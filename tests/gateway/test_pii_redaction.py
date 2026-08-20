@@ -1,0 +1,87 @@
+"""Tests for PII redaction in gateway session context prompts."""
+
+from gateway.session import (
+    SessionContext,
+    SessionSource,
+    build_session_context_prompt,
+    _hash_id,
+    _hash_sender_id,
+    _hash_chat_id,
+)
+from gateway.config import Platform, HomeChannel
+
+
+# ---------------------------------------------------------------------------
+# Low-level helpers
+# ---------------------------------------------------------------------------
+
+class TestHashHelpers:
+
+    def test_hash_id_12_hex_chars(self):
+        h = _hash_id("user-abc")
+        assert len(h) == 12
+        assert all(c in "0123456789abcdef" for c in h)
+
+
+    def test_hash_chat_id_preserves_prefix(self):
+        result = _hash_chat_id("email:12345")
+        assert result.startswith("email:")
+        assert "12345" not in result
+
+
+# ---------------------------------------------------------------------------
+# Integration: build_session_context_prompt
+# ---------------------------------------------------------------------------
+
+def _make_context(
+    user_id="user-123",
+    user_name=None,
+    chat_id="email:99999",
+    platform=Platform.EMAIL,
+    home_channels=None,
+):
+    source = SessionSource(
+        platform=platform,
+        chat_id=chat_id,
+        chat_type="dm",
+        user_id=user_id,
+        user_name=user_name,
+    )
+    return SessionContext(
+        source=source,
+        connected_platforms=[platform],
+        home_channels=home_channels or {},
+    )
+
+
+class TestBuildSessionContextPromptRedaction:
+    def test_no_redaction_by_default(self):
+        ctx = _make_context(user_id="user-123")
+        prompt = build_session_context_prompt(ctx)
+        assert "user-123" in prompt
+
+    def test_user_name_not_redacted(self):
+        ctx = _make_context(user_id="user-123", user_name="Alice")
+        prompt = build_session_context_prompt(ctx, redact_pii=True)
+        assert "Alice" in prompt
+        # user_id should not appear when user_name is present (name takes priority)
+        assert "user-123" not in prompt
+
+
+    def test_home_channel_id_preserved_without_redaction(self):
+        hc = {
+            Platform.EMAIL: HomeChannel(
+                platform=Platform.EMAIL,
+                chat_id="email:99999",
+                name="Home Chat",
+            )
+        }
+        ctx = _make_context(home_channels=hc)
+        prompt = build_session_context_prompt(ctx, redact_pii=False)
+        assert "99999" in prompt
+
+    def test_redaction_is_deterministic(self):
+        ctx = _make_context(user_id="+15551234567")
+        prompt1 = build_session_context_prompt(ctx, redact_pii=True)
+        prompt2 = build_session_context_prompt(ctx, redact_pii=True)
+        assert prompt1 == prompt2
