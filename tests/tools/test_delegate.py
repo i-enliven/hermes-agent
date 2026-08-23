@@ -1949,5 +1949,63 @@ class TestFallbackModelInheritance(unittest.TestCase):
         self.assertIn("missing-acp-binary", str(ctx.exception))
 
 
+
+class TestSubagentTurnLimitExitReasonStatus(unittest.TestCase):
+    """Tests for consistent status and exit_reason reporting when subagents hit max_iterations."""
+
+    def test_status_completed_and_exit_reason_max_iterations_on_valid_summary(self):
+        from tools.delegate_tool import _run_single_child
+
+        parent = _make_mock_parent()
+        child = MagicMock()
+        child.max_iterations = 10
+        child.session_prompt_tokens = 100
+        child.session_completion_tokens = 50
+        child.model = "test-model"
+        child.run_conversation.return_value = {
+            "final_response": "Here is the summary of what I did.",
+            "completed": True,
+            "interrupted": False,
+            "api_calls": 10,
+            "messages": [],
+        }
+
+        entry = _run_single_child(
+            task_index=0,
+            goal="Test max iteration summary success",
+            child=child,
+            parent_agent=parent,
+        )
+
+        self.assertEqual(entry["status"], "completed")
+        self.assertEqual(entry["exit_reason"], "max_iterations")
+
+    def test_status_failed_and_exit_reason_max_iterations_on_summary_failure(self):
+        from tools.delegate_tool import _run_single_child
+
+        parent = _make_mock_parent()
+        child = MagicMock()
+        child.max_iterations = 10
+        child.session_prompt_tokens = 100
+        child.session_completion_tokens = 50
+        child.model = "test-model"
+        child.run_conversation.return_value = {
+            "final_response": "I reached the maximum iterations (10) but couldn't summarize. Error: call failed",
+            "completed": False,
+            "interrupted": False,
+            "api_calls": 10,
+            "messages": [],
+        }
+
+        entry = _run_single_child(
+            task_index=0,
+            goal="Test max iteration summary error",
+            child=child,
+            parent_agent=parent,
+        )
+
+        self.assertEqual(entry["status"], "failed")
+        self.assertEqual(entry["exit_reason"], "max_iterations")
+
 if __name__ == "__main__":
     unittest.main()

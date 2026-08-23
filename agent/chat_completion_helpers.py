@@ -3177,13 +3177,15 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
         logger.warning("Failed to get summary response: %s", e)
         final_response = f"I reached the maximum iterations ({agent.max_iterations}) but couldn't summarize. Error: {str(e)}"
     finally:
+        if summary_call_outcome != "success":
+            if messages and isinstance(messages[-1], dict) and messages[-1].get("role") == "user" and messages[-1].get("content") == summary_request:
+                messages.pop()
         from agent import relay_llm
 
         relay_llm.complete_logical_call(
             summary_api_request_id,
             outcome=summary_call_outcome,
         )
-
     return final_response
 
 

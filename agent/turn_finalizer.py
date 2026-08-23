@@ -224,15 +224,24 @@ def finalize_turn(
 
     # Determine if conversation completed successfully
     normal_text_response = str(_turn_exit_reason).startswith("text_response(")
+    valid_summary_response = (
+        iteration_limit_fallback
+        and final_response is not None
+        and isinstance(final_response, str)
+        and bool(final_response.strip())
+        and not final_response.startswith("⚠️")
+        and not final_response.startswith("I reached the maximum iterations")
+        and not final_response.startswith("I reached the iteration limit")
+    )
     completed = (
         final_response is not None
         and not failed
         and (
             api_call_count < agent.max_iterations
             or normal_text_response
+            or valid_summary_response
         )
     )
-
     # Preflight can seed the display count before the provider receives the
     # request. Roll that estimate back only when an interrupt wins the race
     # before any successful provider response. Compaction state remains owned

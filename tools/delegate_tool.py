@@ -2883,23 +2883,22 @@ def _run_single_child(
         interrupted = result.get("interrupted", False)
         api_calls = result.get("api_calls", 0)
 
-        # The child emits the literal "(empty)" sentinel (see run_agent.py) when
-        # it gives up after repeated empty-LLM-response retries — typically a
-        # transport bug (misrouted provider, adapter returning empty
-        # ChatCompletion, etc.). Treat it as a failure so the parent surfaces
-        # it instead of silently accepting zero-content "success".
         _empty_sentinel = summary.strip() == "(empty)"
+        _error_summary = (
+            summary.startswith("⚠️")
+            or summary.startswith("I reached the maximum iterations")
+            or summary.startswith("I reached the iteration limit")
+        )
 
         if interrupted:
             status = "interrupted"
-        elif summary and not _empty_sentinel:
-            # A summary means the subagent produced usable output.
+        elif summary and not _empty_sentinel and not _error_summary:
+            # A valid summary means the subagent produced usable output.
             # exit_reason ("completed" vs "max_iterations") already
             # tells the parent *how* the task ended.
             status = "completed"
         else:
             status = "failed"
-
         # Build tool trace from conversation messages (already in memory).
         # Uses tool_call_id to correctly pair parallel tool calls with results.
         tool_trace: list[Dict[str, Any]] = []
@@ -2939,13 +2938,14 @@ def _run_single_child(
                         tool_trace[-1].update(result_meta)
 
         # Determine exit reason
+        _child_max = getattr(child, "max_iterations", None)
+        _is_max = isinstance(_child_max, (int, float)) and api_calls >= _child_max
         if interrupted:
             exit_reason = "interrupted"
-        elif completed:
+        elif completed and not _error_summary and not _is_max:
             exit_reason = "completed"
         else:
             exit_reason = "max_iterations"
-
         # Extract token counts (safe for mock objects)
         _input_tokens = getattr(child, "session_prompt_tokens", 0)
         _output_tokens = getattr(child, "session_completion_tokens", 0)

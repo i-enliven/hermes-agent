@@ -373,3 +373,53 @@ def test_bounded_fallback_does_not_fire_when_budget_not_exhausted(monkeypatch):
     record.assert_not_called()
 
 
+
+def test_iteration_limit_summary_completion_flag(monkeypatch):
+    """When budget is exhausted and max_iterations summary succeeds, completed is True."""
+    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    agent = _LimitAgent()
+
+    result = finalize_turn(
+        agent,
+        final_response=None,
+        api_call_count=60,
+        interrupted=False,
+        failed=False,
+        messages=[{"role": "user", "content": "task"}],
+        conversation_history=[],
+        effective_task_id="task",
+        turn_id="turn",
+        user_message="task",
+        original_user_message="task",
+        _should_review_memory=False,
+        _turn_exit_reason="budget_exhausted",
+    )
+
+    assert result["final_response"] == "summary from extra call"
+    assert result["completed"] is True
+    assert agent._handle_max_iterations_called is True
+
+
+def test_iteration_limit_summary_failure_completed_flag(monkeypatch):
+    """When budget is exhausted and summary returns an error string, completed is False."""
+    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    agent = _LimitAgent()
+    agent._handle_max_iterations = lambda msgs, count: "I reached the maximum iterations (60) but couldn't summarize. Error: API call failed"
+
+    result = finalize_turn(
+        agent,
+        final_response=None,
+        api_call_count=60,
+        interrupted=False,
+        failed=False,
+        messages=[{"role": "user", "content": "task"}],
+        conversation_history=[],
+        effective_task_id="task",
+        turn_id="turn",
+        user_message="task",
+        original_user_message="task",
+        _should_review_memory=False,
+        _turn_exit_reason="budget_exhausted",
+    )
+
+    assert result["completed"] is False

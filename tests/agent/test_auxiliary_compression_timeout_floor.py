@@ -115,7 +115,7 @@ class TestCompressionTimeoutFloorSync:
 class TestCompressionTimeoutFloorAsync:
     """Async ``async_call_llm`` mirrors the sync floor (Layer 2)."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_async_config_derived_compression_timeout_is_raised_to_floor(self):
         client = _client_async()
         p1, p2, p3, p4 = _patches(client, task_timeout=COMPRESSION_CONFIG_TIMEOUT)
@@ -130,7 +130,7 @@ class TestCompressionTimeoutFloorAsync:
             f"{COMPRESSION_TIMEOUT_FLOOR}"
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_async_explicit_per_call_timeout_is_not_floored(self):
         client = _client_async()
         explicit = 45.0
@@ -144,7 +144,7 @@ class TestCompressionTimeoutFloorAsync:
         timeout = client.chat.completions.create.call_args.kwargs["timeout"]
         assert timeout == explicit
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_async_non_compression_task_is_not_floored(self):
         client = _client_async()
         low = 30.0
