@@ -220,7 +220,6 @@ def test_serve_startup_applies_limit_before_web_server(monkeypatch):
         lambda: calls.append("limit"),
     )
     monkeypatch.setattr(cli_main, "_sync_bundled_skills_quietly", lambda: None)
-    monkeypatch.setattr(cli_main, "_build_web_ui", lambda *args, **kwargs: True)
     monkeypatch.setattr(cli_main, "_maybe_setup_dashboard_auth_interactively", lambda args: None)
     monkeypatch.setattr(hermes_cli.plugins, "discover_plugins", lambda: None)
     monkeypatch.setattr(

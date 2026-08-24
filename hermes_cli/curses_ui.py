@@ -155,10 +155,10 @@ def _is_boundary(target: str, index: int) -> bool:
 def _token_score(orig: str, lower: str, token: str) -> float | None:
     """Score one token against a target. None if the token isn't a subsequence.
 
-    A faithful port of ``fuzzyScore`` in ui-tui/src/lib/fuzzy.ts and
-    web/src/lib/fuzzy.ts so all three surfaces rank model ids identically:
-    contiguous runs, word-boundary / first-char starts, prefix matches, and
-    exact matches all score higher than scattered subsequence hits.
+    A faithful port of ``fuzzyScore`` in ui-tui/src/lib/fuzzy.ts so both
+    surfaces rank model ids identically: contiguous runs, word-boundary /
+    first-char starts, prefix matches, and exact matches all score higher
+    than scattered subsequence hits.
 
     ``lower`` is ``orig`` lowercased; matching is done against ``lower`` while
     boundary detection uses ``orig`` (so the camelCase rule works), exactly as

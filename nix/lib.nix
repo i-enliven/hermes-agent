@@ -94,7 +94,7 @@ let
 
   # Top-level directory of each workspace member, deduplicated.  Used to
   # exclude JS/TS workspace trees from the Python source filter.  E.g.
-  # apps/desktop + apps/shared + ui-tui + web → [ "apps" "ui-tui" "web" ].
+  # apps/* + ui-tui + ui-tui/packages/* + tests-js → [ "apps" "ui-tui" "tests-js" ].
   jsWorkspaceTopDirs = lib.unique (
     map (d: builtins.head (lib.splitString "/" d)) workspaceMemberDirs
   );
@@ -301,7 +301,7 @@ in
 
     # importNpmLock reads hashes from the lockfile itself — rebuild every
     # npm package to verify the new lockfile resolves offline.
-    nix build .#tui .#web .#desktop
+    nix build .#tui .#desktop
     echo "Lockfile updated and all npm packages built."
   '';
 

@@ -4,8 +4,7 @@ Wire IDs stay unchanged. Some providers report short or brand-less ids
 (Kimi Coding's flagship is literally ``k3``) that users still search for by
 the familiar ``kimi-…`` naming of sibling models.
 
-Keep in sync with ``ui-tui/src/lib/model-search-text.ts`` and
-``web/src/lib/model-search-text.ts``.
+Keep in sync with ``ui-tui/src/lib/model-search-text.ts``.
 """
 
 from __future__ import annotations

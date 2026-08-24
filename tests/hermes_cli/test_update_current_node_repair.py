@@ -19,15 +19,14 @@ def test_current_checkout_repairs_failed_node_deps(capsys):
     """A recorded failure surfaces the fix-npm hint, not 'Already up to date!'."""
     completion = MagicMock()
     with patch.object(
-        update_cmd, "_update_node_dependencies", return_value=["ui-tui, web workspaces"]
+        update_cmd, "_update_node_dependencies", return_value=["ui-tui workspace"]
     ), patch.object(update_cmd, "_m") as m:
         update_cmd._repair_node_deps_on_current_checkout(completion)
 
-    m.return_value._build_web_ui.assert_not_called()
     completion.assert_called_once()
     assert "could not be repaired" in completion.call_args[0][0]
     out = capsys.readouterr().out
-    assert "Node.js refresh failed for: ui-tui, web workspaces" in out
+    assert "Node.js refresh failed for: ui-tui workspace" in out
     assert "Fix npm and re-run `hermes update`." in out
 
 
@@ -36,9 +35,7 @@ def test_current_checkout_healthy_node_deps_reports_up_to_date():
     completion = MagicMock()
     with patch.object(
         update_cmd, "_update_node_dependencies", return_value=[]
-    ), patch.object(update_cmd, "_m") as m:
+    ), patch.object(update_cmd, "_m"):
         update_cmd._repair_node_deps_on_current_checkout(completion)
 
-    # The refresh pairs with the web build like every other call site.
-    m.return_value._build_web_ui.assert_called_once()
     completion.assert_called_once_with("✓ Already up to date!")

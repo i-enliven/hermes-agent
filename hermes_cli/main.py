@@ -1992,8 +1992,8 @@ def _workspace_root(dir: Path) -> Path:
     Otherwise *dir* itself is the root (standalone project or
     prebuilt-bundle layout).
 
-    Used by ``_tui_need_npm_install``, ``_make_tui_argv``, and
-    ``_build_web_ui`` so that lockfile/node_modules resolution and
+    Used by ``_tui_need_npm_install`` and ``_make_tui_argv`` so that
+    lockfile/node_modules resolution and
     ``npm install`` cwd stay consistent — a single helper prevents
     the checks from diverging if someone accidentally creates a
     sub-package lockfile (e.g. running ``npm install`` in the wrong
@@ -4823,7 +4823,6 @@ _LAZY_COMMAND_EXPORTS = {
         "_leftover_pausable_gateway_pids",
         "_log_only_write",
         "_mark_skip_upstream_prompt",
-        "_npm_bin_exists",
         "_npm_lockfile_changed",
         "_npm_manifest_paths",
         "_npm_manifests_digest",
@@ -4866,8 +4865,6 @@ _LAZY_COMMAND_EXPORTS = {
         "_wait_for_windows_update_gateway_exit",
         "_warn_gateway_restart_phase_aborted",
         "_warn_incomplete_gateway_fleet_restart",
-        "_web_build_toolchain_ready",
-        "_web_toolchain_roots",
         "_write_lazy_refresh_incomplete_marker",
         "_write_marker_file",
         "_write_update_incomplete_marker",
@@ -5803,120 +5800,6 @@ def _sweep_stale_bytecode_if_checkout_changed() -> None:
         logger.debug("Stale-bytecode launch sweep failed: %s", exc)
 
 
-def _web_ui_build_needed(web_dir: Path) -> bool:
-    """Return True if the web UI dist is missing or its source content changed.
-
-    Uses a SHA-256 content hash of the web source tree, NOT
-    mtime comparison. ``git checkout`` / ``git pull`` / ``hermes update``
-    rewrite source mtimes without changing content, which made the old
-    mtime check unreliable in both directions: it could skip a rebuild when
-    source had genuinely changed (serving a stale dashboard) and force a
-    rebuild when nothing had. A content hash is stable across mtime churn.
-
-    The dashboard source lives under ``web/`` but Vite outputs to
-    ``hermes_cli/web_dist/`` (per vite.config.ts outDir), NOT ``web/dist/``,
-    so the dist directory is never part of the hashed source tree.
-    """
-    project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-    dist_dir = project_root / "hermes_cli" / "web_dist"
-    sentinel = dist_dir / ".vite" / "manifest.json"
-    if not sentinel.exists():
-        sentinel = dist_dir / "index.html"
-    if not sentinel.exists():
-        return True
-    stamp_file = _web_ui_stamp_path()
-    if not stamp_file.is_file():
-        return True
-    try:
-        stamp_data = json.loads(stamp_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return True
-    if not isinstance(stamp_data, dict):
-        return True
-    saved_hash = stamp_data.get("contentHash")
-    if not saved_hash:
-        return True
-    return _compute_web_ui_content_hash(project_root, web_dir) != saved_hash
-
-
-def _compute_web_ui_content_hash(project_root: Path, web_dir: Path) -> str:
-    """Return a SHA-256 hex digest of the web UI source tree.
-
-    Covers ``web_dir`` (the dashboard frontend source) plus the root
-    ``package.json`` / ``package-lock.json`` (workspace config that
-    determines dependency resolution). Ignored paths (``node_modules/``,
-    ``dist/``, ``*.pyc``, ...) are skipped via the repo-root ``.gitignore``
-    so build output never feeds back into its own staleness check.
-    """
-    h = hashlib.sha256()
-
-    def _hash_file(path: Path) -> None:
-        rel = str(path.relative_to(project_root))
-        h.update(rel.encode())
-        h.update(b"\0")
-        try:
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(65536), b""):
-                    h.update(chunk)
-        except OSError:
-            pass
-        h.update(b"\0")
-
-    from pathspec import PathSpec
-
-    gitignore = project_root / ".gitignore"
-    lines: list[str] = []
-    if gitignore.is_file():
-        lines = gitignore.read_text(encoding="utf-8").splitlines()
-    spec = PathSpec.from_lines("gitignore", lines)
-
-    # Root workspace config (single package-lock.json covers all workspaces).
-    for name in ("package.json", "package-lock.json"):
-        p = project_root / name
-        if p.is_file():
-            rel = str(p.relative_to(project_root))
-            if not spec.match_file(rel):
-                _hash_file(p)
-
-    # Walk the web source tree, pruning ignored directories in-place so we
-    # never descend into node_modules/ or a stray dist/. Sort filenames for
-    # a deterministic, order-independent digest.
-    for dirpath, dirnames, filenames in os.walk(web_dir, topdown=True):
-        dirnames[:] = [
-            d for d in dirnames
-            if not spec.match_file(str((Path(dirpath) / d).relative_to(project_root)))
-        ]
-        for fn in sorted(filenames):
-            fp = Path(dirpath) / fn
-            rel = str(fp.relative_to(project_root))
-            if not spec.match_file(rel):
-                _hash_file(fp)
-
-    return h.hexdigest()
-
-
-def _web_ui_stamp_path() -> Path:
-    """Return the path to the web UI build stamp file under $HERMES_HOME."""
-    from hermes_constants import get_hermes_home
-    return get_hermes_home() / "web-ui-build-stamp.json"
-
-
-def _write_web_ui_build_stamp(project_root: Path, web_dir: Path) -> None:
-    """Write the web UI build stamp after a successful build."""
-    stamp_file = _web_ui_stamp_path()
-    try:
-        stamp_file.parent.mkdir(parents=True, exist_ok=True)
-        from datetime import datetime, timezone
-        stamp_data = {
-            "contentHash": _compute_web_ui_content_hash(project_root, web_dir),
-            "builtAt": datetime.now(timezone.utc).isoformat(),
-        }
-        stamp_file.write_text(json.dumps(stamp_data, indent=2) + "\n", encoding="utf-8")
-    except Exception as exc:
-        # Never let stamp-writing block or fail a build.
-        logger.debug("Failed to write web UI build stamp: %s", exc)
-
-
 def _run_with_idle_timeout(
     cmd: list[str],
     cwd: Path,
@@ -6087,8 +5970,8 @@ def _run_npm_install_deterministic(
     the working tree dirty and causes the next ``hermes update`` to stash the
     lockfile — repeatedly.
 
-    ``--include=dev`` is forced on every invocation: the callers are frontend
-    builds (web UI / TUI workspaces), and those builds need the dev
+    ``--include=dev`` is forced on every invocation: the caller is a frontend
+    build (TUI workspace), and that build needs the dev
     toolchain (``tsc``, ``vite`` — all
     ``devDependencies``).  If the caller's environment has
     ``NODE_ENV=production`` (or npm config ``omit=dev``) — which leaks in from
@@ -6198,229 +6081,6 @@ def _run_npm_watching_for_engine_failure(
             sys.stderr.flush()
         returncode = proc.wait()
     return subprocess.CompletedProcess(cmd, returncode, None, "".join(captured))
-
-
-def _missing_web_build_tool(output: str) -> str | None:
-    """Return the build tool a failed ``npm run build`` could not resolve.
-
-    Each shell words this differently: ``sh: 1: tsc: not found`` (dash),
-    ``vite: command not found`` (bash/zsh), and ``'tsc' is not recognized as
-    an internal or external command`` (cmd.exe).
-    """
-    lowered = output.lower()
-    for tool in ("tsc", "vite"):
-        if any(
-            phrase in lowered
-            for phrase in (
-                f"{tool}: not found",
-                f"{tool}: command not found",
-                f"'{tool}' is not recognized",
-            )
-        ):
-            return tool
-    return None
-
-
-def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
-    """Build the web UI frontend if npm is available, serializing across processes.
-
-    Concurrent dashboard boots (e.g. a retry loop after a
-    readiness timeout) used to each spawn their own ``npm install`` +
-    ``vite build`` over the same tree; the parallel builds starved each
-    other, none finished, the dist sentinel never advanced, and every new
-    boot re-triggered the build. One process builds under an exclusive
-    flock; the rest serve the existing dist (stale is acceptable) or, when
-    no dist exists yet, block until the builder finishes.
-
-    Staleness is checked once, inside :func:`_do_build_web_ui`, after the
-    lock is held — so a process that queued behind the builder skips the
-    rebuild, and the (os.walk-based) check runs at most once per boot.
-    """
-    if not (web_dir / "package.json").exists():
-        return True
-    try:
-        import fcntl
-    except ImportError:
-        # Windows: no flock — fall through to the unserialized build.
-        return _do_build_web_ui(web_dir, fatal=fatal)
-    project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-    dist_index = project_root / "hermes_cli" / "web_dist" / "index.html"
-    try:
-        lock_file = open(project_root / ".web_ui_build.lock", "a", encoding="utf-8")
-    except OSError:
-        return _do_build_web_ui(web_dir, fatal=fatal)
-    try:
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            if dist_index.exists():
-                # Another process is already building — serve the current
-                # dist instead of piling a second build onto the same tree.
-                return True
-            # No dist at all (first-ever build): wait for the builder.
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        return _do_build_web_ui(web_dir, fatal=fatal)
-    finally:
-        lock_file.close()
-
-
-def _do_build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
-    """Build the web UI frontend if npm is available.
-
-    Args:
-        web_dir: Path to the dashboard frontend source directory.
-        fatal: If True, print error guidance and return False on failure
-               instead of a soft warning (used by ``hermes web``).
-
-    Returns True if the build succeeded or was skipped (no package.json).
-    """
-    if not (web_dir / "package.json").exists():
-        return True
-
-    if not _web_ui_build_needed(web_dir):
-        return True
-
-    # Console-encoding-safe print: Windows consoles default to cp1252
-    # (or similar) and will raise UnicodeEncodeError on arrow / check
-    # glyphs unless PYTHONIOENCODING=utf-8 is set. Routing every print
-    # in this function through _say() with errors="replace" keeps the
-    # build path usable on a stock `py -m hermes_cli.main web` invocation.
-    def _say(text: str) -> None:
-        try:
-            print(text)
-        except UnicodeEncodeError:
-            encoding = getattr(sys.stdout, "encoding", None) or "ascii"
-            print(text.encode(encoding, errors="replace").decode(encoding, errors="replace"))
-
-    from hermes_constants import with_hermes_node_path
-
-    npm = _resolve_node_runtime_npm()
-    if not npm:
-        if fatal:
-            _say("Web UI frontend not built and npm is not available.")
-            _say("Install Node.js, then run:  cd web && npm install && npm run build")
-        return not fatal
-    build_env = _npm_lifecycle_env(with_hermes_node_path())
-    _say("→ Building web UI...")
-
-    def _relay(result: "subprocess.CompletedProcess") -> None:
-        """Print captured npm output so users can see *why* a step failed.
-
-        Windows users hitting `rm -rf` / `cp -r` errors (or any other
-        sync-assets / Vite failure) would otherwise see only ``Web UI
-        build failed`` with no hint of the underlying cause, because
-        the npm calls run with ``capture_output=True``.
-        """
-        for blob in (result.stdout, result.stderr):
-            if not blob:
-                continue
-            text = blob.decode("utf-8", errors="replace").rstrip() if isinstance(blob, bytes) else blob.rstrip()
-            if text:
-                _say(text)
-
-    npm_cwd = _workspace_root(web_dir)
-    # Scope the install to the web workspace only so the full workspace graph
-    # is never resolved here (see #38772).
-    # When web/ has its own package-lock.json, _workspace_root() returns
-    # web_dir itself and --workspace would fail.  See #42973.
-    #
-    # When running from the workspace root, this must name the SAME closure
-    # as `hermes update`'s _update_node_dependencies() (ui-tui + web +
-    # --include-workspace-root): the helper prefers `npm ci`, which deletes
-    # node_modules before reifying the requested tree, so a narrower closure
-    # here silently prunes everything the update step just installed (root
-    # devDependencies and the ui-tui workspace) while still exiting 0 —
-    # and since the manifests digest was already recorded, later no-op
-    # updates skip the repair. See #43564/#64354.
-    npm_workspace_args: tuple[str, ...]
-    if npm_cwd == web_dir:
-        npm_workspace_args = ()
-    else:
-        npm_workspace_args = ("--workspace", "web", "--include-workspace-root")
-        # Prebuilt/partial checkouts can lack the ui-tui workspace; naming a
-        # missing workspace makes npm fail hard, so only include it when
-        # present (same guard as _update_node_dependencies()).
-        if (npm_cwd / "ui-tui" / "package.json").exists():
-            npm_workspace_args = ("--workspace", "ui-tui", *npm_workspace_args)
-    if _is_termux_startup_environment():
-        npm_cwd, npm_workspace_args = _termux_workspace_install_context(web_dir)
-
-    def _install_web_deps(*, silent: bool) -> "subprocess.CompletedProcess":
-        return _run_npm_install_deterministic(
-            npm,
-            npm_cwd,
-            extra_args=(*npm_workspace_args, "--silent", "--prefer-offline") if silent else (*npm_workspace_args, "--prefer-offline"),
-            env=build_env,
-        )
-
-    r1 = _install_web_deps(silent=True)
-    if r1.returncode != 0:
-        _say(
-            f"  {'✗' if fatal else '⚠'} Web UI npm install failed"
-            + ("" if fatal else " (hermes web will not be available)")
-        )
-        _relay(r1)
-        if fatal:
-            _say("  Run manually:  npm install --workspace web && npm run build -w web")
-        return False
-    # First attempt — stream output via idle-timeout helper (issue #33788).
-    # capture_output=True on a long Vite build looks identical to a hang;
-    # users react by rebooting, which leaves the editable install in a
-    # half-state. Streaming + idle-kill makes failures observable AND
-    # recoverable (the stale-dist fallback below handles the kill path).
-    r2 = _run_with_idle_timeout([npm, "run", "build"], cwd=web_dir, env=build_env)
-    if r2.returncode != 0:
-        # The install above can exit 0 while leaving the tree without a build
-        # toolchain — a lockfile-hash skip over a half-installed tree, or an
-        # interrupted link step. The generic retry below just reruns the same
-        # command, so `tsc: not found` survives it and the stale dist is
-        # served forever. Reinstall (non-silent, so the user sees it) first.
-        missing_tool = _missing_web_build_tool((r2.stdout or "") + (r2.stderr or ""))
-        if missing_tool:
-            _say(f"  ⚠ Build could not resolve {missing_tool} — reinstalling web dependencies...")
-            _install_web_deps(silent=False)
-            r2 = _run_with_idle_timeout([npm, "run", "build"], cwd=web_dir, env=build_env)
-        if r2.returncode != 0:
-            # Retry once after a short delay — covers boot-time races on Windows
-            # (antivirus scanning Node.js binaries, npm cache not ready, transient
-            # I/O when launched via Scheduled Task at logon). See issue #23817.
-            _time.sleep(3)
-            r2 = _run_with_idle_timeout([npm, "run", "build"], cwd=web_dir, env=build_env)
-
-    if r2.returncode != 0:
-        # _run_with_idle_timeout merges stderr into stdout; older callers
-        # using subprocess.run kept them split. Pull from whichever has
-        # content so the error surfaces regardless of which path produced
-        # the CompletedProcess.
-        build_output = (r2.stderr or "") + (r2.stdout or "")
-        stderr_preview = build_output.strip()
-        stderr_tail = "\n  ".join(stderr_preview.splitlines()[-10:]) if stderr_preview else ""
-        project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-        dist_dir = project_root / "hermes_cli" / "web_dist"
-        dist_index = dist_dir / "index.html"
-
-        # If a stale dist exists, serve it as a fallback instead of failing.
-        # A stale UI is far better than no UI for non-interactive callers
-        # (Windows Scheduled Tasks, CI) — issue #23817.
-        if dist_index.exists():
-            _say("  ⚠ Web UI build failed — serving stale dist as fallback")
-            if stderr_tail:
-                _say(f"  Build error:\n  {stderr_tail}")
-            return True
-
-        _say(
-            f"  {'✗' if fatal else '⚠'} Web UI build failed"
-            + ("" if fatal else " (hermes web will not be available)")
-        )
-        _relay(r2)
-        if fatal:
-            _say("  Run manually:  npm install --workspace web && npm run build -w web")
-        return False
-    _say("  ✓ Web UI built")
-    project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-    _write_web_ui_build_stamp(project_root, web_dir)
-    return True
-
 
 # (main.py decomposition, mechanical move). Re-exported lazily through the
 # module-level __getattr__ above so callers and test monkeypatches on
@@ -9342,20 +9002,6 @@ def _read_ssh_session_token_file(path: str) -> str:
             os.close(root_fd)
 
 
-def _is_electron_packaged_web_dist(path: str) -> bool:
-    """True when *path* looks like an Electron-packaged renderer dist.
-
-    A caller that sets ``HERMES_WEB_DIST`` to ``.../app.asar/dist`` or
-    ``.../app.asar.unpacked/dist`` makes a standalone ``hermes dashboard``
-    serve the packaged frontend in the browser
-    (issue #52945 — "Desktop IPC bridge is unavailable").
-    """
-    if not path:
-        return False
-    # Both app.asar and app.asar.unpacked contain this marker; normalize
-    # separators so Windows paths match too.
-    return "app.asar" in path.replace("\\", "/")
-
 
 def cmd_dashboard(args):
     """Start the web UI server, or (with --stop/--status) manage running ones."""
@@ -9394,22 +9040,8 @@ def cmd_dashboard(args):
     if _token_file and not _headless_backend:
         raise SystemExit("--ssh-session-token-file is only valid with hermes serve")
 
-    # ── Sanitize inherited env that hijacks a standalone launch ─
-    # A desktop Electron spawn sets HERMES_DESKTOP=1 plus
-    # HERMES_WEB_DIST=<packaged app.asar[/unpacked]/dist> (and often
-    # HERMES_SERVE_HEADLESS=1 on the serve path). A shell that inherits
-    # those vars then runs `hermes dashboard` would otherwise:
-    #   - serve a packaged renderer → "IPC bridge is unavailable"
-    #     (issue #52945), or
-    #   - disable the SPA via inherited HERMES_SERVE_HEADLESS.
-    # Only strip Electron-packaged WEB_DIST contamination — caller-managed
-    # HERMES_WEB_DIST overrides (dev / custom builds) must still work.
-    # A HERMES_DESKTOP=1 backend itself keeps its dist.
-    # Intentionally headless `serve` re-sets HERMES_SERVE_HEADLESS below.
-    if os.environ.get("HERMES_DESKTOP") != "1":
-        _inherited_web_dist = os.environ.get("HERMES_WEB_DIST", "")
-        if _is_electron_packaged_web_dist(_inherited_web_dist):
-            os.environ.pop("HERMES_WEB_DIST", None)
+    # A headless `serve` re-sets HERMES_SERVE_HEADLESS below; a regular
+    # dashboard launch must not inherit it.
     if not _headless_backend:
         os.environ.pop("HERMES_SERVE_HEADLESS", None)
 
@@ -9568,50 +9200,21 @@ def cmd_dashboard(args):
         # Don't build the SPA, and tell mount_spa() (read at web_server import
         # below) to disable it even if a stray dist exists. Set it first.
         os.environ["HERMES_SERVE_HEADLESS"] = "1"
-    elif "HERMES_WEB_DIST" not in os.environ and not getattr(args, "skip_build", False):
-        if not _build_web_ui(PROJECT_ROOT / "web", fatal=True):
-            sys.exit(1)
-    elif getattr(args, "skip_build", False):
-        # --build-mode skip trusts the caller to have pre-built the web UI.
-        # Verify the dist actually exists; otherwise the server will start
-        # and serve 404s with no obvious cause (issue #23817).
-        _dist_root = (
-            Path(os.environ["HERMES_WEB_DIST"])
-            if "HERMES_WEB_DIST" in os.environ
-            else PROJECT_ROOT / "hermes_cli" / "web_dist"
-        )
-        if not (_dist_root / "index.html").exists():
-            # The caller promised a pre-built dist but there isn't one.
-            # Instead of hard-failing (issue #59288 — a caller with
-            # --build-mode skip after a wipe of web_dist), warn and attempt
-            # ONE recovery build through the normal build path. Only the
-            # default dist location is recoverable: a custom HERMES_WEB_DIST
-            # points at a caller-managed directory the build cannot populate.
-            _recoverable = "HERMES_WEB_DIST" not in os.environ
-            if _recoverable:
-                print(f"⚠ --skip-build was passed but no web dist found at: {_dist_root}")
-                print("  Attempting one recovery build of the web UI...")
-                _build_web_ui(PROJECT_ROOT / "web", fatal=True)
-            if not (_dist_root / "index.html").exists():
-                print(f"✗ --skip-build was passed but no web dist found at: {_dist_root}")
-                if _recoverable:
-                    print("  The recovery build did not produce a usable dist.")
-                print("  Pre-build first:  npm install --workspace web && npm run build -w web")
-                print("  Or drop --skip-build to build automatically.")
-                sys.exit(1)
-            print("  ✓ Recovery build produced a web dist")
-        print(f"→ Skipping web UI build (--skip-build); using dist at {_dist_root}")
+    elif "HERMES_WEB_DIST" not in os.environ:
+        # No caller-managed dist: the web UI SPA is no longer bundled with
+        # the repo, so the dashboard runs API-only. Tell mount_spa() to
+        # stay off even if a stale prebuilt dist is still on disk from an
+        # older install.
+        print("→ Web UI SPA is no longer bundled; the dashboard runs API-only.")
+        os.environ["HERMES_SERVE_HEADLESS"] = "1"
     else:
-        # HERMES_WEB_DIST is set without --skip-build: the build is skipped
-        # (the env var points at a caller-managed dist), so validate it the
-        # same way the --skip-build branch does — otherwise the server starts
-        # and serves 404s with no obvious cause (same failure mode as #23817,
-        # via the env-var path).
+        # HERMES_WEB_DIST is set: the env var points at a caller-managed
+        # dist, so validate it — otherwise the server starts and serves
+        # 404s with no obvious cause (issue #23817).
         _dist_root = Path(os.environ["HERMES_WEB_DIST"]).expanduser()
         if not (_dist_root / "index.html").exists():
             print(f"✗ HERMES_WEB_DIST is set but no web dist found at: {_dist_root}")
-            print("  Pre-build first:  npm install --workspace web && npm run build -w web")
-            print("  Or unset HERMES_WEB_DIST to build and use the default web UI dist.")
+            print("  Point HERMES_WEB_DIST at a built web UI dist (dist/index.html).")
             sys.exit(1)
         # Write the expanded path back: web_server reads HERMES_WEB_DIST raw
         # at import (no expanduser), so a validated "~/dist" would otherwise

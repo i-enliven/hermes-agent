@@ -2,7 +2,7 @@
 
 Regression guard for the hosted-chat failure where the embedded dashboard
 Chat tab died with a 502 / "[session ended]". Root cause: the image installs
-only a subset of the npm monorepo workspaces (root/web/ui-tui, never apps/*),
+only a subset of the npm monorepo workspaces (root/ui-tui, never apps/*),
 so the actualized node_modules permanently disagrees with the canonical
 package-lock.json. Without HERMES_TUI_DIR set, ``_make_tui_argv`` falls
 through to ``_tui_need_npm_install`` (which returns True forever) and tries a

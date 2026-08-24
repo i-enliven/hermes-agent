@@ -120,7 +120,6 @@ def test_no_stray_lockfiles_in_workspace_subdirs(main_mod) -> None:
     # but we check them too for completeness.)
     subdirs = [
         root / "ui-tui",
-        root / "web",
         root / "apps" / "desktop",
         root / "apps" / "shared",
     ]

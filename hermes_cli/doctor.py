@@ -2251,8 +2251,8 @@ def run_doctor(args):
         # Each entry: (cwd, label, extra_audit_args)
         # PROJECT_ROOT is audited with --workspaces=false so that the apps/*
         # glob (which pulls in Electron, node-pty, etc.) is never resolved
-        # for a routine security check. The web and ui-tui workspaces are
-        # audited separately via --workspace flags. See #38772.
+        # for a routine security check. The ui-tui workspace is
+        # audited separately via a --workspace flag. See #38772.
         # The WhatsApp bridge may live under a writable HERMES_HOME mirror
         # instead of the (possibly read-only) install tree in Docker — resolve
         # it through the shared helper so we audit the dir that actually holds
@@ -2264,7 +2264,6 @@ def run_doctor(args):
             _whatsapp_bridge_dir = PROJECT_ROOT / "scripts" / "whatsapp-bridge"
         npm_audit_targets = [
             (PROJECT_ROOT, "Browser tools (agent-browser)", ["--workspaces=false"]),
-            (PROJECT_ROOT, "web workspace", ["--workspace", "web"]),
             (PROJECT_ROOT, "ui-tui workspace", ["--workspace", "ui-tui"]),
             (_whatsapp_bridge_dir, "WhatsApp bridge", []),
         ]

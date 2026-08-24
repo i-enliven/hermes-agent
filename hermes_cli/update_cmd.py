@@ -363,38 +363,6 @@ def _gateway_prompt(prompt_text: str, default: str = "", timeout: float = 300.0)
     print(f"  (no response after {int(timeout)}s, using default: {default!r})")
     return default
 
-def _npm_bin_exists(bin_dir: Path, name: str) -> bool:
-    """True when an npm bin shim for *name* exists (POSIX or Windows)."""
-    return any(
-        (bin_dir / candidate).exists()
-        for candidate in (name, f"{name}.cmd", f"{name}.ps1", f"{name}.exe")
-    )
-
-def _web_build_toolchain_ready(*roots: Path) -> bool:
-    """True when ``tsc`` and ``vite`` shims are reachable from any of *roots*.
-
-    Callers must pass every root the build would search; checking only one
-    reports a healthy tree as broken.
-    """
-    bin_dirs = [
-        bin_dir
-        for bin_dir in (root / "node_modules" / ".bin" for root in roots)
-        if bin_dir.is_dir()
-    ]
-    return bool(bin_dirs) and all(
-        any(_npm_bin_exists(bin_dir, tool) for bin_dir in bin_dirs)
-        for tool in ("tsc", "vite")
-    )
-
-def _web_toolchain_roots(web_dir: Path) -> tuple[Path, ...]:
-    """Roots whose ``node_modules/.bin`` can satisfy the web build.
-
-    ``npm run build`` prepends ``node_modules/.bin`` for the package and each
-    of its ancestors, so shims hoisted to the workspace root and shims nested
-    under a package that owns its lockfile (#42973) are equally valid.
-    """
-    return (web_dir, web_dir.parent)
-
 def _print_curator_first_run_notice() -> None:
     """Print a short heads-up about the skill curator after `hermes update`.
 
@@ -1130,7 +1098,6 @@ def _update_via_zip(args):
         _m().sys.exit(1)
 
     node_failures = _update_node_dependencies()
-    _m()._build_web_ui(_m().PROJECT_ROOT / "web")
 
     # Sync skills
     try:
@@ -2291,15 +2258,6 @@ def _npm_lockfile_changed(hermes_root: Path) -> bool:
     # node_modules means the cache was recorded by another checkout.
     if not (_m().PROJECT_ROOT / "node_modules").is_dir():
         return True
-    # A matching lockfile hash over a tree whose web build toolchain never
-    # landed must NOT skip the reinstall — otherwise every later `hermes
-    # update` keeps rebuilding against a half-installed tree and serving a
-    # stale dist.
-    web_dir = _m().PROJECT_ROOT / "web"
-    if (web_dir / "package.json").is_file() and not _web_build_toolchain_ready(
-        *_web_toolchain_roots(web_dir)
-    ):
-        return True
     try:
         # Key the cache by PROJECT_ROOT so parallel worktrees don't collide.
         cache_key = hashlib.sha256(str(_m().PROJECT_ROOT).encode()).hexdigest()[:12]
@@ -2342,15 +2300,11 @@ def _repair_node_deps_on_current_checkout(print_completion) -> None:
             "⚠ Checkout is current, but Node.js dependencies could not be repaired."
         )
         return
-    # Pair the refresh with the web build like every other
-    # _update_node_dependencies call site; it staleness-checks internally,
-    # so this is a no-op when nothing changed.
-    _m()._build_web_ui(_m().PROJECT_ROOT / "web")
     print_completion("✓ Already up to date!")
 
 
 def _update_node_dependencies() -> list[str]:
-    """Refresh Node deps for the ui-tui and web workspaces.
+    """Refresh Node deps for the ui-tui workspace.
 
     Returns the list of labels whose npm install failed (empty on success),
     so the caller can treat a Node refresh failure as a partial update rather
@@ -2373,11 +2327,8 @@ def _update_node_dependencies() -> list[str]:
             print("    Install Node.js inside the WSL distro (nvm, or your distro's")
             print("    package manager), then re-run `hermes update`.")
             failed = []
-            if any(
-                (_m().PROJECT_ROOT / workspace / "package.json").exists()
-                for workspace in ("ui-tui", "web")
-            ):
-                failed.append("ui-tui, web workspaces")
+            if (_m().PROJECT_ROOT / "ui-tui" / "package.json").exists():
+                failed.append("ui-tui workspace")
             return failed
         return []
 
@@ -2407,7 +2358,7 @@ def _update_node_dependencies() -> list[str]:
     # (agent-browser was moved out — see #43564): agent-browser resolves at
     # runtime via `npx agent-browser` (tools/browser_tool.py). A plain
     # workspace-scoped install can therefore never prune anything root-only,
-    # so we only need to name the workspaces the CLI/TUI/web build actually
+    # so we only need to name the workspaces the CLI/TUI build actually
     # requires.
     print("→ Updating Node.js dependencies...")
 
@@ -2420,7 +2371,7 @@ def _update_node_dependencies() -> list[str]:
 
     install_args = [
         "--no-fund", "--no-audit", "--prefer-offline", "--progress=false",
-        "--workspace", "ui-tui", "--workspace", "web",
+        "--workspace", "ui-tui",
         # Root package.json's own devDependencies (the shared ESLint flat
         # config every workspace's eslint.config.mjs imports) are otherwise
         # pruned by this scoped install, same as agent-browser used to be
@@ -2449,14 +2400,14 @@ def _update_node_dependencies() -> list[str]:
     )
     if result.returncode == 0:
         _record_npm_lockfile_hash(shared_hermes_root)
-        print("  ✓ ui-tui, web workspaces installed")
+        print("  ✓ ui-tui workspace installed")
         failures: list[str] = []
     else:
         print("  ⚠ npm install failed")
         stderr = (result.stderr or "").strip() if result.stderr else ""
         if stderr:
             print(f"    {stderr.splitlines()[-1]}")
-        failures = _partial_update_failure("ui-tui, web workspaces")
+        failures = _partial_update_failure("ui-tui workspace")
 
     return failures
 
@@ -5135,7 +5086,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
             print("    https://hermes-agent.nousresearch.com")
 
         node_failures = _update_node_dependencies()
-        _m()._build_web_ui(_m().PROJECT_ROOT / "web")
 
         print()
         print("✓ Code updated!")

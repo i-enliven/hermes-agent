@@ -808,12 +808,12 @@ class TestNodeRuntimeNpmResolution:
             "tools.browser_tool.warm_agent_browser_npx_cache", return_value=True
         ):
             failed = hm._update_node_dependencies()
-        assert failed == ["ui-tui, web workspaces"]
+        assert failed == ["ui-tui workspace"]
         out = capsys.readouterr().out
         assert "mixed state" in out
 
     def test_wsl_update_skips_windows_npm_build_paths(self, mock_args, monkeypatch):
-        """A Windows-only npm on WSL must not reach web builds."""
+        """A Windows-only npm on WSL must not reach the ui-tui build."""
         from hermes_cli import main as hm
         import hermes_constants
 
@@ -832,17 +832,12 @@ class TestNodeRuntimeNpmResolution:
         )
         monkeypatch.setenv("PATH", "/mnt/c/Program Files/nodejs")
 
-        with patch("subprocess.run") as mock_run, \
-             patch.object(hm, "_web_ui_build_needed", return_value=True), \
-             patch.object(hm, "_run_npm_install_deterministic") as mock_npm_install, \
-             patch.object(hm, "_run_with_idle_timeout") as mock_idle_build:
+        with patch("subprocess.run") as mock_run:
             mock_run.side_effect = _make_run_side_effect(
                 branch="main", verify_ok=True, commit_count="1"
             )
             cmd_update(mock_args)
 
-        mock_npm_install.assert_not_called()
-        mock_idle_build.assert_not_called()
         assert all(
             not call.args or not call.args[0] or call.args[0][0] != windows_npm
             for call in mock_run.call_args_list
@@ -855,8 +850,8 @@ class TestUpdateNodeDependencies:
     Root package.json has no dependencies of its own: agent-browser
     resolves at runtime via npx (tools/browser_tool.py), and @streamdown/math
     no longer lives in the root package.json. With nothing root-only left
-    to protect, the scoped install (ui-tui, web) only names the workspaces
-    the CLI/TUI/web build requires. Skipping is
+    to protect, the scoped install (ui-tui) only names the workspaces
+    the CLI/TUI build requires. Skipping is
     governed by _npm_lockfile_changed (content hash over the lockfile +
     every workspace package.json), tested separately in
     TestNpmLockfileChanged.
@@ -907,9 +902,9 @@ class TestUpdateNodeDependencies:
 
     @patch("subprocess.Popen")
     @patch("shutil.which", return_value="/usr/bin/npm")
-    def test_install_names_ui_tui_and_web_workspaces(self, _which, mock_popen, tmp_path, monkeypatch):
-        """Regression for #43564: install ui-tui + web directly. The scoped
-        install only names ui-tui and web.
+    def test_install_names_ui_tui_workspace(self, _which, mock_popen, tmp_path, monkeypatch):
+        """Regression for #43564: install ui-tui directly. The scoped
+        install only names ui-tui.
         """
         from hermes_cli import main as hm
 
@@ -925,11 +920,14 @@ class TestUpdateNodeDependencies:
         calls = self._popen_npm_calls(popen_calls)
         assert len(calls) == 1, f"expected exactly 1 npm call, got: {calls}"
         joined = " ".join(str(a) for a in calls[0])
-        assert "--workspace ui-tui" in joined and "--workspace web" in joined, (
-            f"expected ui-tui + web workspace selectors; actual: {calls[0]}"
+        assert "--workspace ui-tui" in joined, (
+            f"expected the ui-tui workspace selector; actual: {calls[0]}"
+        )
+        assert "web" not in [str(a) for a in calls[0]], (
+            f"the scoped install only names ui-tui; actual: {calls[0]}"
         )
         assert "desktop" not in joined, (
-            f"the scoped install only names ui-tui and web; actual: {calls[0]}"
+            f"the scoped install only names ui-tui; actual: {calls[0]}"
         )
         assert "--workspaces=false" not in joined, (
             f"no root-only deps remain to protect; --workspaces=false is unnecessary now; actual: {calls[0]}"
@@ -945,7 +943,7 @@ class TestUpdateNodeDependencies:
         though agent-browser and @streamdown/math were removed from root
         `dependencies` (#43564). --include-workspace-root keeps them from
         being pruned by this scoped install, while --workspace ui-tui
-        --workspace web scopes the install to just those workspaces
+        scopes the install to just that workspace
         (confirmed empirically against npm 10.9.8 and 11.9.0 in PR #44772
         review)."""
         from hermes_cli import main as hm
@@ -1046,7 +1044,7 @@ class TestUpdateNodeDependencies:
         self, _which, mock_popen, tmp_path, monkeypatch
     ):
         """The npx warm-up must fire even when the workspace install fails —
-        it's independent of ui-tui/web dependency state (#43564)."""
+        it's independent of the ui-tui dependency state (#43564)."""
         from hermes_cli import main as hm
 
         (tmp_path / "package.json").write_text("{}")

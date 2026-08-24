@@ -177,10 +177,9 @@ WORKDIR /opt/hermes
 # ui-tui/package.json.  Copying the tree up front lets npm resolve the
 # workspace to real content instead of stopping at a bare package.json.
 COPY package.json package-lock.json ./
-COPY web/package.json web/
 COPY ui-tui/package.json ui-tui/
 COPY ui-tui/packages/hermes-ink/ ui-tui/packages/hermes-ink/
-# apps/shared/ is copied IN FULL because web/package.json references it as a
+# apps/shared/ is copied IN FULL because ui-tui/package.json references it as a
 # `file:` workspace dependency (same pattern as hermes-ink above).
 COPY apps/shared/ apps/shared/
 
@@ -267,13 +266,11 @@ RUN touch ./README.md
 RUN uv sync --frozen --no-install-project --extra all --extra messaging --extra otlp --extra anthropic --extra bedrock --extra azure-identity --extra hindsight --extra matrix
 
 # ---------- Frontend build (cached independently from Python source) ----------
-# Copy only the frontend source trees first so that Python-only changes don't
-# invalidate the (relatively slow) web + ui-tui build layer.
-COPY web/ web/
+# Copy only the frontend source tree first so that Python-only changes don't
+# invalidate the (relatively slow) ui-tui build layer.
 COPY ui-tui/ ui-tui/
 COPY apps/shared/ apps/shared/
-RUN cd web && npm run build && \
-    cd ../ui-tui && npm run build
+RUN cd ui-tui && npm run build
 
 # ---------- Source code ----------
 # .dockerignore excludes node_modules, so the installs above survive.
@@ -357,7 +354,9 @@ COPY --chmod=0755 docker/cont-init.d/015-supervise-perms /etc/cont-init.d/015-su
 COPY --chmod=0755 docker/cont-init.d/02-reconcile-profiles /etc/cont-init.d/02-reconcile-profiles
 
 # ---------- Runtime ----------
-ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
+# The web UI SPA is no longer bundled with the repo (3b), so the dashboard
+# runs API-only: no HERMES_WEB_DIST to point at, and mount_spa() stays off
+# because HERMES_SERVE_HEADLESS is unset here and no dist exists.
 # Point the TUI launcher at the prebuilt bundle baked at build time (Layer 8:
 # `ui-tui && npm run build`). This makes _make_tui_argv take the prebuilt-bundle
 # fast path (`node --expose-gc /opt/hermes/ui-tui/dist/entry.js`) and skip the
@@ -365,8 +364,8 @@ ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
 # nix/packaged-release path the launcher was designed for.
 #
 # Why this is required (not just an optimization): the root package-lock.json
-# describes the WHOLE monorepo workspace set (root + web + ui-tui + apps/*),
-# but the image only installs root/web/ui-tui (apps/* — the desktop app — is
+# describes the WHOLE monorepo workspace set (root + ui-tui + apps/*),
+# but the image only installs root/ui-tui (apps/* — the desktop app — is
 # never `npm install`ed here). So the actualized node_modules permanently
 # disagrees with the canonical lock, _tui_need_npm_install() returns True on
 # every launch, and the runtime `npm install` it triggers (a) can never
