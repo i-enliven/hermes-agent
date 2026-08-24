@@ -33,8 +33,8 @@ from utils import (
     atomic_replace,
 )
 
-# Shared formatter; the private alias is kept because claw.py and the backup
-# tests import ``_format_size`` from this module.
+# Shared formatter; the private alias is kept because doctor.py and the
+# backup tests import ``_format_size`` from this module.
 from hermes_cli.sizefmt import format_bytes as _format_size
 
 logger = logging.getLogger(__name__)
