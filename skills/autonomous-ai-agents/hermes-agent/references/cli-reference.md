@@ -132,7 +132,7 @@ hermes send                 One-off message through a gateway platform
 hermes pairing / plugins / insights / journey / computer-use
 hermes acp                  ACP server (IDE integration)
 hermes completion bash|zsh|fish
-hermes update / uninstall / claw migrate
+hermes update / uninstall
 ```
 
 Plugin- and provider-supplied subcommands (e.g. `hermes photon setup`) only appear once their plugin is installed/active.

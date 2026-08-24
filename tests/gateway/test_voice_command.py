@@ -892,8 +892,8 @@ class TestDiscordVoiceChannelMethods:
 
         Mirrors ``SIGNAL_ALLOWED_USERS`` and the existing
         ``DISCORD_ALLOWED_CHANNELS`` / ``_IGNORED_CHANNELS`` /
-        ``_FREE_RESPONSE_CHANNELS`` wildcard handling. This is the
-        convention ``claw migrate`` emits (#22334).
+        ``_FREE_RESPONSE_CHANNELS`` wildcard handling. Open-mode
+        allowlists use ``"*"`` as the wildcard (#22334).
         """
         adapter = self._make_adapter()
         adapter._allowed_user_ids = {"*"}
