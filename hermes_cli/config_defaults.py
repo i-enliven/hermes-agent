@@ -3474,47 +3474,15 @@ DEFAULT_CONFIG = {
         "extra_allowed_hosts": [],
     },
 
-    # Hermes Desktop (Electron app) launch options. These only affect
-    # `hermes desktop`; they do not touch the CLI/gateway.
+    # Desktop-backend settings read by the kept gateway (tui_gateway/server.py):
+    # repo-discovery config for the Projects panel, and crash-recovery
+    # auto-continue (re-submits an interrupted turn after an app/backend/machine
+    # crash, if the interruption is fresh). Empty repo_scan_roots preserve the
+    # historical bounded scan of the user's home.
     "desktop": {
-        # Git repository discovery for the Desktop Projects sidebar. Empty
-        # roots preserve the historical bounded scan of the user's home.
         "repo_scan_enabled": True,
         "repo_scan_roots": [],
         "repo_scan_exclude_paths": [],
-        # Extra Electron command-line flags appended to every desktop launch,
-        # e.g. ["--ozone-platform=x11"] on headless/VM X11 hosts that need an
-        # explicit ozone backend, or GPU workaround flags. A list of strings;
-        # a single string is also accepted and shell-split.
-        "electron_flags": [],
-        # GPU hardware acceleration policy for the desktop app:
-        #   "auto"  - let the app detect remote displays (SSH/VNC/RDP) and
-        #             disable GPU only then (default; current behavior).
-        #   true    - always disable GPU acceleration (software rendering).
-        #             Use on no-GPU VMs / Proxmox hosts where the GPU path hangs.
-        #   false   - always keep GPU acceleration on, even over a remote display.
-        # Bridged to the HERMES_DESKTOP_DISABLE_GPU env var the Electron app reads.
-        "disable_gpu": "auto",
-        # Linux keychain backend for secure token storage (Chromium's
-        # --password-store switch, which safeStorage needs before it can
-        # encrypt remote gateway tokens):
-        #   "auto"  - detect the session keychain: KWallet via KDE session env
-        #             vars, GNOME Keyring / any org.freedesktop.secrets
-        #             provider (e.g. KeePassXC) via D-Bus (default).
-        #   "gnome-libsecret" / "kwallet" / "kwallet5" / "kwallet6" / "basic"
-        #           - force a specific backend ("basic" = unencrypted store).
-        # Ignored on macOS/Windows. Bridged to the HERMES_DESKTOP_PASSWORD_STORE
-        # env var the Electron app reads, so an explicit env var still wins.
-        "password_store": "auto",
-        # macOS only: optional persistent code-signing identity (a cert in the
-        # login keychain — a self-signed "Code Signing" cert from Keychain
-        # Access works; no Apple Developer account needed) used to re-sign
-        # locally rebuilt desktop apps. A certificate-anchored Designated
-        # Requirement stays stable across rebuilds, so TCC grants (Full Disk
-        # Access, Desktop/Downloads/Documents, Accessibility, Automation,
-        # microphone) survive every update. Empty keeps the default stable
-        # ad-hoc signing (identifier-pinned requirement).
-        "macos_signing_identity": "",
         # Auto-continue a turn that was killed mid-run by an app/backend/machine
         # crash: resuming that session re-submits the interrupted prompt (shown
         # as a "resumed interrupted turn" event) if the interruption is fresh.
@@ -3527,7 +3495,6 @@ DEFAULT_CONFIG = {
             "max_attempts": 2,
         },
     },
-
 
     # Google Vertex AI provider (Gemini via the OpenAI-compatible endpoint).
     # Auth is OAuth2 (short-lived access tokens minted from a service-account

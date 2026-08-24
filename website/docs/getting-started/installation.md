@@ -15,10 +15,10 @@ platform-gated features are supported), see **[Platform Support](./platform-supp
 
 ## Quick Install
 ### With the Hermes Desktop installer on macOS or Windows (recommended)
-To easily install the command-line and desktop applications, [download the Hermes Desktop installer](https://hermes-agent.nousresearch.com/) from our website and run it.
+To easily install the command-line application, [download the Hermes Desktop installer](https://hermes-agent.nousresearch.com/) from our website and run it.
 
-### Without Hermes Desktop:
-For a command-line only install without Hermes Desktop, run:
+### Without the installer:
+For a command-line only install, run:
 
 #### Linux / macOS / WSL2 / Android (Termux)
 ```bash
@@ -30,11 +30,6 @@ curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 Run in powershell:
 ```powershell
 iex (irm https://hermes-agent.nousresearch.com/install.ps1) 
-```
-
-If you want to install & run Hermes Desktop after a command-line only install, simply run
-```bash
-hermes desktop
 ```
 
 ### What the Installer Does
@@ -90,7 +85,7 @@ You don't need to rebuild your setup from scratch. Restore a full backup with `h
 
 ## Prerequisites
 
-**Installer:** On non-Windows platforms, the only prerequisite is **Git**. On Linux, also make sure `curl` and `xz-utils` are available (the installer downloads Node.js as a `.tar.xz` archive). The desktop app additionally requires `g++` (or `build-essential` on Debian/Ubuntu) to compile native modules. The installer automatically handles everything else:
+**Installer:** On non-Windows platforms, the only prerequisite is **Git**. On Linux, also make sure `curl` and `xz-utils` are available (the installer downloads Node.js as a `.tar.xz` archive). The installer automatically handles everything else:
 
 - **uv** (fast Python package manager)
 - **Python 3.11** (via uv, no sudo needed)
@@ -99,7 +94,7 @@ You don't need to rebuild your setup from scratch. Restore a full backup with `h
 - **ffmpeg** (audio format conversion for TTS)
 
 :::info
-You do **not** need to install Python, Node.js, ripgrep, or ffmpeg manually. The installer detects what's missing and installs it for you. Just make sure `git` is available (`git --version`). On Linux, ensure `curl` and `xz-utils` are installed (`sudo apt install curl xz-utils` on Debian/Ubuntu). For the desktop app, also install `build-essential` (`sudo apt install build-essential`).
+You do **not** need to install Python, Node.js, ripgrep, or ffmpeg manually. The installer detects what's missing and installs it for you. Just make sure `git` is available (`git --version`). On Linux, ensure `curl` and `xz-utils` are installed (`sudo apt install curl xz-utils` on Debian/Ubuntu).
 :::
 
 :::tip Nix users

@@ -8,7 +8,7 @@ Instructions for AI coding assistants and developers working on the hermes-agent
 
 Hermes is a personal AI agent that runs the same agent core across a CLI, a
 messaging gateway (Telegram, Discord, Slack, and ~20 other platforms), a TUI,
-and an Electron desktop app. It learns across sessions (memory + skills),
+and a web dashboard. It learns across sessions (memory + skills),
 delegates to subagents, runs scheduled jobs, and drives a real terminal and
 browser. It is extended primarily through **plugins and skills**, not by
 growing the core.
@@ -42,7 +42,7 @@ This is the project's intent layer. Use it two ways:
 
 Read the balance right: Hermes ships a **lot** — most merges are bug fixes to
 real reported behavior, and the product surface (platforms, channels,
-providers, models, desktop/TUI features) expands aggressively and on purpose.
+providers, models, TUI/dashboard features) expands aggressively and on purpose.
 The restraint below is aimed squarely at the **core agent + the model tool
 schema**, the one place where every addition is paid for on every API call.
 "Smallest footprint" governs *how a capability is wired into the core*, NOT
@@ -56,7 +56,7 @@ conservative at the waist.
   `main`, points to the exact line where it manifests, and fixes the whole bug
   class — sibling call paths included — not just the one site the reporter hit.
 - **Expand reach at the edges.** New platform adapters, channels, providers,
-  models, and desktop/TUI/dashboard features are welcome and land routinely,
+  models, and TUI/dashboard features are welcome and land routinely,
   including large ones (a new messaging channel, a session-cap feature, a
   Windows PTY bridge). Breadth in the product is a goal, not a footprint
   concern — as long as it integrates with the existing setup/config UX
@@ -213,18 +213,18 @@ the competing PRs into plugins against that interface.
 ### Surface capability is a property of the SESSION, never of the process env
 
 A tool that only works because of *who is on the other end of the connection* —
-the desktop app's panes, the in-app browser, message reactions, Projects — must
-resolve its availability from the **session's own source**, not from an env var
-on the backend process.
+GUI-surface panes and previews, the in-app browser, message reactions,
+Projects — must resolve its availability from the **session's own source**,
+not from an env var on the backend process.
 
-The client and the backend are separate machines on separate clocks. The
-desktop app can be driving a backend Electron spawned locally, one over SSH,
-one behind a plain URL + token, or Hermes Cloud. Only the first two are spawned
-by us and carry `HERMES_DESKTOP=1`. Every env-keyed GUI gate is therefore a
-silent no-op on the other half of the topologies, and the failure is invisible:
-the tool is stripped from the schema before the model ever sees it, on the same
-backend whose platform hint is telling the model it's *"chatting inside the
-Hermes desktop app."*
+The client and the backend are separate machines on separate clocks. A GUI
+client can be driving a backend we spawned locally, one over SSH, one behind a
+plain URL + token, or Hermes Cloud. Only the first two are spawned by us and
+carry `HERMES_DESKTOP=1`. Every env-keyed GUI gate is therefore a silent no-op
+on the other half of the topologies, and the failure is invisible: the tool is
+stripped from the schema before the model ever sees it, on the same backend
+whose platform hint is telling the model it's *"chatting inside a Hermes GUI
+client."*
 
 The pattern that works:
 
@@ -235,7 +235,7 @@ The pattern that works:
   every topology.
 - **`check_fn` answers reachability or user opt-in, not surface.** "Is the
   renderer bridge wired?", "did the user enable reactions?" — fine. "Was I
-  spawned by Electron?" — not fine. `check_fn` results are also TTL-cached
+  spawned by a GUI client?" — not fine. `check_fn` results are also TTL-cached
   process-wide (`tools/registry.py`), so a per-session answer does not belong
   there at all: one process serves many sessions.
 - **Ask which identity you actually mean.** `HERMES_DESKTOP=1` legitimately
@@ -315,7 +315,7 @@ Browse with `hermes logs [--follow] [--level ...] [--session ...]`.
 
 ## TypeScript Style
 
-Applies to TypeScript across Hermes: desktop, TUI, website, and future TS packages.
+Applies to TypeScript across Hermes: TUI, web dashboard, `apps/shared`, `apps/bootstrap-installer`, and future TS packages.
 
 - Prefer small nanostores over component state when state is shared, reused, or read by distant UI.
 - Let each feature own its atoms. Chat state belongs near chat, shell state near shell, shared state in `src/store`.
@@ -527,21 +527,6 @@ The dashboard embeds the real `hermes --tui` — **not** a rewrite.  See `hermes
 **Do not re-implement the primary chat experience in React.** The main transcript, composer/input flow (including slash-command behavior), and PTY-backed terminal belong to the embedded `hermes --tui` — anything new you add to Ink shows up in the dashboard automatically. If you find yourself rebuilding the transcript or composer for the dashboard, stop and extend Ink instead.
 
 **Structured React UI around the TUI is allowed when it is not a second chat surface.** Sidebar widgets, inspectors, summaries, status panels, and similar supporting views (e.g. `ChatSidebar`, `ModelPickerDialog`, `ToolCall`) are fine when they complement the embedded TUI rather than replacing the transcript / composer / terminal. Keep their state independent of the PTY child's session and surface their failures non-destructively so the terminal pane keeps working unimpaired.
-
-### Electron Desktop Chat App (`apps/desktop/`)
-
-A **separate** chat surface from both the classic CLI and the dashboard's embedded TUI. It is an Electron + React + nanostore renderer (`@assistant-ui/react`) that talks to a `tui_gateway` backend over JSON-RPC (`requestGateway(method, params)`). The WebSocket/JSON-RPC transport lives in the framework-agnostic `apps/shared` package (`@hermes/shared` — `JsonRpcGatewayClient` + WS URL helpers), which the web dashboard (`web/`) also consumes; **desktop has no build/runtime dependency on the dashboard frontend** — it spawns a headless `hermes serve` backend server (the same gateway `dashboard` serves, minus the browser UI entirely: `serve` sets `headless_backend=True`, so `cmd_dashboard` skips `_build_web_ui` AND exports `HERMES_SERVE_HEADLESS=1` so `mount_spa()` disables the SPA even if a stray `web_dist/` exists — only the JSON-RPC/WS/API surface is reachable). `dashboard` and `serve` share `cmd_dashboard`/`start_server` but are independent surfaces — neither launches the other. The one exception is a backward-compat *fallback*: `serve` is newer, so the desktop spawn (`electron/backend-command.ts` + `backendSupportsServe()` in `electron/main.ts`) detects whether the resolved runtime registers `serve` and, only when it does not (an older managed install / PATH `hermes` the app hasn't updated yet), rewrites the argv to the legacy `dashboard --no-open`. Without that, a new app against an un-upgraded runtime would crash on an unknown subcommand and brick every mid-upgrade user. It does NOT embed `hermes --tui` — it has its own composer, transcript, and slash-command pipeline. For scoped Desktop architecture, state, resolver, transport, and testing rules, read `apps/desktop/AGENTS.md`.
-
-**Slash commands in the desktop app are curated client-side, then dispatched to the backend.** The pipeline:
-
-- **Backend already provides everything.** `tui_gateway/server.py` `commands.catalog` (empty-query list) and `complete.slash` (typed-query completions) both include built-in commands, user `quick_commands`, AND skill-derived commands (`scan_skill_commands()` / `get_skill_commands()`). The desktop app does not need a new RPC to see skills.
-- **The renderer curates via `apps/desktop/src/lib/desktop-slash-commands.ts`.** This is the load-bearing file. It holds `DESKTOP_COMMAND_SPECS` (the built-ins and their Desktop surfaces) plus `NO_DESKTOP_SURFACE` block-lists for terminal-only / messaging-only / picker-owned / settings-owned / advanced commands that should NOT clutter the desktop popover.
-  - `isDesktopSlashCommand(name)` — gates **execution**. Returns true for built-ins AND for any non-built-in (skill / quick command), so typed extension commands run.
-  - `isDesktopSlashSuggestion(name)` — gates **discovery/completion**. Used by BOTH completion paths in `app/chat/composer/hooks/use-slash-completions.ts` (empty-query catalog filter + typed-query `complete.slash` filter) and by `filterDesktopCommandsCatalog`.
-  - `isDesktopSlashExtensionCommand(name)` — true when the command is NOT a known Hermes built-in (i.e. a skill or user quick command). Both suggestion and catalog-filter paths allow extensions through so skill commands surface in the palette. (Added when fixing "skill commands missing from the desktop slash palette" — the curated allow-list was silently dropping every skill/quick command from completions even though they executed fine when typed.)
-- **Dispatch** lives in `app/session/hooks/use-prompt-actions/slash.ts` (`runSlash`): built-ins that the desktop owns (`/skin`, `/help`, `/new`, …) are handled locally or via `commands.catalog`; everything else goes to `slash.exec`, falling back to `command.dispatch` (which the gateway resolves into skill / alias / exec directives). A skill command resolves to `{type: "skill", message}` and is submitted as a normal prompt.
-
-**Rule:** the desktop slash palette's curation is about hiding noise (terminal-only / messaging-only built-ins), NOT about hiding user-activated extensions. Skill commands and `quick_commands` are extensions the backend surfaces — they belong in completions. If you tighten `desktop-slash-commands.ts`, keep `isDesktopSlashExtensionCommand` flowing into both the suggestion and catalog-filter paths. Tests: from `apps/desktop`, run `npx vitest run src/lib/desktop-slash-commands.test.ts` (workspace dependencies are installed at the repo root).
 
 ---
 

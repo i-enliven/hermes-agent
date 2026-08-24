@@ -40,20 +40,15 @@ The `curl | bash` installer manages Python, Node, and dependencies itself. The N
 No clone needed. Nix fetches, builds, and runs everything:
 
 ```bash
-# Run the desktop app
-nix run github:NousResearch/hermes-agent#desktop
+# Run the CLI
+nix run github:NousResearch/hermes-agent -- setup
 
 # Or install persistently
-nix profile install github:NousResearch/hermes-agent#desktop
-
-# run the tui
-nix run github:NousResearch/hermes-agent -- setup
-nix run github:NousResearch/hermes-agent -- --tui
-
-# or install it in your profile
 nix profile install github:NousResearch/hermes-agent
 hermes setup
-hermes --tui
+
+# run the tui
+nix run github:NousResearch/hermes-agent -- --tui
 ```
 
 After `nix profile install`, `hermes`, `hermes-agent`, and `hermes-acp` are on your PATH. From here, the workflow is identical to the [standard installation](./installation.md) — `hermes setup` walks you through provider selection, `hermes gateway install` sets up a launchd (macOS) or systemd user service, and config lives in `~/.hermes/`.

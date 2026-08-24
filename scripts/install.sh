@@ -81,7 +81,6 @@ MANIFEST_MODE=false
 STAGE_NAME=""
 JSON_OUTPUT=false
 NON_INTERACTIVE=false
-INCLUDE_DESKTOP=false
 
 # Detect non-interactive mode (e.g. curl | bash)
 # When stdin is not a terminal, read -p will fail with EOF,
@@ -143,10 +142,6 @@ while [[ $# -gt 0 ]]; do
             NON_INTERACTIVE=true
             shift
             ;;
-        --include-desktop|-IncludeDesktop)
-            INCLUDE_DESKTOP=true
-            shift
-            ;;
         --dir)
             INSTALL_DIR="$2"
             INSTALL_DIR_EXPLICIT=true
@@ -182,7 +177,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --stage NAME   Run one desktop bootstrap stage"
             echo "  --json         Print a JSON result frame for --stage"
             echo "  --non-interactive  Skip stages that require user input"
-            echo "  --include-desktop  Also build the desktop app (apps/desktop -> Hermes.app)"
             echo "  --dir PATH     Installation directory"
             echo "                   default (non-root):  ~/.hermes/hermes-agent"
             echo "                   default (root, Linux): /usr/local/lib/hermes-agent"
@@ -319,16 +313,7 @@ EOF
 }
 
 emit_manifest() {
-    # Stage-Desktop is included only with --include-desktop, mirroring
-    # install.ps1: the signed bootstrap installer (Hermes-Setup) passes it so
-    # a GUI install ends up with a launchable app; the Electron app's own
-    # first-launch bootstrap and the CLI one-liner omit it (building the
-    # desktop from inside the already-running app would clobber it).
-    local desktop_stage=""
-    if [ "$INCLUDE_DESKTOP" = true ]; then
-        desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
-    fi
-    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
+    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
     printf '\n'
 }
 
@@ -2096,9 +2081,9 @@ run_browser_install_with_timeout() {
 # function target, which the `timeout` binary cannot exec) it uses a pure-shell
 # watchdog: launch the command in its own process group, poll until it finishes,
 # and SIGTERM (then SIGKILL) the whole group on timeout. The pure-shell path is
-# what protects the bug-#39219 case — a stalled Electron download on macOS,
+# what protects the bug-#39219 case — a stalled `npm`/download on macOS,
 # where `timeout` is usually absent — turning an indefinite hang into a non-zero
-# exit so callers (install_desktop) can self-heal via the mirror fallback.
+# exit so callers can self-heal / retry.
 #
 # $1 (timeout) must be a bare integer number of seconds — the pure-shell loop
 # compares it arithmetically (the `timeout` binary would also accept suffixes
@@ -2108,7 +2093,7 @@ run_with_timeout() {
     local timeout_seconds="$1"
     shift
 
-    # Normalize to a bare integer; fall back to the desktop default if a caller
+    # Normalize to a bare integer; fall back to a generous default if a caller
     # ever passes a suffixed/empty value (the pure-shell loop needs an int).
     case "$timeout_seconds" in
         ''|*[!0-9]*) timeout_seconds=900 ;;
@@ -2928,407 +2913,11 @@ ensure_mode() {
 }
 
 
-# Clear the cached Electron download + any half-written unpacked output so the
-# next `npm run pack` re-downloads and re-stages from scratch. A corrupt zip in
-# the per-user Electron download cache - most often a partial/resumed download
-# that leaves concatenated junk - makes electron-builder's `unpack-electron`
-# extract a tree MISSING the electron binary, so the `electron`->`Hermes` rename
-# dies with ENOENT and every re-run repeats the broken extraction forever. This
-# is the bash sibling of install.ps1's Clear-ElectronBuildCache and the Python
-# _purge_electron_build_cache() used by `hermes desktop`; install.sh was the only
-# build path lacking it. Echoes the removed paths (one per line); best-effort.
-clear_electron_build_cache() {
-    local desktop_dir="$1"
-    local removed=""
-
-    # Per-user Electron download cache dirs, honoring the overrides @electron/get
-    # respects, then the platform defaults (macOS: ~/Library/Caches/electron,
-    # Linux: $XDG_CACHE_HOME/electron or ~/.cache/electron).
-    local cache_dirs=()
-    [ -n "${electron_config_cache:-}" ] && cache_dirs+=("$electron_config_cache")
-    [ -n "${ELECTRON_CACHE:-}" ] && cache_dirs+=("$ELECTRON_CACHE")
-    if [ "$OS" = "macos" ]; then
-        cache_dirs+=("$HOME/Library/Caches/electron")
-    else
-        [ -n "${XDG_CACHE_HOME:-}" ] && cache_dirs+=("$XDG_CACHE_HOME/electron")
-        cache_dirs+=("$HOME/.cache/electron")
-    fi
-
-    local dir zip
-    for dir in "${cache_dirs[@]}"; do
-        [ -d "$dir" ] || continue
-        # Recurse: the bad copy may be the top-level zip OR a copy inside an
-        # @electron/get hash subdir.
-        while IFS= read -r zip; do
-            [ -n "$zip" ] || continue
-            if rm -f "$zip" 2>/dev/null; then
-                removed="$removed$zip
-"
-            fi
-        done <<EOF
-$(find "$dir" -type f -name 'electron-*.zip' 2>/dev/null)
-EOF
-    done
-
-    # A half-written unpacked dir from an interrupted prior pack poisons the
-    # rename even after the zip is fixed (mac-arm64-unpacked / linux-unpacked).
-    local release_dir="$desktop_dir/release"
-    if [ -d "$release_dir" ]; then
-        local unpacked
-        while IFS= read -r unpacked; do
-            [ -n "$unpacked" ] || continue
-            if rm -rf "$unpacked" 2>/dev/null; then
-                removed="$removed$unpacked
-"
-            fi
-        done <<EOF
-$(find "$release_dir" -maxdepth 1 -type d -name '*-unpacked' 2>/dev/null)
-EOF
-    fi
-
-    printf '%s' "$removed"
-}
-
-# Run the desktop pack in $1 (the apps/desktop dir). `npm run pack` = tsc +
-# vite build + electron-builder --dir, producing an unpacked app for the
-# current OS. Signing auto-discovery is disabled so electron-builder falls back
-# to an ad-hoc signature instead of grabbing an unrelated Developer ID from the
-# keychain (a real signed/notarized .dmg needs Apple credentials — a separate
-# release concern). Optional $2 = an ELECTRON_MIRROR base URL for this attempt,
-# used as a fallback when the default GitHub release download is blocked.
-_desktop_pack() {
-    local desktop_dir="$1"
-    local mirror="${2:-}"
-    if [ -n "$mirror" ]; then
-        ( cd "$desktop_dir" && ELECTRON_MIRROR="$mirror" CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack )
-    else
-        ( cd "$desktop_dir" && CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack )
-    fi
-}
-
-# Last-resort Electron mirror after GitHub download fails (#47266).
-DESKTOP_ELECTRON_FALLBACK_MIRROR="https://npmmirror.com/mirrors/electron/"
-
-# Per-attempt wall-clock cap for the desktop npm install / electron-builder pack
-# (#39219). A stalled (not failed) Electron download on a throttled/blocked link
-# never returns, so without this the installer hangs forever on "Build desktop
-# app". 900s is generous enough for a slow-but-progressing ~150MB fetch + build;
-# override with DESKTOP_BUILD_TIMEOUT for very slow links.
-DESKTOP_BUILD_TIMEOUT="${DESKTOP_BUILD_TIMEOUT:-900}"
-
 # Wall-clock cap for the plain registry `npm install`s (browser-tools + TUI
 # deps). Same #39219 stall class but no ~150MB Electron binary, so a shorter
 # default; override with NODE_DEPS_TIMEOUT for very slow links.
 NODE_DEPS_TIMEOUT="${NODE_DEPS_TIMEOUT:-600}"
 
-# Electron package dir — workspace-local nest first, then root hoist.
-_electron_dir() {
-    local install_dir="$1"
-    if [ -d "$install_dir/apps/desktop/node_modules/electron" ]; then
-        printf '%s\n' "$install_dir/apps/desktop/node_modules/electron"
-    else
-        printf '%s\n' "$install_dir/node_modules/electron"
-    fi
-}
-
-# True when dist/ holds a usable Electron binary (#38673 / run-electron-builder.mjs).
-_electron_dist_ok() {
-    local install_dir="$1"
-    local electron_dir
-    electron_dir="$(_electron_dir "$install_dir")"
-    if [ "$OS" = "macos" ]; then
-        [ -e "$electron_dir/dist/Electron.app/Contents/MacOS/Electron" ]
-    else
-        [ -e "$electron_dir/dist/electron" ]
-    fi
-}
-
-# Best-effort: run electron/install.js to populate dist/ (optional mirror).
-_restore_electron_dist() {
-    local install_dir="$1"
-    local mirror="${2:-}"
-    local electron_dir
-    electron_dir="$(_electron_dir "$install_dir")"
-    _electron_dist_ok "$install_dir" && return 0
-
-    [ -f "$electron_dir/install.js" ] || return 1
-    command -v node >/dev/null 2>&1 || return 1
-
-    rm -rf "$electron_dir/dist" 2>/dev/null || true
-    rm -f "$electron_dir/path.txt" 2>/dev/null || true
-
-    if [ -n "$mirror" ]; then
-        ( cd "$electron_dir" && ELECTRON_MIRROR="$mirror" node install.js ) || true
-    else
-        ( cd "$electron_dir" && node install.js ) || true
-    fi
-    _electron_dist_ok "$install_dir"
-}
-
-_electron_pkg_staged_missing_dist() {
-    local install_dir="$1"
-    local electron_dir
-    electron_dir="$(_electron_dir "$install_dir")"
-    [ -f "$electron_dir/package.json" ] && [ -f "$electron_dir/install.js" ] && ! _electron_dist_ok "$install_dir"
-}
-
-_restore_electron_dist_with_fallback() {
-    local install_dir="$1"
-    _restore_electron_dist "$install_dir" \
-        || { [ -z "${ELECTRON_MIRROR:-}" ] && _restore_electron_dist "$install_dir" "$DESKTOP_ELECTRON_FALLBACK_MIRROR"; }
-}
-
-# Build apps/desktop into a launchable native app. Mirrors install.ps1's
-# Install-Desktop: a root-level npm install so the apps/* workspace resolves
-# the desktop's own deps (Electron ~150MB), then `npm run pack`
-# (electron-builder --dir) which emits an unpacked app for the current OS. Only invoked
-# via the 'desktop' stage / --include-desktop, which the Electron app's own
-# first-launch bootstrap never requests (it must not rebuild itself).
-install_desktop_voice_deps() {
-    # Desktop ships with working voice out of the box: eagerly install the
-    # wake-word + local-STT stacks ([wake] + [voice] extras) instead of
-    # leaving them to lazy first-use install. Policy change (Teknium, July
-    # 2026, #70509 testing): the first ear-click used to trigger a
-    # multi-minute onnxruntime pip install that froze the UI and blew RPC
-    # timeouts. Lazy install remains the fallback for CLI-only installs and
-    # for anything this best-effort step fails to fetch.
-    local _prev_venv="${VIRTUAL_ENV:-}"
-    if [ "$USE_VENV" = true ]; then
-        export VIRTUAL_ENV="$INSTALL_DIR/venv"
-    fi
-    if [ -z "${UV_CMD:-}" ]; then
-        install_uv || true
-    fi
-    if [ -z "${UV_CMD:-}" ]; then
-        log_warn "uv unavailable — voice/wake deps will lazy-install at first use instead"
-        return 0
-    fi
-    log_info "Installing voice + wake-word dependencies (onnxruntime, faster-whisper — 1-3min)..."
-    if (cd "$INSTALL_DIR" && $UV_CMD pip install -e ".[wake,voice]") ; then
-        log_success "Voice + wake-word dependencies installed"
-    else
-        log_warn "Voice/wake dependency install failed — they will lazy-install at first use"
-    fi
-    if [ "$USE_VENV" = true ] && [ -z "$_prev_venv" ]; then
-        unset VIRTUAL_ENV
-    fi
-    return 0
-}
-
-install_desktop() {
-    local desktop_dir="$INSTALL_DIR/apps/desktop"
-
-    # The desktop stage only runs when a build is explicitly requested
-    # (--include-desktop / 'desktop' stage), so a missing toolchain is a hard
-    # failure, not a silent skip — a silent skip yields a "complete" install
-    # with no app and a confusing "couldn't find a built desktop" at launch.
-    # Always re-resolve Node here. Stages run in separate processes, so we can't
-    # trust an earlier check; more importantly check_node now enforces the build
-    # floor (Node >=26) and prepends the Hermes-managed Node to PATH, so
-    # the build never runs on a too-old system Node — the cause of the opaque
-    # "Build desktop app … exit code 1" failure (Vite crashes on old Node).
-    check_node
-    if ! command -v npm >/dev/null 2>&1; then
-        log_error "Cannot build desktop app: Node.js / npm unavailable"
-        log_info "Install Node.js and retry: cd $desktop_dir && npm run pack"
-        return 1
-    fi
-    if [ ! -f "$desktop_dir/package.json" ]; then
-        log_warn "Skipping desktop build (apps/desktop not present in checkout)"
-        return 0
-    fi
-
-    # 1. Root workspace install so apps/desktop's deps (Electron, Vite,
-    #    node-pty prebuilds) resolve. The browser-tools install runs in the
-    #    repo-root package workspace, which does not pull apps/* deps.
-    #
-    #    Prefer `npm ci`: it deletes node_modules and reinstalls from the
-    #    lockfile, so it always produces a complete tree. Bare `npm install`
-    #    can report "up to date" against a stale node_modules/.package-lock.json
-    #    marker while node_modules is actually empty (Windows workspace-hoisting
-    #    flake) — leaving tsc/typescript unresolved and `npm run pack`'s
-    #    `tsc -b` failing with no obvious cause. Fall back to `npm install`
-    #    only if `npm ci` is unavailable or the lockfile is out of sync.
-    #
-    #    Both the install and the build below are wrapped in a hard wall-clock
-    #    timeout (#39219): the Electron binary (~150MB) is fetched from GitHub,
-    #    and on a throttled/blocked connection that download can *stall* — npm
-    #    neither errors nor exits, so the installer sits on "Build desktop app"
-    #    forever with only `npm warn deprecated` lines visible. A stall now
-    #    converts to a non-zero exit, which feeds the existing self-heal /
-    #    mirror-fallback escalation instead of hanging the whole install.
-    #
-    #    The `npm ci` and its `npm install` fallback SHARE one budget: a stalled
-    #    link wedges both identically, so giving each a full DESKTOP_BUILD_TIMEOUT
-    #    would double the worst-case hang. We compute a single deadline and pass
-    #    the remaining seconds to the fallback (min 30s so it still gets a real
-    #    attempt if `npm ci` failed fast rather than stalling).
-    log_info "Installing desktop workspace dependencies (includes Electron ~150MB, 1-3min)..."
-    local _deps_start _deps_remaining
-    _deps_start=$(date +%s)
-    if run_with_timeout "$DESKTOP_BUILD_TIMEOUT" bash -c 'cd "$1" && npm ci' _ "$INSTALL_DIR"; then
-        log_success "Desktop workspace dependencies installed"
-    elif _deps_remaining=$(( DESKTOP_BUILD_TIMEOUT - ($(date +%s) - _deps_start) )); \
-         [ "$_deps_remaining" -lt 30 ] && _deps_remaining=30; \
-         run_with_timeout "$_deps_remaining" bash -c 'cd "$1" && npm install' _ "$INSTALL_DIR"; then
-        log_success "Desktop workspace dependencies installed"
-    elif _electron_pkg_staged_missing_dist "$INSTALL_DIR"; then
-        log_warn "Desktop dependency install failed with a missing Electron dist; attempting self-heal..."
-        _restore_electron_dist_with_fallback "$INSTALL_DIR" || true
-    else
-        log_error "Desktop workspace npm install failed"
-        # Common cause: a previous 'sudo npm'/'sudo npx' left root-owned files in
-        # ~/.npm, so this non-root install can't write the shared cache. npm hides
-        # it behind a confusing EEXIST / "File exists" message while the real errno
-        # is EACCES (-13). Point the user at the fix instead of a raw npm trace.
-        log_info "If the errors above mention EACCES / 'permission denied' / EEXIST while"
-        log_info "writing the npm cache, your ~/.npm likely holds root-owned files from an"
-        log_info "earlier 'sudo npm' or 'sudo npx'. Reclaim ownership and retry:"
-        log_info "  sudo chown -R \"\$(id -un)\" ~/.npm && npm cache verify"
-        log_info "Then re-run this installer, or build manually:"
-        log_info "  cd \"$INSTALL_DIR\" && npm ci && cd apps/desktop && npm run pack"
-        return 1
-    fi
-
-    # 2. Build, with up to three escalating attempts so a transient/blocked
-    #    Electron download self-heals instead of failing the whole install:
-    #      a) plain `npm run pack` (downloads Electron from GitHub),
-    #      b) on failure, purge a corrupt cached zip + stale unpacked dir and
-    #         retry (matches install.ps1 / `hermes desktop`),
-    #      c) on still-failing, fall back to a public Electron mirror — this is
-    #         the GitHub-blocked/throttled case (the repeating "retrying" log).
-    log_info "Building desktop app (this takes 1-3 minutes)..."
-    local pack_ok=false
-    if run_with_timeout "$DESKTOP_BUILD_TIMEOUT" _desktop_pack "$desktop_dir"; then
-        pack_ok=true
-    else
-        local purged=""
-        local restored=false
-        if ! _electron_dist_ok "$INSTALL_DIR"; then
-            purged="$(clear_electron_build_cache "$desktop_dir")"
-            if _restore_electron_dist "$INSTALL_DIR"; then restored=true; fi
-        fi
-        if [ "$restored" = true ]; then
-            log_warn "Desktop build failed; refreshed the Electron download and retrying once..."
-            if run_with_timeout "$DESKTOP_BUILD_TIMEOUT" _desktop_pack "$desktop_dir"; then
-                pack_ok=true
-            fi
-        fi
-    fi
-
-    # (c) GitHub blocked → mirror fallback (#47266).
-    if [ "$pack_ok" = false ] && [ -z "${ELECTRON_MIRROR:-}" ]; then
-        log_warn "Desktop build still failing — the Electron download from GitHub looks blocked."
-        log_warn "Re-downloading Electron via a public mirror ($DESKTOP_ELECTRON_FALLBACK_MIRROR), then rebuilding..."
-        log_warn "  (set ELECTRON_MIRROR yourself to use a different/trusted mirror)"
-        _electron_dist_ok "$INSTALL_DIR" || _restore_electron_dist "$INSTALL_DIR" "$DESKTOP_ELECTRON_FALLBACK_MIRROR" || true
-        if run_with_timeout "$DESKTOP_BUILD_TIMEOUT" _desktop_pack "$desktop_dir" "$DESKTOP_ELECTRON_FALLBACK_MIRROR"; then
-            pack_ok=true
-        fi
-    fi
-
-    if [ "$pack_ok" = false ]; then
-        log_error "Desktop app build failed"
-        # If the log shows repeated "retrying" lines fetching the Electron zip,
-        # the binary download is blocked/throttled (firewall, proxy, region) and
-        # the mirror fallback above also couldn't reach a host. Try a mirror you
-        # trust and rebuild (@electron/get honors ELECTRON_MIRROR):
-        log_info "If the log shows Electron download retries, rebuild via a reachable mirror:"
-        log_info "  ELECTRON_MIRROR=<mirror-base-url> \\"
-        log_info "    bash -c 'cd \"$desktop_dir\" && CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack'"
-        log_info "Otherwise build manually: cd $desktop_dir && npm run pack"
-        return 1
-    fi
-
-    local app=""
-    if [ "$OS" = "linux" ]; then
-        if [ -x "$desktop_dir/release/linux-unpacked/Hermes" ]; then
-            app="$desktop_dir/release/linux-unpacked/Hermes"
-        elif [ -x "$desktop_dir/release/linux-unpacked/hermes" ]; then
-            app="$desktop_dir/release/linux-unpacked/hermes"
-        fi
-    else
-        local cand
-        for cand in \
-            "$desktop_dir/release/mac-arm64/Hermes.app" \
-            "$desktop_dir/release/mac/Hermes.app"; do
-            if [ -d "$cand" ]; then
-                app="$cand"
-                break
-            fi
-        done
-    fi
-    if [ -z "$app" ]; then
-        log_error "Desktop build completed but no app was found under $desktop_dir/release/"
-        return 1
-    fi
-    log_success "Desktop app built: $app"
-
-    # Linux: Electron's chrome-sandbox helper needs root:root 4755 or the
-    # sandboxed renderer will abort on startup.  Check the file is a regular
-    # file (not a symlink) before chown/chmod so we don't follow an
-    # attacker-controlled link to an arbitrary path.
-    if [ "$OS" = "linux" ]; then
-        local sandbox="$desktop_dir/release/linux-unpacked/chrome-sandbox"
-        if [ -f "$sandbox" ] && [ ! -L "$sandbox" ]; then
-            if [ "$(id -u)" -eq 0 ]; then
-                chown root:root "$sandbox" && chmod 4755 "$sandbox" || {
-                    log_error "Cannot configure Electron sandbox helper: $sandbox"
-                    return 1
-                }
-            elif command -v sudo >/dev/null 2>&1; then
-                sudo chown root:root "$sandbox" && sudo chmod 4755 "$sandbox" || {
-                    log_error "Cannot configure Electron sandbox helper (sudo failed): $sandbox"
-                    return 1
-                }
-            else
-                log_error "Cannot configure Electron sandbox helper without sudo: $sandbox"
-                return 1
-            fi
-        fi
-    fi
-
-    # macOS: route through the same config-aware signing fixup as
-    # `hermes desktop`, so install/repair and self-update agree about the app's
-    # identity. The fixup preserves the Electron entitlement plists and signs
-    # with a stable Designated Requirement (configured keychain identity, else
-    # identifier-pinned ad-hoc), so macOS TCC grants — Full Disk Access,
-    # Desktop/Downloads/Documents, Accessibility, microphone — survive the
-    # rebuild instead of resetting on every update. The shell's
-    # publisher-signing decision governed the build and is passed explicitly so
-    # importing Python cannot reverse it by loading HERMES_HOME/.env. If the
-    # helper is unavailable or fails, branch into the historical quarantine
-    # strip + deep ad-hoc repair so a broken venv never leaves the bundle
-    # unsigned/unlaunchable.
-    if [ "$OS" = "macos" ] && [ -z "${CSC_LINK:-}" ] && [ -z "${APPLE_SIGNING_IDENTITY:-}" ] && command -v codesign >/dev/null 2>&1; then
-        local config_python="$INSTALL_DIR/venv/bin/python"
-        local fixup_ok=""
-        if [ -x "$config_python" ]; then
-            if HERMES_HOME="$HERMES_HOME" "$config_python" - "$desktop_dir" <<'PYEOF'
-import sys
-from pathlib import Path
-from hermes_cli.main import _desktop_macos_relaunchable_fixup
-ok = _desktop_macos_relaunchable_fixup(
-    Path(sys.argv[1]), publisher_signing_configured=False
-)
-sys.exit(0 if ok else 1)
-PYEOF
-            then
-                fixup_ok=1
-            else
-                log_warn "Config-aware macOS signing fixup failed; applying the historical ad-hoc fallback."
-            fi
-        fi
-        if [ -z "$fixup_ok" ]; then
-            xattr -cr "$app" 2>/dev/null || true
-            codesign --force --deep --sign - "$app" >/dev/null 2>&1 || true
-        fi
-    fi
-
-    # `npm install` + `npm run pack` rewrite lockfiles; restore them so the
-    # checkout stays clean for the next `hermes update`.
-    restore_dirty_lockfiles "$INSTALL_DIR"
-}
 
 # Each --stage runs in its own process, so (unlike the monolithic main() where
 # clone_repo cd's once and later steps inherit it) a stage that operates on the
@@ -3416,18 +3005,6 @@ run_stage_body() {
             require_install_dir
             maybe_start_gateway
             ;;
-        desktop)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            # Each stage runs in its own process, so the Hermes-managed Node
-            # provisioned during prerequisites/node-deps (at $HERMES_HOME/node/bin)
-            # isn't on PATH here. check_node re-adds it (or installs if missing)
-            # so install_desktop can find npm instead of silently skipping.
-            check_node
-            install_desktop_voice_deps
-            install_desktop
-            ;;
         complete)
             detect_os
             resolve_install_layout
@@ -3513,10 +3090,6 @@ main() {
     run_setup_wizard
     maybe_start_gateway
 
-    if [ "$INCLUDE_DESKTOP" = true ]; then
-        install_desktop_voice_deps
-        install_desktop
-    fi
 
     print_success
 

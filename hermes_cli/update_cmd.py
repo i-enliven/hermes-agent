@@ -152,9 +152,9 @@ def _run_migrate_config_fresh(*, interactive: bool = False, quiet: bool = False)
 
 # Critical files that Hermes must be able to import immediately after an
 # update/install. Most are imported on every CLI startup; ``web_server.py``
-# is the desktop/dashboard backend path that a fresh Windows install launches
+# is the dashboard backend path that a fresh Windows install launches
 # right away. If any of these fail to parse after a pull, the user can be
-# left with a bricked CLI or desktop backend. The post-pull syntax guard
+# left with a bricked CLI or dashboard backend. The post-pull syntax guard
 # validates these and auto-rolls-back on failure.
 _UPDATE_CRITICAL_FILES = (
     "hermes_cli/main.py",
@@ -830,7 +830,7 @@ def _commit_staged_replacements(staged) -> None:
 
 def _print_update_completion(message: str) -> None:
     """Print an update outcome plus, when the dashboard launched this run
-    with an action id, a terminal receipt line the Desktop can match after
+    with an action id, a terminal receipt line the dashboard can match after
     the dashboard restarts (see #47359 / #58764)."""
     print(message)
     action_id = os.environ.get("HERMES_ACTION_ID", "")
@@ -874,7 +874,7 @@ def _update_complete_message(pre_version: str | None) -> str:
     return "✓ Update complete!"
 
 
-def _update_via_zip(args, *, had_desktop_app_before_update: bool = False):
+def _update_via_zip(args):
     """Update Hermes Agent by downloading a ZIP archive.
 
     Used on Windows when git file I/O is broken (antivirus, NTFS filter
@@ -1131,10 +1131,6 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False):
 
     node_failures = _update_node_dependencies()
     _m()._build_web_ui(_m().PROJECT_ROOT / "web")
-    _rebuild_desktop_after_update(
-        _m().PROJECT_ROOT / "apps" / "desktop",
-        had_desktop_app_before_update=had_desktop_app_before_update,
-    )
 
     # Sync skills
     try:
@@ -1878,8 +1874,8 @@ def _format_concurrent_instances_message(
     lines.append(f"  Updating now would fail to overwrite {shim} because")
     lines.append("  Windows blocks REPLACE on a running executable.")
     lines.append("")
-    lines.append("  Close Hermes Desktop, exit any open `hermes` REPLs, and")
-    lines.append("  stop the gateway (`hermes gateway stop`) before retrying.")
+    lines.append("  Close the Hermes dashboard backend, exit any open `hermes")
+    lines.append("  REPLs, and stop the gateway (`hermes gateway stop`) before retrying.")
     lines.append("")
     if matches:
         pid_args = " ".join(f"/PID {pid}" for pid, _ in matches)
@@ -2257,8 +2253,8 @@ def _npm_manifest_paths() -> tuple[Path, ...]:
     The workspace list is pulled from the root package.json's `workspaces`
     globs (npm's own source of truth) rather than hardcoded, so adding a
     workspace can never silently escape the skip key. Every workspace
-    manifest belongs in the key — desktop included, even though the
-    install only names ui-tui and web — because the single lockfile spans
+    manifest belongs in the key — even though the install only names
+    ui-tui and web — because the single lockfile spans
     the whole workspace graph, so any manifest edit can put the lockfile
     out of sync and change what the install must do. Falls back to hashing
     just root manifests if package.json is unreadable (never skips more
@@ -2417,16 +2413,12 @@ def _update_node_dependencies() -> list[str]:
         logger.info("npm lockfile unchanged, skipping npm install")
         return []
 
-    # Root package.json has no dependencies of its own (agent-browser and
-    # @streamdown/math were moved out — see #43564): agent-browser resolves
-    # at runtime via `npx agent-browser` (tools/browser_tool.py), and
-    # @streamdown/math is a desktop-only import now declared in
-    # apps/desktop/package.json. That means a plain workspace-scoped install
-    # can never prune anything root-only, so we only need to name the
-    # workspaces the CLI/TUI/web build actually requires. apps/desktop pulls
-    # in Electron as a devDependency with a ~200MB postinstall download, so
-    # it's deliberately never named here — desktop deps install on demand
-    # (see _desktop_build_needed).
+    # Root package.json has no runtime dependencies of its own
+    # (agent-browser was moved out — see #43564): agent-browser resolves at
+    # runtime via `npx agent-browser` (tools/browser_tool.py). A plain
+    # workspace-scoped install can therefore never prune anything root-only,
+    # so we only need to name the workspaces the CLI/TUI/web build actually
+    # requires.
     print("→ Updating Node.js dependencies...")
 
     def _partial_update_failure(*labels: str) -> list[str]:
@@ -2441,10 +2433,11 @@ def _update_node_dependencies() -> list[str]:
         "--workspace", "ui-tui", "--workspace", "web",
         # Root package.json's own devDependencies (the shared ESLint flat
         # config every workspace's eslint.config.mjs imports) are otherwise
-        # pruned by this scoped install, same as agent-browser/@streamdown
-        # math used to be before they moved out of root entirely (#43564).
-        # Unlike those, root's devDependencies have nowhere else to live —
-        # this flag still excludes apps/desktop, which is never named above.
+        # pruned by this scoped install, same as agent-browser used to be
+        # before it moved out of root entirely (#43564). Root's devDependencies
+        # (the shared ESLint flat config) have nowhere else to live, so the
+        # root's own dev deps must stay installed even though no root
+        # runtime dep exists.
         "--include-workspace-root",
     ]
 
@@ -2455,8 +2448,8 @@ def _update_node_dependencies() -> list[str]:
     # NOTE: capture_output=False here is deliberate (#18840) — optional
     # postinstall scripts print download progress, and capturing it makes a
     # long download look hung. The chatty npm-deprecation noise during
-    # `hermes update` comes from the *desktop* build, not this step; that
-    # one is captured to update.log.
+    # `hermes update` comes from the other install steps, not this one;
+    # postinstall chatter here is captured to update.log.
     result = _m()._run_npm_install_deterministic(
         npm,
         _m().PROJECT_ROOT,
@@ -2466,7 +2459,7 @@ def _update_node_dependencies() -> list[str]:
     )
     if result.returncode == 0:
         _record_npm_lockfile_hash(shared_hermes_root)
-        print("  ✓ ui-tui, web workspaces installed (desktop skipped)")
+        print("  ✓ ui-tui, web workspaces installed")
         failures: list[str] = []
     else:
         print("  ⚠ npm install failed")
@@ -2482,7 +2475,7 @@ def _log_only_write(text: str) -> None:
 
     During ``hermes update`` ``sys.stdout`` is an ``_UpdateOutputStream`` that
     mirrors to both the terminal and ``update.log``. Loud, low-signal
-    subprocess output (npm installs, the Electron/vite build, the cua-driver
+    subprocess output (npm installs, the vite build, the cua-driver
     installer's "Next steps" wall) should be captured and tucked into the log
     so failures stay debuggable, without flooding the user's terminal. This
     reaches past the mirroring stream straight to the underlying log handle.
@@ -3144,7 +3137,7 @@ def _venv_core_imports_healthy() -> tuple[bool, str]:
         # No venv interpreter at all. In a dev checkout that's normal (the
         # dev may run hermes from any interpreter), so report healthy to
         # avoid forcing reinstalls. But on a MANAGED install (the Windows
-        # installer / desktop bootstrap stamps `.hermes-bootstrap-complete`,
+        # installer bootstrap stamps `.hermes-bootstrap-complete`,
         # and an interrupted update leaves `.update-incomplete`), the venv
         # IS the install — its absence means a repair got interrupted after
         # the old venv was moved aside, and "Already up to date!" would
@@ -3196,15 +3189,15 @@ def _detect_venv_python_processes(
     """Find live processes running from the project venv's interpreter.
 
     The hermes.exe shim guard misses the biggest lock-holder class on
-    Windows: the Desktop app's backend (``python.exe -m hermes_cli.main
+    Windows: the dashboard backend (``python.exe -m hermes_cli.main
     serve``) and anything else running straight off ``venv\\Scripts\\python
     (w).exe``. Those processes keep native ``.pyd`` extensions mapped, so a
     dependency sync mid-update dies with access-denied and strands the venv
     half-updated (ryanc's brotlicffi/_sodium.pyd incidents, July 2026).
 
-    Killing them from here is pointless — the Desktop app supervises its
-    backend and respawns it within seconds — so the caller should refuse and
-    tell the user to close the app instead. Returns ``(pid, name, cmdline)``
+    Killing them from here is pointless — the dashboard backend is
+    supervised and respawns within seconds — so the caller should refuse
+    and tell the user to close it instead. Returns ``(pid, name, cmdline)``
     tuples; empty off-Windows / without psutil / when nothing matches. The
     calling process and its ancestors are always excluded (a CLI ``hermes
     update`` itself runs from the venv python). Never raises.
@@ -3257,7 +3250,7 @@ def _detect_venv_python_processes(
         cwd_low = str(info.get("cwd") or "").lower().rstrip(os.sep) + os.sep
 
         # Primary match: the executable itself lives under this venv
-        # (venv\Scripts\python(w).exe — the desktop backend / gateway case).
+        # (venv\Scripts\python(w).exe — the dashboard backend / gateway case).
         is_holder = exe_norm.startswith(venv_prefix)
         # Fallback: uv/base-interpreter trampolines run a python whose exe is
         # OUTSIDE the venv but which still imports from it and holds its .pyd
@@ -3272,7 +3265,7 @@ def _detect_venv_python_processes(
         if not is_holder:
             continue
         name = info.get("name") or Path(exe).name
-        # Return the FULL cmdline: callers match against it (the Desktop
+        # Return the FULL cmdline: callers match against it (the dashboard
         # preflight's pausable-gateway exemption parses for `gateway run`).
         # Truncating here cut long managed-runtime interpreter paths before
         # the `-m hermes_cli.main gateway run` argv, so autostarted gateways
@@ -3454,7 +3447,7 @@ def _format_venv_python_holders_message(matches: list[tuple[int, str, str]]) -> 
         hint = ""
         low = cmdline.lower()
         if "serve" in low or "dashboard" in low:
-            hint = "  ← Hermes Desktop backend (close the desktop app)"
+            hint = "  ← Hermes dashboard backend (close the dashboard)"
         elif "gateway" in low:
             hint = "  ← gateway"
         lines.append(f"  PID {pid}  {name}  {cmdline[:120]}{hint}")
@@ -3468,7 +3461,7 @@ def _format_venv_python_holders_message(matches: list[tuple[int, str, str]]) -> 
         "  dependency update would fail partway and leave a broken install."
     )
     lines.append(
-        "  Close the Hermes desktop app / other Hermes terminals, then re-run:"
+        "  Close the Hermes dashboard backend / other Hermes terminals, then re-run:"
     )
     lines.append("    hermes update")
     lines.append("  (or use `hermes update --force-venv` to proceed anyway at your own risk)")
@@ -3488,7 +3481,7 @@ def _venv_launcher_ancestors(pids: list[int]) -> list[int]:
     ``_detect_venv_python_processes()`` matches on the venv path prefix, so
     the guard downstream of the pause sees the *launcher* instead. The two
     sets are disjoint, which meant a paused gateway still tripped the
-    venv-holder guard and aborted the update every time (the Desktop
+    venv-holder guard and aborted the update every time (the dashboard
     "venv-blocked: N process(es) hold the install" dead-end, where the
     reported holder is a gateway the updater believes it already stopped).
 
@@ -3553,7 +3546,7 @@ def _leftover_pausable_gateway_pids(
     would dead-end the update — an abort pointed at exactly the kind of
     process the pause machinery exists to stop.
 
-    Holders are classified with the same matcher the Desktop preflight uses
+    Holders are classified with the same matcher the preflight uses
     to exempt them (``_is_pausable_gateway``), so the preflight's exemption
     and this guard's tolerance cannot drift apart — matcher drift between
     two views of the same process table is what produced the launcher/worker
@@ -3562,7 +3555,7 @@ def _leftover_pausable_gateway_pids(
     falls back to the captured prefix.
 
     Returns ``None`` when any holder is not a pausable gateway — an operator
-    REPL, a stray script, or the Desktop backend has no pause machinery
+    REPL, a stray script, or the dashboard backend has no pause machinery
     downstream, and the guard must keep refusing exactly as before.
     """
     from hermes_cli._scan_venv_blockers import _is_pausable_gateway
@@ -3691,11 +3684,10 @@ def _orphaned_desktop_backend_pids(
             return None
     return roots
 
-
 def _stop_process_trees(pids: list[int]) -> None:
     """Force-stop each PID with its full child tree (Windows).
 
-    ``taskkill /T /F`` mirrors the Desktop's ``forceKillProcessTree`` and
+    ``taskkill /T /F`` mirrors the installer's process-tree kill and
     install.ps1's venv sweep: stopping only the parent can leave a managed
     ``.hermes-runtime`` interpreter child alive and holding the install open
     (#70026). Best effort; never raises.
@@ -4062,7 +4054,7 @@ def _refresh_windows_gateway_launchers() -> None:
 def _refresh_bootstrap_cache_scripts(branch: str = "main") -> None:
     """Sync the installer's bootstrap-cache scripts from the fresh checkout.
 
-    The Desktop GUI updater (``hermes-setup.exe``) executes
+    The bootstrap installer (``hermes-setup.exe``) executes
     ``$HERMES_HOME/bootstrap-cache/install-<ref>.ps1`` (or ``.sh``) for its
     repair/bootstrap stages. Installer binaries built before the #67193
     cache-refresh fix (June 2026 and earlier) NEVER re-download a cached
@@ -4361,82 +4353,6 @@ def _normalize_managed_eol(git_cmd, repo_root):
         pass
 
 
-def _desktop_app_present(desktop_dir: Path) -> bool:
-    """Return whether a packaged or source Desktop build exists."""
-    return (
-        _m()._desktop_packaged_executable(desktop_dir) is not None
-        or _m()._desktop_dist_exists(desktop_dir)
-    )
-
-
-def _rebuild_desktop_after_update(
-    desktop_dir: Path, *, had_desktop_app_before_update: bool
-) -> None:
-    """Rebuild an installed Desktop app when its source or artifact changed."""
-    # The release tree is ignored by git and can disappear during an update.
-    # Its pre-update presence is enough to restore it; do not make people who
-    # have never used Desktop pay for an Electron build.
-    has_desktop_app = had_desktop_app_before_update or _desktop_app_present(desktop_dir)
-    if not (
-        (desktop_dir / "package.json").exists()
-        and _m()._resolve_node_runtime_npm()
-        and has_desktop_app
-    ):
-        return
-
-    print("→ Checking if desktop app needs rebuilding...")
-    # Consult the content-hash stamp IN-PROCESS first. The spawned
-    # `hermes desktop --build-only` subprocess re-imports the whole CLI stack
-    # (~1-3 s) just to reach the same _m()._desktop_build_needed check; when
-    # the stamp already says "up to date" we can skip the spawn entirely. The
-    # update path never passes --source, so the subprocess would run with
-    # source_mode=False — mirror that here. Any error in the pre-check falls
-    # through to the subprocess.
-    skip_desktop_build = False
-    try:
-        skip_desktop_build = not _m()._desktop_build_needed(
-            desktop_dir, _m().PROJECT_ROOT, source_mode=False
-        )
-    except Exception:
-        skip_desktop_build = False
-    if skip_desktop_build:
-        print("  ✓ Desktop app up to date")
-        return
-
-    desktop_build_cmd = [sys.executable, "-m", "hermes_cli.main", "desktop", "--build-only"]
-    # Capture the (very loud) Electron/vite build output into update.log
-    # instead of streaming it to the terminal. On the rare nonzero exit,
-    # retry once after waiting again for the venv — this covers a
-    # still-settling rebuild window the first wait didn't fully catch — then
-    # surface the captured tail so the failure is debuggable.
-    #
-    # Start the build subprocess with the Hermes-managed Node on PATH: when
-    # `hermes update` runs inside the desktop updater chain (Desktop →
-    # hermes-setup → hermes update), the shell PATH customizations are lost,
-    # so a bare-PATH child would fail with `node: not found` before cmd_gui can
-    # self-heal.
-    from hermes_constants import with_hermes_node_path
-
-    build_env = with_hermes_node_path()
-    build_result = _m()._run_logged_subprocess(
-        desktop_build_cmd, cwd=_m().PROJECT_ROOT, env=build_env
-    )
-    if build_result.returncode != 0:
-        build_result = _m()._run_logged_subprocess(
-            desktop_build_cmd, cwd=_m().PROJECT_ROOT, env=build_env
-        )
-    if build_result.returncode != 0:
-        print("  ⚠ Desktop build failed (non-fatal; run `hermes desktop` to retry)")
-        tail = "\n".join((build_result.stdout or "").strip().splitlines()[-15:])
-        if tail:
-            print(tail)
-        from hermes_constants import display_hermes_home as _dhh
-
-        print(f"  Full build log: {_dhh()}/logs/update.log")
-    else:
-        print("  ✓ Desktop app up to date")
-
-
 def _cmd_update_impl(args, gateway_mode: bool):
     """Body of ``cmd_update`` — kept separate so the wrapper can always
     restore stdio even on ``sys.exit``."""
@@ -4459,7 +4375,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
     # Whether this update is running without a human at the keyboard.
     # Interactive terminal updates always stash-and-ask (unchanged behavior);
-    # only non-interactive updates (desktop/chat app, gateway, `--yes`) consult
+    # only non-interactive updates (dashboard, gateway, `--yes`) consult
     # the `updates.non_interactive_local_changes` config setting to decide
     # whether to auto-restore stashed local source changes or throw them away.
     _non_interactive_update = (
@@ -4512,13 +4428,13 @@ def _cmd_update_impl(args, gateway_mode: bool):
         )
 
     # With gateways paused, anything still running from the venv interpreter
-    # (most commonly the Desktop app's `hermes serve` backend) will keep .pyd
+    # (most commonly the dashboard's `hermes serve` backend) will keep .pyd
     # files locked and corrupt the dependency sync below. Refuse rather than
-    # race: killing the desktop backend is futile (the app supervises and
-    # respawns it), so the user must close the app. Deliberately NOT bypassed
-    # by plain --force: the desktop bootstrap updater passes --force to skip
+    # race: killing the dashboard backend is futile (it is supervised and
+    # respawns), so the user must close it. Deliberately NOT bypassed
+    # by plain --force: the bootstrap installer passes --force to skip
     # the hermes.exe shim guard above, but its lock probe only checks the shim
-    # and app.asar — a non-desktop venv python holding a .pyd would sail
+    # and app.asar — a plain venv python holding a .pyd would sail
     # through and corrupt the sync (the exact failure this guard exists for).
     # --force-venv is the explicit escape hatch.
     if _m()._is_windows() and not getattr(args, "force_venv", False):
@@ -4584,11 +4500,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
     # can actually break — and only when the sync would truly rewrite the
     # loaded distribution.
 
-    # Capture this after every fail-closed venv guard, but before either
-    # update path can remove the ignored release tree.
-    desktop_dir = _m().PROJECT_ROOT / "apps" / "desktop"
-    had_desktop_app_before_update = _desktop_app_present(desktop_dir)
-
     # Try git-based update first, fall back to ZIP download on Windows
     # when git file I/O is broken (antivirus, NTFS filter drivers, etc.)
     use_zip_update = False
@@ -4651,10 +4562,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
     if use_zip_update:
         # ZIP-based update for Windows when git is broken
         try:
-            _update_via_zip(
-                args,
-                had_desktop_app_before_update=had_desktop_app_before_update,
-            )
+            _update_via_zip(args)
         finally:
             _m()._resume_windows_gateways_after_update(_windows_gateway_resume)
         return
@@ -4851,7 +4759,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
             # A current checkout does NOT imply a healthy install: a previous
             # dependency sync may have failed partway (classic on Windows,
-            # where a running gateway/desktop backend keeps .pyd files locked
+            # where a running gateway/dashboard backend keeps .pyd files locked
             # and uv/pip dies with access-denied, stranding the venv between
             # versions). Probe the venv's core imports and repair if broken —
             # otherwise "Already up to date!" gaslights the user while their
@@ -4926,7 +4834,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     "⚠ Restart required to finish the managed Python runtime repair."
                 )
                 print(
-                    "  Any running Hermes gateways, Desktop backends, or other "
+                    "  Any running Hermes gateways, dashboard backends, or other "
                     "long-lived processes still use the previous runtime."
                 )
                 print("  Restart each of them to pick up the repaired runtime.")
@@ -5060,7 +4968,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # report "N new commit(s)" against origin yet still sit on the old
         # commit afterward (the branch-switch step re-detaches to the SHA).
         # Before this guard, ``hermes update`` printed "✓ Code updated!" and
-        # reinstalled deps + rebuilt the desktop app against the stale tree —
+        # reinstalled deps + rebuilt the web app against the stale tree —
         # no error, no warning, ``hermes doctor`` healthy. Compare pre-pull
         # and post-pull HEAD; if they match, surface the no-op instead of
         # claiming success.
@@ -5238,11 +5146,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         node_failures = _update_node_dependencies()
         _m()._build_web_ui(_m().PROJECT_ROOT / "web")
-
-        _rebuild_desktop_after_update(
-            desktop_dir,
-            had_desktop_app_before_update=had_desktop_app_before_update,
-        )
 
         print()
         print("✓ Code updated!")
@@ -5597,7 +5500,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         # Safety net: config-version migrations have been observed to leave
         # cron/jobs.json valid-but-empty, silently dropping every scheduled
-        # job (issue #34600). The desktop scheduler can also overwrite with
+        # job (issue #34600). The dashboard's cron scheduler can also overwrite with
         # its own small set, causing partial loss (issue #52144). If the
         # live file now has fewer jobs than the pre-update snapshot, restore
         # it and warn loudly.
@@ -5943,7 +5846,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
             # --- Systemd services (Linux) ---
             # Discover all hermes-gateway* units (default + profiles) plus
-            # hermes-serve* units (the Desktop app's backend, #83438).
+            # hermes-serve* units (the dashboard's backend, #83438).
             if supports_systemd_services():
                 try:
                     _ensure_user_systemd_env()
@@ -6329,7 +6232,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 # still sees the exit and relaunches either way.
                 # Announce the drain first: this wait can hold for the full
                 # budget per gateway with no other output, and on surfaces
-                # that stream update progress (the desktop updater most of
+                # that stream update progress (the installer updater most of
                 # all) the silence reads as a hung update (#44515).
                 print(
                     f"  → {proc.profile}: draining gateway PID {pid} "
@@ -6561,10 +6464,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             print(f"⚠ Git update failed: {e}")
             print("→ Falling back to ZIP download...")
             print()
-            _update_via_zip(
-                args,
-                had_desktop_app_before_update=had_desktop_app_before_update,
-            )
+            _update_via_zip(args)
         else:
             print(f"✗ Update failed: {e}")
             sys.exit(1)

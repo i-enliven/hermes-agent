@@ -24,7 +24,6 @@ const sidebars: SidebarsConfig = {
       items: [
         'user-guide/cli',
         'user-guide/tui',
-        'user-guide/desktop',
         'user-guide/bot-mode',
         'user-guide/windows-native',
         'user-guide/windows-wsl-quickstart',
@@ -54,7 +53,6 @@ const sidebars: SidebarsConfig = {
         'user-guide/profiles',
         'user-guide/profile-distributions',
         'user-guide/multi-profile-gateways',
-        'user-guide/multi-connection-desktop',
         'user-guide/git-worktrees',
         'user-guide/docker',
         'user-guide/security',
@@ -322,7 +320,6 @@ const sidebars: SidebarsConfig = {
                   items: [
                     'user-guide/skills/bundled/software-development/software-development-dogfood',
                     'user-guide/skills/bundled/software-development/software-development-hermes-agent-skill-authoring',
-                    'user-guide/skills/bundled/software-development/software-development-inspecting-hermes-desktop-dom',
                     'user-guide/skills/bundled/software-development/software-development-node-inspect-debugger',
                     'user-guide/skills/bundled/software-development/software-development-plan',
                     'user-guide/skills/bundled/software-development/software-development-python-debugpy',
@@ -770,7 +767,6 @@ const sidebars: SidebarsConfig = {
               items: [
                 'developer-guide/plugin-llm-access',
                 'developer-guide/subagent-lifecycle-api',
-                'developer-guide/desktop-plugin-sdk',
                 'developer-guide/memory-provider-plugin',
                 'developer-guide/context-engine-plugin',
                 'developer-guide/secret-source-plugin',

@@ -12,8 +12,8 @@ launchd/systemd quirks.
 
 If you only run one Hermes agent, you don't need this page — see
 [Profiles](./profiles.md) for the basics. And if your instances live on
-*different* machines that one desktop app should reach simultaneously, see
-[Connecting Desktop to Many Hermes Instances](./multi-connection-desktop.md).
+*different* machines, use [`hermes peer`](../reference/cli-commands.md) to
+register the other gateways and reach their agents from a single install.
 
 ## When to use this
 

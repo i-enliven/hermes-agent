@@ -1,7 +1,7 @@
 """``hermes dashboard`` / ``hermes serve`` subcommand parsers.
 
 ``dashboard`` is the browser web UI; ``serve`` is the same gateway, headless —
-what the desktop app and remote backends run. ``serve`` also skips the web UI
+what remote backends run. ``serve`` also skips the web UI
 build (``headless_backend=True``): pure JSON-RPC/WS clients never load the SPA.
 Both share one handler (``cmd_dashboard`` → ``start_server``). Extracted from
 ``hermes_cli/main.py:main()`` (god-file Phase 2); handler injected to avoid
@@ -19,7 +19,7 @@ def _add_server_runtime_args(parser) -> None:
 
     Both subcommands boot the *same* ``web_server.start_server`` (the
     JSON-RPC/WebSocket gateway). ``dashboard`` opens a browser UI on top of
-    it; ``serve`` is the headless backend the desktop app and remote clients
+    it; ``serve`` is the headless backend that remote clients
     connect to. The shared server logic lives in one place — only the
     browser-opening behavior and help framing differ.
     """
@@ -91,9 +91,8 @@ def build_dashboard_parser(
 
     Both share the same backend (``cmd_dashboard`` → ``start_server``).
     ``dashboard`` is the browser UI; ``serve`` is the headless backend used by
-    the desktop app and remote clients. They are independent surfaces — neither
-    "launches" the other — so the desktop app spawns ``serve``, never
-    ``dashboard``.
+    remote clients. They are independent surfaces — neither "launches" the
+    other.
     """
     # =========================================================================
     # dashboard command — the browser web UI
@@ -135,10 +134,10 @@ def build_dashboard_parser(
     # =========================================================================
     serve_parser = subparsers.add_parser(
         "serve",
-        help="Start the Hermes backend server (headless; powers the desktop app and remote backends)",
+        help="Start the Hermes backend server (headless; powers remote backends and other clients)",
         description=(
-            "Run the Hermes backend server — the JSON-RPC/WebSocket gateway the "
-            "desktop app and remote clients connect to. Headless: it never opens "
+            "Run the Hermes backend server — the JSON-RPC/WebSocket gateway that "
+            "remote clients connect to. Headless: it never opens "
             "a browser UI."
         ),
     )
@@ -154,14 +153,14 @@ def build_dashboard_parser(
         dest="ssh_session_token_file",
         metavar="PATH",
         default=None,
-        help="Read a one-shot Desktop SSH session token from PATH",
+        help="Read a one-shot SSH session token from PATH",
     )
     serve_parser.add_argument(
         "--ssh-owner-nonce",
         dest="ssh_owner_nonce",
         metavar="NONCE",
         default=None,
-        help="Identify a Desktop-owned SSH backend process",
+        help="Identify a remote-owned SSH backend process",
     )
     # `headless_backend` marks the lean path: desktop/remote clients speak pure
     # JSON-RPC/WS, so `serve` skips the web UI build AND never serves the SPA

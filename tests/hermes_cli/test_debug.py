@@ -34,9 +34,6 @@ def hermes_home(tmp_path, monkeypatch):
     (logs_dir / "gui.log").write_text(
         "2026-04-12 17:00:12 INFO hermes_cli.web_server: dashboard request\n"
     )
-    (logs_dir / "desktop.log").write_text(
-        "2026-04-12 17:00:15 INFO desktop: backend spawned\n"
-    )
 
     return home
 
@@ -147,11 +144,11 @@ class TestCaptureLogSnapshot:
 
 
 class TestMissingLogNote:
-    """A missing log explains itself when the writer isn't this backend.
+    """A missing log file reports a plain absence.
 
-    `hermes debug share` runs on the backend, so a desktop connected to a
-    remote/docker/SSH backend can never contribute desktop.log. Reporting a
-    bare absence sends triage after a client-side bug it cannot see.
+    `hermes debug share` runs on the backend, so a log that only exists on
+    the client machine can never be contributed by the backend. Reporting a
+    bare absence is the only fact the backend can establish.
     """
 
     def test_backend_written_log_reports_plain_absence(self, hermes_home):
@@ -162,45 +159,6 @@ class TestMissingLogNote:
         snap = _capture_log_snapshot("agent", tail_lines=10)
         assert snap.full_text is None
         assert snap.tail_text == "(file not found)"
-
-    def test_client_written_log_names_its_writer_and_path(self, hermes_home):
-        from hermes_cli.debug import _capture_log_snapshot
-
-        (hermes_home / "logs" / "desktop.log").unlink()
-
-        snap = _capture_log_snapshot("desktop", tail_lines=10)
-        assert snap.full_text is None
-        assert "not on this host" in snap.tail_text
-        assert "Hermes Desktop" in snap.tail_text
-        # The reader needs the path to collect by hand on the client machine.
-        assert str(hermes_home / "logs" / "desktop.log") in snap.tail_text
-
-    def test_present_client_log_is_captured_normally(self, hermes_home):
-        """A local backend still reads desktop.log — the note is only for a miss."""
-        from hermes_cli.debug import _capture_log_snapshot
-
-        snap = _capture_log_snapshot("desktop", tail_lines=10)
-        assert "backend spawned" in snap.tail_text
-        assert "not on this host" not in snap.tail_text
-
-    def test_empty_client_log_is_empty_not_absent(self, hermes_home):
-        """An empty file means the app ran and logged nothing — a different fact."""
-        from hermes_cli.debug import _capture_log_snapshot
-
-        (hermes_home / "logs" / "desktop.log").write_text("")
-
-        snap = _capture_log_snapshot("desktop", tail_lines=10)
-        assert snap.tail_text == "(file empty)"
-
-    def test_report_carries_the_note_for_a_remote_backend(self, hermes_home):
-        """The uploaded report — what people paste into support — must explain it."""
-        from hermes_cli.debug import collect_debug_report
-
-        (hermes_home / "logs" / "desktop.log").unlink()
-
-        report = collect_debug_report(log_lines=10, dump_text="dump\n")
-        assert "--- desktop.log" in report
-        assert "not on this host" in report
 
 
 
@@ -388,8 +346,8 @@ class TestRunDebugShare:
 
 
 
-    def test_share_uploads_five_pastes(self, hermes_home, capsys):
-        """Successful share uploads report + agent.log + gateway.log + gui.log + desktop.log."""
+    def test_share_uploads_four_pastes(self, hermes_home, capsys):
+        """Successful share uploads report + agent.log + gateway.log + gui.log."""
         from hermes_cli.debug import run_debug_share
 
         args = MagicMock()
@@ -412,18 +370,16 @@ class TestRunDebugShare:
             run_debug_share(args)
 
         out = capsys.readouterr().out
-        # Should have 5 uploads: report, agent.log, gateway.log, gui.log, desktop.log
-        assert call_count[0] == 5
+        # Should have 4 uploads: report, agent.log, gateway.log, gui.log
+        assert call_count[0] == 4
         assert "paste.rs/paste1" in out  # Report
         assert "paste.rs/paste2" in out  # agent.log
         assert "paste.rs/paste3" in out  # gateway.log
         assert "paste.rs/paste4" in out  # gui.log
-        assert "paste.rs/paste5" in out  # desktop.log
         assert "Report" in out
         assert "agent.log" in out
         assert "gateway.log" in out
         assert "gui.log" in out
-        assert "desktop.log" in out
 
         # Each log paste should start with the dump header
         agent_paste = uploaded_content[1]
@@ -435,9 +391,6 @@ class TestRunDebugShare:
         gui_paste = uploaded_content[3]
         assert "--- hermes dump ---" in gui_paste
         assert "--- full gui.log ---" in gui_paste
-        desktop_paste = uploaded_content[4]
-        assert "--- hermes dump ---" in desktop_paste
-        assert "--- full desktop.log ---" in desktop_paste
 
 
 
