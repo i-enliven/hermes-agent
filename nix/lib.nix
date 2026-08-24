@@ -120,7 +120,6 @@ let
           jsWorkspaceTopDirs ++ [
             # Documentation
             "docs"
-            "website"
             # CI/infra
             "docker"
             ".github"

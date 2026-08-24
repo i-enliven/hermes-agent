@@ -12,9 +12,6 @@ HELPER = REPO_ROOT / "skills/github/github-auth/scripts/git-credential-token.py"
 LEGACY_SED = r"sed 's|https://[^:]*:\([^@]*\)@.*|\1|'"
 SHIPPED_TREES = (
     REPO_ROOT / "skills/github",
-    REPO_ROOT / "website/docs/user-guide/skills/bundled/github",
-    REPO_ROOT
-    / "website/i18n/zh-Hans/docusaurus-plugin-content-docs/current/user-guide/skills/bundled/github",
 )
 
 

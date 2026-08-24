@@ -821,9 +821,9 @@ class StreamingConfig:
         # wins so callers can force either state.
         #
         # ``transport`` alone does NOT imply ``enabled``: ``streaming.enabled``
-        # is the documented master switch (see website/docs/user-guide/
-        # configuration.md), so a bare ``transport`` only selects HOW to stream
-        # once streaming is on. Only the ``mode`` alias flips ``enabled``.
+        # is the documented master switch, so a bare ``transport`` only selects
+        # HOW to stream once streaming is on. Only the ``mode`` alias flips
+        # ``enabled``.
         raw_transport = data.get("transport")
         raw_mode = data.get("mode")
         # Normalize both through the same helper so YAML's bare ``off``/``on``

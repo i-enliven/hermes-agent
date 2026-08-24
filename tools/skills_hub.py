@@ -512,7 +512,7 @@ class SkillSource(ABC):
 # ---------------------------------------------------------------------------
 
 # Map a GitHub tap repo (owner/repo) to the human-facing provider label used
-# in the docs-site catalog (website/scripts/extract-skills.py::GITHUB_TAP_LABELS).
+# in the docs-site catalog.
 # The runtime index collapses every GitHub tap into source="github"; stamping
 # this provider label onto each skill's ``extra`` keeps the per-tap identity
 # (NVIDIA / OpenAI / Anthropic / HuggingFace / gstack / ...) searchable and
@@ -1658,8 +1658,8 @@ class SkillsShSource(SkillSource):
 
     def search(self, query: str, limit: int = 10) -> List[SkillMeta]:
         if not query.strip():
-            # Empty query = bulk catalog dump (what build_skills_index.py
-            # calls with). The homepage scrape only sees ~200 featured
+            # Empty query = bulk catalog dump (what the index crawler calls
+            # with). The homepage scrape only sees ~200 featured
             # entries; the sitemap walks the full ~20k+ catalog.
             return self._sitemap_catalog(limit)
 

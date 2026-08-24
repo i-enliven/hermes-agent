@@ -9,8 +9,7 @@ appears when a CDP endpoint is reachable (Browserbase with a
 ``connectUrl``, local Chromium-family browser via ``/browser connect``, or
 ``browser.cdp_url`` set in config).
 
-See ``website/docs/developer-guide/browser-supervisor.md`` for the full
-design.
+The full design lives in ``tools/browser_supervisor.py``.
 """
 
 from __future__ import annotations

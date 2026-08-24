@@ -23,8 +23,6 @@ Public API:
 The bulk of the wiring is internal — most callers only need the layer
 in :func:`tools.file_operations.FileOperations._check_lint_delta`,
 which is already wired (see that module).
-
-Architecture is documented in ``website/docs/user-guide/features/lsp.md``.
 """
 from __future__ import annotations
 

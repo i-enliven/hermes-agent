@@ -455,9 +455,7 @@ class GatewayAuthorizationMixin:
         # sender_chat traffic, and channel broadcasts with no `from_user`,
         # and an operator who explicitly listed the chat expects those to
         # be honored. Run this check before the no-user-id guard below so
-        # documented behavior matches reality
-        # (website/docs/reference/environment-variables.md,
-        # website/docs/user-guide/messaging/telegram.md).
+        # documented behavior matches reality.
         if source.chat_type in {"group", "forum", "channel"} and source.chat_id:
             chat_allowlist_env = {
                 Platform.TELEGRAM: "TELEGRAM_GROUP_ALLOWED_CHATS",

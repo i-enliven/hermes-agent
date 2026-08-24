@@ -15,7 +15,6 @@ Lanes:
   skipping those product jobs.
 * ``docker_meta`` — Dockerfiles etc.
 * ``frontend``    — TS typecheck matrix + desktop build.
-* ``site``        — Docusaurus + generated skill docs.
 * ``scan``        — supply-chain scan (Python files, .pth, setup hooks).
 * ``deps``        — pyproject.toml dependency bounds check.
 * ``uv_lock``     — ``uv lock --check``. Re-resolves the whole graph against
@@ -47,9 +46,8 @@ import sys
 _FRONTEND = ("ui-tui/", "web/", "apps/")  # TS typecheck-matrix packages
 _ROOT_NPM = {"package.json", "package-lock.json"}  # shifts every package's tree
 _DOCKER_META = ("docker/", ".hadolint.yml", "Dockerfile") # docker setup
-_SITE = ("website/", "skills/", "optional-skills/")  # docs site + skill pages
 # Prose/frontend trees that can't touch Python. skills/ is excluded on purpose.
-_PY_SKIP = ("docs/", "website/") + _FRONTEND
+_PY_SKIP = ("docs/",) + _FRONTEND
 
 # CI-sensitive files: eslint config, workflow files, composite actions.
 # Changes here can influence what code the autofix job executes and pushes to
@@ -132,7 +130,6 @@ def classify(files: list[str]) -> dict[str, bool]:
         "python_prod": any(not _py_irrelevant(f) and not _py_test_only(f) for f in files),
         "docker_meta":  any(f.startswith(_DOCKER_META) for f in files),
         "frontend": any(f.startswith(_FRONTEND) or f in _ROOT_NPM for f in files),
-        "site": any(f.startswith(_SITE) for f in files),
         "scan": any(_is_scan(f) for f in files),
         "deps": any(f == "pyproject.toml" for f in files),
         "uv_lock": any(f in ("pyproject.toml", "uv.lock") for f in files),
@@ -146,7 +143,6 @@ def classify(files: list[str]) -> dict[str, bool]:
         ret["python_prod"] = True
         ret["docker_meta"] = True
         ret["frontend"] = True
-        ret["site"] = True
         ret["scan"] = True
         ret["deps"] = True
         ret["uv_lock"] = True

@@ -1356,9 +1356,8 @@ def _normalize_custom_provider_entry(
         "contextLength": "context_length",
         "rateLimitDelay": "rate_limit_delay",
     }
-    # api_key_env is a documented snake_case alias for key_env (see
-    # website/docs/guides/azure-foundry.md).  Normalize it up front so the
-    # rest of the normalizer treats it as the canonical field.
+    # api_key_env is a documented snake_case alias for key_env.  Normalize it
+    # up front so the rest of the normalizer treats it as the canonical field.
     if "api_key_env" in entry and "key_env" not in entry:
         entry["key_env"] = entry["api_key_env"]
     _KNOWN_KEYS = {
@@ -5078,8 +5077,7 @@ _DYNAMIC_TOP_LEVEL_KEYS = frozenset({
 # Container keys whose immediate child IS a user-supplied platform name
 # (``platforms.<name>.<field>``).  These appear both at the top level and
 # nested under ``gateway`` — current docs configure platforms under
-# ``gateway.platforms.<name>`` (website/docs/developer-guide/
-# adding-platform-adapters.md) and ``gateway/config.py`` also resolves a
+# ``gateway.platforms.<name>`` and ``gateway/config.py`` also resolves a
 # top-level ``platforms`` map.  Anything below the platform-name segment is
 # accepted because ``PlatformConfig`` carries an open ``extra`` mapping.
 _PLATFORM_CONTAINER_KEYS = frozenset({"platforms"})

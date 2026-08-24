@@ -255,7 +255,7 @@ class TestClawHubSource(unittest.TestCase):
 
         Regression for the silent 200-skill truncation: ClawHub's listing
         endpoint caps any single page at 200 items + returns a `nextCursor`.
-        The build_skills_index.py crawler calls `search("", limit=N)` with a
+        The index crawler calls `search("", limit=N)` with a
         large N to dump the full catalog. Before the fix, that hit a single
         unpaginated request and silently dropped 99% of the catalog.
         """

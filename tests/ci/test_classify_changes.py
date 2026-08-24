@@ -26,7 +26,6 @@ DEFAULT = {
     "python_prod": True,
     "frontend": True,
     "docker_meta": True,
-    "site": True,
     "scan": True,
     "deps": True,
     "uv_lock": True,
@@ -37,7 +36,7 @@ DEFAULT = {
 }
 
 
-def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, installer=False, mcp_catalog=False, docker_meta=False, ci_review=False, python_prod=None) -> dict[str, bool]:
+def _lanes(python=False, frontend=False, scan=False, deps=False, uv_lock=False, npm_lock=False, installer=False, mcp_catalog=False, docker_meta=False, ci_review=False, python_prod=None) -> dict[str, bool]:
     # python_prod tracks python except for tests-only diffs; default it to
     # python so the majority of cases don't need to spell it out.
     return {
@@ -45,7 +44,6 @@ def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_
         "python_prod": python if python_prod is None else python_prod,
         "frontend": frontend,
         "docker_meta": docker_meta,
-        "site": site,
         "scan": scan,
         "deps": deps,
         "uv_lock": uv_lock,
@@ -65,16 +63,15 @@ CASES = {
     "ui-tui → frontend": (["ui-tui/src/entry.ts"], _lanes(frontend=True)),
     # Lockfile bump shifts every TS package's tree, but not the Python suite.
     "root lockfile → frontend, not python": (["package-lock.json"], _lanes(frontend=True, npm_lock=True)),
-    "nested lockfile → npm_lock": (["website/package-lock.json"], _lanes(site=True, npm_lock=True)),
-    "website → site": (["website/docs/intro.md"], _lanes(site=True)),
+    "nested lockfile → npm_lock": (["web/package-lock.json"], _lanes(frontend=True, npm_lock=True)),
     # uv lock --check re-resolves against PyPI, so it must stay off for any
     # diff that can't desync the lockfile — a registry blip on a docs PR
     # otherwise shows up as a blocking "uv.lock out of sync" red X.
-    "docs → no uv_lock": (["website/docs/user-guide/profiles.md"], _lanes(site=True)),
+    "docs → no uv_lock": (["docs/user-guide/profiles.md"], _lanes()),
     "frontend → no uv_lock": (["apps/desktop/src/store/profile.ts"], _lanes(frontend=True)),
     # SKILL.md reads like docs, but the skill-doc tests read skills/, so a
     # skill edit must still run Python.
-    "skill md → python + site": (["skills/github/SKILL.md"], _lanes(python=True, site=True)),
+    "skill md → python": (["skills/github/SKILL.md"], _lanes(python=True)),
     "dockerfile → docker meta": (["Dockerfile"], _lanes(docker_meta=True)),
     # install.ps1 is a shell script Python never imports, but it's also not
     # provably prose, so python stays on (fail-open) alongside the Windows lane.

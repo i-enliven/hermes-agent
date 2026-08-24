@@ -283,9 +283,8 @@ async def test_discord_free_response_channel_skips_auto_thread(adapter, monkeypa
     Without this, every message in a free-response channel would auto-create
     a fresh thread (since the channel bypasses the @mention gate, every
     message looks like a fresh trigger).  That turns a "lightweight chat"
-    channel into a thread-spawning machine — see the docs at
-    website/docs/user-guide/messaging/discord.md which already describe
-    this as the intended behavior.
+    channel into a thread-spawning machine — see the Discord user docs,
+    which already describe this as the intended behavior.
     """
     monkeypatch.setenv("DISCORD_REQUIRE_MENTION", "true")
     monkeypatch.setenv("DISCORD_FREE_RESPONSE_CHANNELS", "789")

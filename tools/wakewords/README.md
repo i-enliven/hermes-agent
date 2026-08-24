@@ -1,9 +1,8 @@
 # Bundled wake-word models
 
 `hey_hermes.onnx` / `hey_hermes.tflite` — the on-device "Hey Hermes" hotword
-model. This is the default detector for the wake word feature (see
-`website/docs/user-guide/features/wake-word.md`); no training or setup is
-required to say "hey hermes".
+model. This is the default detector for the wake word feature; no training
+or setup is required to say "hey hermes".
 
 - **Engine:** [openWakeWord](https://github.com/dscripka/openWakeWord) (Apache-2.0).
 - **Provenance:** trained with the openWakeWord training pipeline (synthetic
