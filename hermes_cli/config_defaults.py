@@ -1451,111 +1451,18 @@ DEFAULT_CONFIG = {
         },
     },
 
-    # Web dashboard settings
+
+    # Process-isolation settings. The web dashboard backend is gone, but
+    # the TUI/desktop backend still reads these for compute-host turn
+    # isolation (tui_gateway._load_dashboard_process_isolation_config ->
+    # "compute_host.py" / "host_supervisor.py"), which runs agent turns in
+    # a child process. The raw user config.yaml is read directly by the TUI
+    # backend (_load_cfg does NOT deep-merge DEFAULT_CONFIG), so these keys
+    # stay documented + validated here for `hermes config set` and doctor.
     "dashboard": {
-        "theme": "default",  # Dashboard visual theme: "default", "midnight", "ember", "mono", "cyberpunk", "rose"
-        # Process-isolation rollout controls. Runtime reads these through the
-        # raw config loader, so tui_gateway.server also owns explicit defaults.
         "turn_isolation": False,
         "compute_host_heartbeat_secs": 15,
         "compute_host_respawn_max": 3,
-        # Hide the token/cost analytics surfaces (Analytics page, token bars and
-        # cost figures on the Models page) by default.  The numbers shown there
-        # are a local debug estimate: they only count successful main-agent
-        # responses with a usable ``response.usage``, and silently exclude every
-        # auxiliary call (context compression, title generation, vision,
-        # session search, web extract, smart approval, MCP routing, plugin LLM
-        # access) plus provider-side retries, fallback attempts, and any call
-        # whose usage block didn't come back.  Cache writes are also missing
-        # from the API response.  On models with heavy auxiliary traffic
-        # (Kimi K2.6, MiniMax M2.7) the local total can be 10x-100x lower than
-        # the provider bill, which is worse than hiding the numbers entirely
-        # because they look precise enough to compare against the provider.
-        # Set this to True to re-enable the surfaces with the understanding
-        # that the numbers are a local lower-bound estimate, not billing.
-        "show_token_analytics": False,
-        # OAuth gate configuration (engaged when ``--host`` is set and
-        # ``--insecure`` is not). The bundled Nous Portal plugin reads
-        # both keys at startup; they are the canonical surface for these
-        # settings. Each can be overridden by an environment variable —
-        # ``HERMES_DASHBOARD_OAUTH_CLIENT_ID`` and
-        # ``HERMES_DASHBOARD_PORTAL_URL`` respectively — and the env var
-        # wins when set to a non-empty value. The override path is what
-        # Fly.io's platform-secret injection uses to push the per-deploy
-        # client_id at provisioning time without operators needing to
-        # touch config.yaml. Local dev / non-Fly deploys can set either
-        # surface; missing values fall through to the plugin's defaults
-        # (no provider registered when ``client_id`` is empty;
-        # ``portal_url`` defaults to https://portal.nousresearch.com).
-        "oauth": {
-            "client_id": "",  # agent:{instance_id} — Portal provisions this
-            "portal_url": "",  # blank → use plugin default (production Portal)
-        },
-        # Username/password gate configuration — read by the bundled
-        # ``dashboard_auth/basic`` plugin (a self-hosted "just put a
-        # password on my dashboard" provider that needs no OAuth IDP).
-        # The plugin registers a password provider when ``username`` plus
-        # either ``password_hash`` (preferred — no plaintext at rest) or
-        # ``password`` (plaintext, hashed in-memory at load) are set. Each
-        # key is overridable by an env var
-        # (``HERMES_DASHBOARD_BASIC_AUTH_USERNAME`` /
-        # ``_PASSWORD_HASH`` / ``_PASSWORD`` / ``_SECRET`` /
-        # ``_TTL_SECONDS``), env winning when non-empty. Leave ``username``
-        # empty (the default) to keep the plugin a no-op — loopback /
-        # ``--insecure`` operators and OAuth users are unaffected.
-        #
-        # ``secret`` is the HMAC key used to sign the stateless session
-        # tokens this provider mints. When empty, a random per-process key
-        # is generated — fine for a single process, but sessions then
-        # don't survive a restart or span multiple workers. Set an
-        # explicit ``secret`` (32+ random bytes, base64/hex/raw) for
-        # stable multi-worker / restart-surviving sessions. Compute a
-        # ``password_hash`` with
-        # ``python -c "from plugins.dashboard_auth.basic import hash_password; print(hash_password('PW'))"``.
-        "basic_auth": {
-            "username": "",  # blank → plugin no-op (no password provider)
-            "password_hash": "",  # scrypt$... (preferred — no plaintext at rest)
-            "password": "",  # plaintext fallback (hashed in-memory at load)
-            "secret": "",  # token-signing key; blank → random per-process
-            "session_ttl_seconds": 0,  # 0 → plugin default (12h)
-        },
-        # Drain-control service-credential configuration — read by the
-        # bundled ``dashboard_auth/drain`` plugin (the first consumer of the
-        # generic non-interactive token-auth capability). The SECRET itself
-        # is a credential and is NOT configured here: it is provisioned by
-        # nous-account-service at deploy time via the
-        # ``HERMES_DASHBOARD_DRAIN_SECRET`` env var (the .env-is-for-secrets
-        # rule). These are the behavioural knobs only. The plugin is a no-op
-        # unless that env var is set to a >=256-bit secret; a weak secret is
-        # rejected at registration (fail-closed) and the drain endpoint stays
-        # disabled. ``scope`` is the capability label attached to the verified
-        # principal; ``min_secret_chars`` is the entropy bar (url-safe-b64
-        # chars; 43 ~= 256 bits).
-        "drain_auth": {
-            "scope": "drain",
-            "min_secret_chars": 43,
-        },
-        # Public URL override (env: ``HERMES_DASHBOARD_PUBLIC_URL``).
-        # When set, this is the complete authority — scheme + host +
-        # optional path prefix (e.g. ``https://example.com/hermes``) —
-        # the OAuth ``redirect_uri`` is built from. Set this for deploys
-        # behind reverse proxies that don't reliably forward
-        # ``X-Forwarded-Host`` / ``X-Forwarded-Proto`` / ``X-Forwarded-Prefix``
-        # (manual nginx setups, on-prem ingresses, custom-domain Fly
-        # deploys without proper proxy headers). When set,
-        # ``X-Forwarded-Prefix`` is IGNORED on the OAuth path because
-        # the operator has declared the public URL — we no longer need
-        # to guess from proxy headers, and stacking the prefix on top
-        # would double-prefix the common case where the prefix is
-        # already baked into ``public_url``. Leave empty to use the
-        # existing proxy-header reconstruction (the default).
-        #
-        # Validation: rejects values without ``http(s)://`` scheme or
-        # without a host, and any string containing quote / angle /
-        # whitespace / control characters. A malformed value silently
-        # falls through to request reconstruction rather than breaking
-        # the login flow.
-        "public_url": "",
     },
 
     # Privacy settings
@@ -3493,7 +3400,7 @@ DEFAULT_CONFIG = {
     },
 
     # Config schema version - bump this when adding new required fields
-    "_config_version": 37,
+    "_config_version": 38,
 }
 
 # Optional environment variables that enhance functionality

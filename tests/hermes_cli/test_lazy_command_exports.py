@@ -11,6 +11,8 @@ import subprocess
 import sys
 import textwrap
 
+import pytest
+
 import hermes_cli.main
 
 
@@ -40,6 +42,7 @@ def test_importing_main_does_not_import_command_modules():
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.real_concurrent_gate
 def test_lazy_reexports_resolve_to_real_objects():
     import hermes_cli.dashboard_procs
     import hermes_cli.sessions_cmd
@@ -50,13 +53,8 @@ def test_lazy_reexports_resolve_to_real_objects():
         hermes_cli.main._cmd_update_impl is hermes_cli.update_cmd._cmd_update_impl
     )
     assert (
-        hermes_cli.main._scan_dashboard_processes
-        is hermes_cli.dashboard_procs._scan_dashboard_processes
-    )
-    # Back-compat alias resolves to the kill helper.
-    assert (
-        hermes_cli.main._warn_stale_dashboard_processes
-        is hermes_cli.dashboard_procs._kill_stale_dashboard_processes
+        hermes_cli.main._detect_concurrent_hermes_instances
+        is hermes_cli.dashboard_procs._detect_concurrent_hermes_instances
     )
 
 

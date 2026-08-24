@@ -16,7 +16,6 @@ import pytest
 from hermes_cli.subcommands.auth import build_auth_parser
 from hermes_cli.subcommands.backup import build_backup_parser
 from hermes_cli.subcommands.config import build_config_parser
-from hermes_cli.subcommands.dashboard import build_dashboard_parser
 from hermes_cli.subcommands.debug import build_debug_parser
 from hermes_cli.subcommands.doctor import build_doctor_parser
 from hermes_cli.subcommands.dump import build_dump_parser

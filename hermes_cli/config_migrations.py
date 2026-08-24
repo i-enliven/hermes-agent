@@ -817,6 +817,46 @@ def _migrate_to_37(results: Dict[str, Any], quiet: bool) -> None:
             )
 
 
+def _migrate_to_38(results: Dict[str, Any], quiet: bool) -> None:
+    # ── Version 37 → 38: prune the removed web-dashboard keys from
+    #    the legacy "dashboard" block ──
+    # The web dashboard/serve backend (hermes_cli.web_server) was removed,
+    # so dashboard.theme, dashboard.show_token_analytics, the
+    # dashboard.oauth / dashboard.basic_auth sub-blocks (read by the
+    # now-deleted dashboard_auth plugins + web_server SPA), plus
+    # dashboard.drain_auth (dashboard_auth/drain plugin) and
+    # dashboard.public_url (web_server OAuth redirect_uri) are dead.
+    # The block itself STAYS: the TUI/desktop backend still reads the
+    # process-isolation keys (dashboard.turn_isolation,
+    # dashboard.compute_host_heartbeat_secs, dashboard.compute_host_respawn_max)
+    # via tui_gateway._load_dashboard_process_isolation_config, and the raw
+    # user config.yaml is what that reader consults. So we pop only the
+    # dead keys and drop the whole block only if that leaves it empty.
+    # Mirrors the v24→25 model_catalog removal pattern.
+    _c = _cfg()
+    read_raw_config = _c.read_raw_config
+    _persist_migration = _c._persist_migration
+
+    config = read_raw_config()
+    raw_dash = config.get("dashboard")
+    if isinstance(raw_dash, dict):
+        touched = False
+        for dead_key in ("theme", "show_token_analytics", "oauth", "basic_auth", "drain_auth", "public_url"):
+            if dead_key in raw_dash:
+                raw_dash.pop(dead_key, None)
+                touched = True
+        if touched:
+            if not raw_dash:
+                # Nothing live remained — drop the whole block.
+                del config["dashboard"]
+            else:
+                config["dashboard"] = raw_dash
+            _persist_migration(config)
+            results["config_added"].append("dashboard block pruned of removed web-dashboard keys (theme/show_token_analytics/oauth/basic_auth/drain_auth/public_url)")
+            if not quiet:
+                print("  ✓ Removed obsolete dashboard keys (theme, show_token_analytics, oauth, basic_auth, drain_auth, public_url); kept process-isolation keys.")
+
+
 #: Registry of (target_version, migration_fn), strictly ascending. The driver
 #: applies every entry whose target version is greater than the on-disk
 #: observe earlier steps' writes via read_raw_config() (filesystem state).
@@ -841,6 +881,7 @@ MIGRATIONS: Tuple[Tuple[int, Callable[[Dict[str, Any], bool], None]], ...] = (
     (35, _migrate_to_35),
     (36, _migrate_to_36),
     (37, _migrate_to_37),
+    (38, _migrate_to_38),
 )
 
 

@@ -1,24 +1,15 @@
 """Tests for Kanban task file attachments (#35338).
 
-Covers three layers:
+Covers two layers:
   * ``hermes_cli.kanban_db`` accessors (add/list/get/delete + path helpers)
-  * the dashboard REST surface (upload / list / download / delete)
   * worker-context surfacing so a kanban worker sees the absolute paths
-
-The plugin router is attached to a bare FastAPI app — same approach as
-``test_kanban_dashboard_plugin.py`` — so we exercise the real HTTP path
-(multipart upload, streaming download) without the whole dashboard.
 """
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from hermes_cli import kanban_db as kb
 
@@ -26,20 +17,6 @@ from hermes_cli import kanban_db as kb
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-def _load_plugin_router():
-    repo_root = Path(__file__).resolve().parents[2]
-    plugin_file = repo_root / "plugins" / "kanban" / "dashboard" / "plugin_api.py"
-    assert plugin_file.exists(), f"plugin file missing: {plugin_file}"
-    spec = importlib.util.spec_from_file_location(
-        "hermes_dashboard_plugin_kanban_attach_test", plugin_file,
-    )
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod.router
 
 
 @pytest.fixture
@@ -50,13 +27,6 @@ def kanban_home(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     kb.init_db()
     return home
-
-
-@pytest.fixture
-def client(kanban_home):
-    app = FastAPI()
-    app.include_router(_load_plugin_router(), prefix="/api/plugins/kanban")
-    return TestClient(app)
 
 
 def _make_task(conn, title="t") -> str:
@@ -167,62 +137,6 @@ def _create_task_via_api(client) -> str:
     r = client.post("/api/plugins/kanban/tasks", json={"title": "x"})
     assert r.status_code == 200, r.text
     return r.json()["task"]["id"]
-
-
-def test_upload_list_download_delete_roundtrip(client):
-    task_id = _create_task_via_api(client)
-    content = b"hello attachment world"
-
-    # Upload
-    r = client.post(
-        f"/api/plugins/kanban/tasks/{task_id}/attachments",
-        files={"file": ("notes.txt", content, "text/plain")},
-    )
-    assert r.status_code == 200, r.text
-    att = r.json()["attachment"]
-    assert att["filename"] == "notes.txt"
-    assert att["size"] == len(content)
-    att_id = att["id"]
-
-    # List (drawer also embeds it in GET /tasks/:id)
-    r = client.get(f"/api/plugins/kanban/tasks/{task_id}/attachments")
-    assert r.status_code == 200
-    assert [a["filename"] for a in r.json()["attachments"]] == ["notes.txt"]
-
-    detail = client.get(f"/api/plugins/kanban/tasks/{task_id}").json()
-    assert "attachments" in detail
-    assert len(detail["attachments"]) == 1
-
-    # Download streams the exact bytes back
-    r = client.get(f"/api/plugins/kanban/attachments/{att_id}")
-    assert r.status_code == 200
-    assert r.content == content
-
-    # Delete removes the row and the file
-    r = client.delete(f"/api/plugins/kanban/attachments/{att_id}")
-    assert r.status_code == 200
-    assert client.get(f"/api/plugins/kanban/attachments/{att_id}").status_code == 404
-    assert client.get(
-        f"/api/plugins/kanban/tasks/{task_id}/attachments"
-    ).json()["attachments"] == []
-
-
-def test_upload_sanitizes_traversal_filename(client):
-    task_id = _create_task_via_api(client)
-    r = client.post(
-        f"/api/plugins/kanban/tasks/{task_id}/attachments",
-        files={"file": ("../../../../etc/passwd", b"x", "text/plain")},
-    )
-    assert r.status_code == 200, r.text
-    stored_path = r.json()["attachment"]["stored_path"]
-    # The leaf name only; never escapes the per-task attachments dir.
-    assert Path(stored_path).name == "passwd"
-    task_dir = kb.task_attachments_dir(task_id).resolve()
-    assert Path(stored_path).resolve().is_relative_to(task_dir)
-
-
-def test_download_unknown_attachment_404(client):
-    assert client.get("/api/plugins/kanban/attachments/424242").status_code == 404
 
 
 # ---------------------------------------------------------------------------

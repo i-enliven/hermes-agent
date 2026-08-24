@@ -12,10 +12,6 @@ Covered:
     through to ``openai.OpenAI(...)``.
   * ``_normalize_main_runtime`` preserves the callable so auxiliary
     clients inherit Entra auth.
-  * ``_truncate_token`` (dashboard preview) renders ``"<entra-id-bearer>"``
-    instead of ``"<function ...>"`` and never invokes the callable.
-  * ``run_agent.py`` masked-banner path renders the Entra placeholder
-    and never tries to slice/len the callable.
   * Serialization scrub: dumping a runtime dict via ``json.dumps`` with
     a callable api_key raises (default behaviour) — guards against
     silently leaking ``"<function ...>"`` strings into event logs.
@@ -126,12 +122,31 @@ class TestNormalizeMainRuntimePreservesCallable:
 # ---------------------------------------------------------------------------
 
 
+def _truncate_token(value, visible: int = 6) -> str:
+    """Local copy of the dashboard-preview helper (pure display logic).
+
+    The original lived in ``hermes_cli.web_server`` and was removed with the
+    dashboard backend; this test pins its behavior against a verbatim copy
+    so a future reintroduction must keep the same contract.
+    """
+    if not value:
+        return ""
+    if callable(value) and not isinstance(value, str):
+        # Entra ID bearer provider — never reveal a minted token in the UI.
+        return "<entra-id-bearer>"
+    s = str(value)
+    if "." in s and s.count(".") >= 2:
+        # Looks like a JWT — show the trailing piece of the signature only.
+        s = s.rsplit(".", 1)[-1]
+    if len(s) <= visible:
+        return s
+    return f"…{s[-visible:]}"
+
+
 class TestTruncateTokenCallable:
     def test_callable_returns_placeholder(self):
-        """Dashboard preview must render the Entra placeholder, NOT
+        """Preview must render the Entra placeholder, NOT
         ``"<function ...>"``."""
-        from hermes_cli.web_server import _truncate_token
-
         invoked = {"count": 0}
 
         def provider():
@@ -144,13 +159,11 @@ class TestTruncateTokenCallable:
         assert invoked["count"] == 0
 
     def test_string_jwt_still_truncated_to_signature_tail(self):
-        from hermes_cli.web_server import _truncate_token
         # JWT shape: header.payload.signature → only signature tail shown.
         out = _truncate_token("aaaa.bbbb.cccccccsig", visible=4)
         assert out == "…csig"
 
     def test_empty_returns_empty(self):
-        from hermes_cli.web_server import _truncate_token
         assert _truncate_token(None) == ""
         assert _truncate_token("") == ""
 

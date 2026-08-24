@@ -126,7 +126,8 @@ def _start_loopback_listener(flow) -> "http.server.HTTPServer":
 def _worker(session_id: str, hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool) -> None:
     """Drive the interactive MCP OAuth probe under the shared dashboard bridge.
 
-    Structurally identical to ``web_server._run_dashboard_mcp_oauth`` — the same
+    Structurally identical to the dashboard backend's removed
+    ``_run_dashboard_mcp_oauth`` — the same
     HERMES_HOME override + secret-scope + force_interactive_oauth +
     dashboard_oauth_flow wrapping around ``_probe_single_server`` — but keyed to
     our session record instead of a FastAPI request. On success the token file

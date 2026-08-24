@@ -101,12 +101,10 @@ def _reload_config_modules() -> None:
     so subsequent imports read the UPDATED code.
 
     It also reloads ``hermes_cli._subprocess_compat`` and
-    ``hermes_cli.dashboard_procs`` so that post-update dashboard cleanup
-    (``_finish_dashboard_update_cleanup`` → ``_scan_dashboard_processes``)
-    uses the freshly-pulled code. Without this, a new symbol added to
+    ``hermes_cli.dashboard_procs`` so that post-update process helpers
+    use the freshly-pulled code. Without this, a new symbol added to
     ``_subprocess_compat`` (e.g. ``bounded_probe_run``) is invisible to the
-    cached module object, causing ``ImportError`` during the cleanup step
-    that runs later in the same process.
+    cached module object.
     """
     import importlib
 
@@ -151,16 +149,13 @@ def _run_migrate_config_fresh(*, interactive: bool = False, quiet: bool = False)
 
 
 # Critical files that Hermes must be able to import immediately after an
-# update/install. Most are imported on every CLI startup; ``web_server.py``
-# is the dashboard backend path that a fresh Windows install launches
-# right away. If any of these fail to parse after a pull, the user can be
-# left with a bricked CLI or dashboard backend. The post-pull syntax guard
-# validates these and auto-rolls-back on failure.
+# update/install. Most are imported on every CLI startup. If any of these
+# fail to parse after a pull, the user can be left with a bricked CLI.
+# The post-pull syntax guard validates these and auto-rolls-back on failure.
 _UPDATE_CRITICAL_FILES = (
     "hermes_cli/main.py",
     "hermes_cli/config.py",
     "hermes_cli/__init__.py",
-    "hermes_cli/web_server.py",
     "cli.py",
     "run_agent.py",
     "model_tools.py",
@@ -599,77 +594,6 @@ def _format_time_ago(iso_ts: str) -> str:
         return f"{secs // 86400}d ago"
     except Exception:
         return "recently"
-
-def _reload_process_scan_modules() -> None:
-    """Force-reload the process-scan modules from disk after an update.
-
-    ``_finish_dashboard_update_cleanup`` runs in the PRE-update Python
-    process, but ``_scan_dashboard_processes`` does a function-level
-    ``from hermes_cli._subprocess_compat import bounded_probe_run``. If the
-    update added a new symbol to ``_subprocess_compat`` (as #87134 did with
-    ``bounded_probe_run``), the cached OLD module object doesn't have it and
-    the cleanup step crashes with ImportError — after the code update itself
-    already succeeded. Reload dependency-first so ``dashboard_procs`` binds
-    against the fresh ``_subprocess_compat``.
-
-    Lives here (called from the cleanup entry point) rather than only in
-    ``_reload_config_modules`` so EVERY caller — the git-update path, the
-    Windows ZIP fallback path, and any future one — is covered.
-    """
-    import importlib
-
-    importlib.invalidate_caches()
-    for mod_name in (
-        "hermes_cli._subprocess_compat",
-        "hermes_cli.dashboard_procs",
-    ):
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            try:
-                importlib.reload(mod)
-            except Exception as exc:
-                # warning, not debug: a failed reload here surfaces seconds
-                # later as an ImportError in the same process — leave a trail.
-                logger.warning(
-                    "Could not reload %s for post-update cleanup: %s",
-                    mod_name,
-                    exc,
-                )
-
-
-def _finish_dashboard_update_cleanup(
-    node_failures: list[str], already_restarted_units: "set[str] | None" = None
-) -> None:
-    """Refresh managed dashboards or stop stale manual ones after an update.
-
-    *already_restarted_units* forwards the systemd unit names (no
-    ``.service`` suffix) that the fleet-restart loop already restarted
-    directly, so a Serve-only install's freshly restarted process isn't
-    found and restarted a second time here (review on #83595).
-    """
-    if node_failures:
-        print()
-        print("  ℹ Leaving running dashboard process(es) untouched because the")
-        print("    Node.js dependency refresh did not complete.")
-        return
-
-    # The scan path lazy-imports symbols from _subprocess_compat; make sure
-    # both modules reflect the freshly-updated source before touching them.
-    _reload_process_scan_modules()
-
-    stop_result = _m()._kill_stale_dashboard_processes(
-        restart_managed=True, already_restarted_units=already_restarted_units
-    )
-    if not stop_result.get("unrecovered"):
-        return
-
-    print()
-    print(
-        "⚠ A web dashboard/serve process was stopped during update and could "
-        "not be auto-restarted."
-    )
-    print("  Re-launch it when you want the web UI back:")
-    print("    hermes dashboard --port <port>")
 
 def _atomic_replace_dir(src: str, dst: str) -> None:
     """Replace directory *dst* with *src* without leaving *dst* half-deleted.
@@ -1207,9 +1131,6 @@ def _update_via_zip(args):
         _print_curator_recent_run_notice()
     except Exception as e:
         logger.debug("Curator recent-run notice failed: %s", e)
-    # Don't stop a working dashboard when the Node refresh failed — see the
-    # git-update path for rationale (#30271).
-    _finish_dashboard_update_cleanup(node_failures)
 
 def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[str]:
     status = subprocess.run(
@@ -3387,9 +3308,7 @@ def _format_venv_python_holders_message(matches: list[tuple[int, str, str]]) -> 
     for pid, name, cmdline in matches[:6]:
         hint = ""
         low = cmdline.lower()
-        if "serve" in low or "dashboard" in low:
-            hint = "  ← Hermes dashboard backend (close the dashboard)"
-        elif "gateway" in low:
+        if "gateway" in low:
             hint = "  ← gateway"
         lines.append(f"  PID {pid}  {name}  {cmdline[:120]}{hint}")
     if len(matches) > 6:
@@ -3402,7 +3321,7 @@ def _format_venv_python_holders_message(matches: list[tuple[int, str, str]]) -> 
         "  dependency update would fail partway and leave a broken install."
     )
     lines.append(
-        "  Close the Hermes dashboard backend / other Hermes terminals, then re-run:"
+        "  Close other Hermes terminals / gateways, then re-run:"
     )
     lines.append("    hermes update")
     lines.append("  (or use `hermes update --force-venv` to proceed anyway at your own risk)")
@@ -5575,9 +5494,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         _pre_restart_gateway_pids: list | None = []
         # Declared outside the restart try/except below (and never reset
         # to None) so it's always safe to read afterwards even if that
-        # block raises before reaching its own restart bookkeeping —
-        # needed to forward already-restarted units to
-        # ``_finish_dashboard_update_cleanup`` (review on #83595).
+        # block raises before reaching its own restart bookkeeping.
         restarted_services: list = []
 
         # Auto-restart ALL gateways after update.
@@ -6359,19 +6276,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 print("  (add `sudo` if any are in system scope)")
         except Exception as e:
             logger.debug("Legacy unit check during update failed: %s", e)
-
-        # Restart a managed dashboard through systemd, or stop stale manual
-        # dashboard processes. Raw-killing a systemd-owned dashboard PID makes
-        # systemd treat it as a clean stop, leaving the Cloudflare origin dead.
-        # Preserve the safety rule above: a failed Node refresh leaves the
-        # currently running dashboard untouched.
-        #
-        # Forward the systemd units restarted above (includes hermes-serve*,
-        # #83438) so a Serve-only install's freshly restarted process isn't
-        # found and restarted again below (review on #83595).
-        _finish_dashboard_update_cleanup(
-            node_failures, already_restarted_units=set(restarted_services)
-        )
 
         print()
         print("Tip: You can now select a provider and model:")

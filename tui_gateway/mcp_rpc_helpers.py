@@ -45,7 +45,8 @@ def reset_profile(token) -> None:
 def summarize_server(name: str, cfg: dict) -> Dict[str, Any]:
     """Serialize one server's config for a UI (no secret values).
 
-    Mirrors web_server._mcp_server_summary plus an ``oauth_tokens_present``
+    Mirrors the dashboard backend's removed ``_mcp_server_summary`` plus an
+    ``oauth_tokens_present``
     flag so a UI can tell an OAuth server that still needs authentication from
     one already authenticated.
     """
