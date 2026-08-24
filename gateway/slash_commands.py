@@ -1827,7 +1827,7 @@ class GatewaySlashCommandsMixin:
                     custom_provs = get_compatible_custom_providers(cfg)
                 except Exception:
                     custom_provs = cfg.get("custom_providers")
-                _excl = cfg.get("model_catalog", {}).get("excluded_providers")
+                _excl = cfg.get("excluded_providers")
                 if isinstance(_excl, list):
                     excluded_provs = _excl
         except Exception:

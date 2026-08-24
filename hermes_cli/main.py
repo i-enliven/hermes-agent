@@ -3763,14 +3763,15 @@ def select_provider_and_model(args=None):
     # resolves back to a concrete slug, so the dispatch chain below is
     # unchanged. Custom providers and the trailing actions stay flat.
     canonical_descs = {p.slug: p.tui_desc for p in CANONICAL_PROVIDERS}
-    # Honor ``model_catalog.excluded_providers`` so the CLI ``hermes model``
-    # picker hides the same providers the gateway/TUI pickers do. A canonical
-    # provider is hidden if its slug OR any of its aliases appears in the
-    # exclusion list (case-insensitive), matching list_authenticated_providers'
-    # matching against hermes_id / alias / canonical slug.
+    # Honor excluded_providers (config: excluded_providers) so the CLI
+    # ``hermes model`` picker hides the same providers the gateway/TUI
+    # pickers do. A canonical provider is hidden if its slug OR any of its
+    # aliases appears in the exclusion list (case-insensitive), matching
+    # list_authenticated_providers' matching against hermes_id / alias /
+    # canonical slug.
     _cli_excluded = {
         str(p).strip().lower()
-        for p in (config.get("model_catalog", {}) or {}).get("excluded_providers") or []
+        for p in config.get("excluded_providers") or []
         if p
     }
     if _cli_excluded:

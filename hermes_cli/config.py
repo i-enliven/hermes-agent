@@ -5042,7 +5042,6 @@ _OPEN_DICT_TOP_LEVEL_KEYS = frozenset({
     "quick_commands",
     "personalities",
     "command_allowlist",
-    "model_catalog",
     "channel_prompts",
     "server_actions",
     "secrets",

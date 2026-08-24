@@ -27,7 +27,7 @@ import yaml
 
 CONFIG = {
     "model": {"provider": "openrouter", "default": "anthropic/claude-opus-4.6"},
-    "model_catalog": {"excluded_providers": ["copilot"]},
+    "excluded_providers": ["copilot"],
     "providers": {
         "my-llm": {
             "name": "My LLM",

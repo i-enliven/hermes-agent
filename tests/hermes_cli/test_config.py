@@ -707,7 +707,6 @@ class TestConfigSupportFloor:
         "display": {"tool_progress_overrides": {"telegram": "verbose"}},
         "stt": {"model": "base", "provider": "local"},
         "compression": {"summary_model": "gpt-x", "summary_provider": "auto"},
-        "model_catalog": {"ttl_hours": 24},
         "memory": {"write_mode": "approve"},
         "delegation": {"max_async_children": 8},
         "agent": {"verify_on_stop": True},
@@ -728,7 +727,6 @@ class TestConfigSupportFloor:
         },
         "memory": {"write_approval": True},
         "model": {"default": "openai/gpt-5.4", "provider": "openrouter"},
-        "model_catalog": {"ttl_hours": 1},
         "plugins": {"enabled": []},
         "stt": {"provider": "local"},
     }
@@ -738,7 +736,6 @@ class TestConfigSupportFloor:
         "model": {"default": "anthropic/claude-fable-5", "provider": "nous"},
         "plugins": {"disabled": ["foo"]},
         "skills": {"write_mode": "on"},
-        "model_catalog": {"ttl_hours": 24},
         "agent": {},
     }
     _V20_EXPECTED = {
@@ -747,7 +744,6 @@ class TestConfigSupportFloor:
         # default (opt-in) so the write invariant strips it from disk.
         "agent": {},
         "model": {"default": "anthropic/claude-fable-5", "provider": "nous"},
-        "model_catalog": {"ttl_hours": 1},
         "plugins": {"disabled": ["foo"], "enabled": []},
     }
 

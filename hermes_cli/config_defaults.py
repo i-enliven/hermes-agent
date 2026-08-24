@@ -2681,27 +2681,6 @@ DEFAULT_CONFIG = {
         "backup_count": 3,     # Number of rotated backup files to keep
     },
 
-    # Remotely-hosted model catalog manifest.  When enabled, the CLI fetches
-    # curated model lists for OpenRouter and Nous Portal from this URL,
-    # falling back to the in-repo snapshot on network failure.  Lets us
-    # update model picker lists without shipping a hermes-agent release.
-    # The default URL is served by the docs site GitHub Pages deploy.
-    "model_catalog": {
-        "enabled": True,
-        "url": "https://hermes-agent.nousresearch.com/docs/api/model-catalog.json",
-        # Disk cache TTL in hours.  Beyond this, the CLI refetches on the
-        # next /model or `hermes model` invocation; network failures
-        # silently fall back to the stale cache.
-        "ttl_hours": 1,
-        # Optional per-provider override URLs for third parties that want
-        # to self-host their own curation list using the same schema.
-        # Example:
-        #   providers:
-        #     openrouter:
-        #       url: https://example.com/my-curation.json
-        "providers": {},
-    },
-
     # Per-model metadata overrides — manually declare context_window,
     # max_output_tokens, capabilities, or model family for any
     # provider+model. Recognized fields: context_window,

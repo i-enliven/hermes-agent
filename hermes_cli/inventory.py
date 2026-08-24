@@ -97,7 +97,7 @@ def load_picker_context() -> ConfigContext:
         current_provider = ""
         current_base_url = ""
     raw = cfg.get("providers")
-    excluded = cfg.get("model_catalog", {}).get("excluded_providers") or []
+    excluded = cfg.get("excluded_providers") or []
     return ConfigContext(
         current_provider=current_provider,
         current_model=current_model,
@@ -339,7 +339,7 @@ def build_aux_picker_rows(
     correct behaviour the default that a new caller cannot forget:
 
     - user-defined ``providers:`` and saved ``custom_providers:`` entries
-    - ``model_catalog.excluded_providers`` honoured, matching ``/model``
+    - ``excluded_providers`` honoured, matching ``/model``
     - exhausted-credential-pool providers stay visible (``for_picker``)
     - the active custom endpoint is probed, offline saved ones are not, so
       the picker never blocks on a dead local server

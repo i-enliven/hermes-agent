@@ -748,8 +748,7 @@ def union_with_portal_free_recommendations(
 
     The Portal's ``/api/nous/recommended-models`` endpoint advertises which
     models are free *right now* — independent of what the in-repo
-    ``_PROVIDER_MODELS["nous"]`` list happens to contain or whether the
-    docs-hosted catalog manifest has been rebuilt since the last release.
+    ``_PROVIDER_MODELS["nous"]`` list happens to contain.
 
     For free-tier users this is the source of truth: any model the Portal
     flags as free should be selectable, even if the user is running an
@@ -815,8 +814,7 @@ def union_with_portal_paid_recommendations(
     Mirror of :func:`union_with_portal_free_recommendations` for paid-tier
     users. The Portal's ``/api/nous/recommended-models`` endpoint advertises
     which paid models are blessed *right now* — independent of what the
-    in-repo ``_PROVIDER_MODELS["nous"]`` list happens to contain or whether
-    the docs-hosted catalog manifest has been rebuilt since the last release.
+    in-repo ``_PROVIDER_MODELS["nous"]`` list happens to contain.
 
     For paid-tier users this lets newly-launched paid models surface in the
     picker even if the user is running an older Hermes that doesn't ship
@@ -1410,71 +1408,43 @@ _PROVIDER_ALIASES = {
 }
 
 
-# In-repo fallback for the model Hermes silently lands on when the user never
-# picked one (GUI onboarding confirm card, empty ``model.default``,
-# provider-set-but-model-missing resolution). The AUTHORITATIVE source is the
-# remote model catalog: the manifest labels exactly one entry per provider
-# with ``"default": true`` (see get_default_model_from_cache in
-# model_catalog.py), so maintainers can rotate the default without shipping a
-# release. This constant is the offline/fresh-install fallback and MUST match
-# the labeled entry in the published model-catalog manifest. Deliberately a
-# capable low-cost model rather than the curated lists' entry [0]: aggregator
-# lists are ordered most-capable-first, so [0] is the priciest Anthropic
-# flagship (claude-fable-5 / opus) — silently billing the most expensive model
-# for traffic the user never opted into.
+# The model Hermes silently lands on when the user never picked one (GUI
+# onboarding confirm card, empty ``model.default``, provider-set-but-model-
+# missing resolution). Deliberately a capable low-cost model rather than the
+# curated lists' entry [0]: aggregator lists are ordered most-capable-first,
+# so [0] is the priciest Anthropic flagship (claude-fable-5 / opus) — silently
+# billing the most expensive model for traffic the user never opted into.
 PREFERRED_SILENT_DEFAULT_MODEL = "z-ai/glm-5.2"
-
-
-def get_preferred_silent_default_model(provider: str = "openrouter") -> str:
-    """Return the silent-default model id — catalog label first, constant second.
-
-    Reads the ``"default": true`` label from the cached remote catalog
-    (never hits the network — safe on hot resolution paths), falling back to
-    :data:`PREFERRED_SILENT_DEFAULT_MODEL` when no cached manifest exists or
-    the provider block carries no label.
-    """
-    try:
-        from hermes_cli.model_catalog import get_default_model_from_cache
-        labeled = get_default_model_from_cache(provider)
-        if labeled:
-            return labeled
-    except Exception:
-        pass
-    return PREFERRED_SILENT_DEFAULT_MODEL
 
 
 def pick_silent_default_model(model_ids: list[str], provider: str = "openrouter") -> str:
     """Pick the silent default from an available-models list.
 
-    Returns the catalog-labeled default (see
-    :func:`get_preferred_silent_default_model`) when the list carries it,
+    Returns :data:`PREFERRED_SILENT_DEFAULT_MODEL` when the list carries it,
     else the first entry, else "". Used by every surface that must choose a
     model on the user's behalf without an interactive picker (GUI onboarding
     recommended-default, empty-model runtime fallback).
     """
-    preferred = get_preferred_silent_default_model(provider)
+    preferred = PREFERRED_SILENT_DEFAULT_MODEL
     if preferred in model_ids:
         return preferred
     return model_ids[0] if model_ids else ""
 
 
 # Providers whose *silent* auto-default must go through the cost-safe
-# catalog-labeled default (``get_preferred_silent_default_model``) instead of
-# curated-list entry [0]. Metered aggregators (Nous Portal, OpenRouter) order
-# their lists best-/most-capable-first — entry [0] is the priciest flagship
+# ``PREFERRED_SILENT_DEFAULT_MODEL`` constant instead of curated-list entry
+# [0]. Metered aggregators (Nous Portal, OpenRouter) order their lists
+# best-/most-capable-first — entry [0] is the priciest flagship
 # (``anthropic/claude-fable-5``). Using that as the non-interactive fallback
 # when a profile sets a provider with no model silently bills the most
 # expensive model for traffic the user never opted into (a missing default
-# escalated to Opus and billed 863 requests before the user noticed). The
-# catalog manifest labels the default entry (``"default": true``) so it can
-# rotate without a release; a missing model must never escalate to the
-# flagship.
+# escalated to Opus and billed 863 requests before the user noticed). A
+# missing model must never escalate to the flagship.
 #
-# This is deliberately a network-free lookup for the hot resolution path
-# (cache-only catalog read). The *interactive* default (GUI onboarding /
-# ``hermes model``) uses the richer free/paid-tier-aware resolver — see
-# ``get_recommended_default_model`` in hermes_cli/web_server.py and
-# ``partition_nous_models_by_tier`` — which can hit the Portal.
+# The *interactive* default (GUI onboarding / ``hermes model``) uses the
+# richer free/paid-tier-aware resolver — see ``get_recommended_default_model``
+# in hermes_cli/web_server.py and ``partition_nous_models_by_tier`` — which
+# can hit the Portal.
 _SILENT_DEFAULT_PROVIDERS: frozenset[str] = frozenset({"nous", "openrouter"})
 
 
@@ -1490,12 +1460,12 @@ def get_default_model_for_provider(provider: str) -> str:
     whose curated list is ordered most-capable-first, that entry is also the
     most EXPENSIVE one, so silently defaulting to it is a billing footgun.
     Those providers (``_SILENT_DEFAULT_PROVIDERS``) resolve through the
-    catalog-labeled default instead; a missing model must never auto-escalate
-    to the flagship.
+    cost-safe ``PREFERRED_SILENT_DEFAULT_MODEL`` constant instead; a missing
+    model must never auto-escalate to the flagship.
     """
     models = _PROVIDER_MODELS.get(provider, [])
     if provider in _SILENT_DEFAULT_PROVIDERS:
-        preferred = get_preferred_silent_default_model(provider)
+        preferred = PREFERRED_SILENT_DEFAULT_MODEL
         # Trust the preferred default even when the provider has no static
         # catalog (OpenRouter's picker list is fetched live; its curated
         # snapshot carries the default).
@@ -1762,16 +1732,9 @@ def fetch_openrouter_models(
     if _openrouter_catalog_cache is not None and not force_refresh:
         return list(_openrouter_catalog_cache)
 
-    # Prefer the remotely-hosted catalog manifest; fall back to the in-repo
-    # snapshot when the manifest is unreachable. Both are curated lists that
-    # drive the picker; the OpenRouter live /v1/models filter (tool support,
-    # free pricing) is applied on top either way.
-    try:
-        from hermes_cli.model_catalog import get_curated_openrouter_models
-        remote = get_curated_openrouter_models()
-    except Exception:
-        remote = None
-    fallback = list(remote) if remote else list(OPENROUTER_MODELS)
+    # The in-repo curated list drives the picker; the OpenRouter live
+    # /v1/models filter (tool support, free pricing) is applied on top.
+    fallback = list(OPENROUTER_MODELS)
     preferred_ids = [mid for mid, _ in fallback]
 
     try:
@@ -1809,7 +1772,7 @@ def fetch_openrouter_models(
         }
 
     curated: list[tuple[str, str]] = []
-    silent_default = get_preferred_silent_default_model("openrouter")
+    silent_default = PREFERRED_SILENT_DEFAULT_MODEL
     for preferred_id in preferred_ids:
         live_item = live_by_id.get(preferred_id)
         if live_item is None:
@@ -1845,18 +1808,9 @@ def model_ids(*, force_refresh: bool = False) -> list[str]:
 def get_curated_nous_model_ids() -> list[str]:
     """Return the curated Nous Portal model-id list.
 
-    Prefers the remotely-hosted catalog manifest (published as the docs
-    site's ``model-catalog.json`` API asset); falls back to the in-repo
-    snapshot in ``_PROVIDER_MODELS["nous"]`` when the manifest is
-    unreachable. Always returns a list (never None).
+    The curated list is the in-repo snapshot in
+    ``_PROVIDER_MODELS["nous"]``. Always returns a list (never None).
     """
-    try:
-        from hermes_cli.model_catalog import get_curated_nous_models
-        remote = get_curated_nous_models()
-    except Exception:
-        remote = None
-    if remote:
-        return list(remote)
     return list(_PROVIDER_MODELS.get("nous", []))
 
 
@@ -3174,12 +3128,11 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
                     return live
         except Exception:
             pass
-        # Live failed (or no creds). Fall back to the docs-hosted manifest
-        # — NOT the in-repo _PROVIDER_MODELS["nous"] snapshot — so newly
-        # added Portal models still surface without a Hermes release.
-        manifest_ids = get_curated_nous_model_ids()
-        if manifest_ids:
-            return manifest_ids
+        # Live failed (or no creds). Fall back to the in-repo curated list
+        # (_PROVIDER_MODELS['nous']).
+        curated_ids = get_curated_nous_model_ids()
+        if curated_ids:
+            return curated_ids
     if normalized == "stepfun":
         try:
             from hermes_cli.auth import resolve_api_key_provider_credentials

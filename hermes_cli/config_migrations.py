@@ -472,24 +472,26 @@ def _migrate_to_23(results: Dict[str, Any], quiet: bool) -> None:
 
 
 def _migrate_to_25(results: Dict[str, Any], quiet: bool) -> None:
-    # ── Version 24 → 25: lower model_catalog TTL 24h → 1h ──
-    # The model picker now refreshes its curated list hourly so freshly
-    # published model-catalog.json deploys reach users without a day-long
-    # stale window. Only rewrite the OLD default (24) — never clobber a
-    # value the user deliberately customized.
+    # ── Version 24 → 25: remove the model_catalog block ──
+    # The remote model-catalog manifest (docs site) is gone; the curated
+    # model lists now live in-repo. The only user-meaningful field in the
+    # old block, excluded_providers, is re-homed to the top level so the
+    # /model exclusion feature keeps working after the block disappears.
     _c = _cfg()
     read_raw_config = _c.read_raw_config
     _persist_migration = _c._persist_migration
 
     config = read_raw_config()
     raw_mc = config.get("model_catalog")
-    if isinstance(raw_mc, dict) and raw_mc.get("ttl_hours") == 24:
-        raw_mc["ttl_hours"] = 1
-        config["model_catalog"] = raw_mc
+    if isinstance(raw_mc, dict):
+        excluded = raw_mc.get("excluded_providers")
+        if excluded and "excluded_providers" not in config:
+            config["excluded_providers"] = excluded
+        del config["model_catalog"]
         _persist_migration(config)
-        results["config_added"].append("model_catalog.ttl_hours 24→1")
+        results["config_added"].append("model_catalog removed; excluded_providers re-homed to top level")
         if not quiet:
-            print("  ✓ Lowered model_catalog.ttl_hours to 1 (hourly picker refresh)")
+            print("  ✓ Removed model_catalog block (excluded_providers re-homed to top level)")
 
 
 def _migrate_to_29(results: Dict[str, Any], quiet: bool) -> None:
