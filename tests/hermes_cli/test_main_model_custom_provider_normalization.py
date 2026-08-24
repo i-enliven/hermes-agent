@@ -2,11 +2,11 @@
 
 from unittest.mock import patch
 
-from hermes_cli.web_server import _normalize_main_model_assignment
+from hermes_cli.profile_model import _normalize_main_model_assignment
 
 
 def _normalize(config, provider, model="vendor/model-a"):
-    with patch("hermes_cli.web_server.load_config", return_value=config):
+    with patch("hermes_cli.profile_model.load_config", return_value=config):
         return _normalize_main_model_assignment(provider, model)
 
 

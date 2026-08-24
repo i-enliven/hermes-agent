@@ -434,7 +434,7 @@ def _(rid, params: dict) -> dict:
 
     if model and provider:
         try:
-            from hermes_cli.web_routers.profiles import _write_profile_model
+            from hermes_cli.profile_model import _write_profile_model
 
             _write_profile_model(path, provider, model)
             model_set = True
@@ -450,7 +450,7 @@ def _(rid, params: dict) -> dict:
         # report). Clones bring their own model section and stay untouched.
         try:
             from hermes_cli.config import load_config_readonly, read_user_config_raw
-            from hermes_cli.web_routers.profiles import _write_profile_model
+            from hermes_cli.profile_model import _write_profile_model
             from hermes_constants import (
                 reset_hermes_home_override,
                 set_hermes_home_override,
@@ -754,7 +754,7 @@ def _(rid, params: dict) -> dict:
         provider = str(params.get("provider") or "").strip()
         if model and provider:
             try:
-                from hermes_cli.web_routers.profiles import _write_profile_model
+                from hermes_cli.profile_model import _write_profile_model
 
                 _write_profile_model(profile_dir, provider, model)
                 applied["model"] = True
