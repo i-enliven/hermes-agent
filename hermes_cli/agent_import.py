@@ -962,7 +962,7 @@ def import_agent_command(args) -> None:
 
 
 def print_import_report(report: Dict[str, Any], dry_run: bool) -> None:
-    """Print a formatted per-item import report (claw-migrate style)."""
+    """Print a formatted per-item import report (preview-first style)."""
     from hermes_cli.setup import Colors, color, print_header, print_info
 
     summary = report.get("summary", {})

@@ -16771,7 +16771,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 )
         except Exception:
             pass
-# Show a random tip to help users discover features
+        # Show a random tip to help users discover features
         try:
             from hermes_cli.tips import get_random_tip
             _tip = get_random_tip()
