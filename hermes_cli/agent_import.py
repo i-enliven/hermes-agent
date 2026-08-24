@@ -7,13 +7,11 @@ Usage:
     hermes import-agent claude-code --dry-run # preview only, no changes
     hermes import-agent codex --source /path/to/.codex
 
-Follows the OpenClaw migration pattern (``hermes claw migrate`` /
-``optional-skills/migration/openclaw-migration/scripts/openclaw_to_hermes.py``):
+Follows a preview-first migration pattern:
 detect → parse → map → apply, with a mandatory preview phase, per-item
 imported/skipped/conflict/error records, and a ``--dry-run`` that writes
 nothing.  The memory-entry merge and allowlist-merge primitives here are
-self-contained ports of the openclaw script's equivalents so this command
-works even when the optional migration skill is not installed.
+self-contained so this command works without any optional skill installed.
 
 Mappings
 --------
