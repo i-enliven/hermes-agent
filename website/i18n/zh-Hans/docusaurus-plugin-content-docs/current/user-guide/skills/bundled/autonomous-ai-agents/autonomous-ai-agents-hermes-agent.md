@@ -239,7 +239,6 @@ hermes honcho setup/status  Honcho memory integration (requires honcho plugin)
 hermes memory setup/status/off  Memory provider config
 hermes completion bash|zsh  Shell completions
 hermes acp                  ACP server (IDE integration)
-hermes claw migrate         Migrate from OpenClaw
 hermes uninstall            Uninstall Hermes
 ```
 
