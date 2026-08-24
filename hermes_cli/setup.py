@@ -20,7 +20,7 @@ import shutil
 import sys
 import copy
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from hermes_cli.nous_subscription import get_nous_subscription_features
 from tools.tool_backend_helpers import managed_nous_tools_enabled
@@ -2343,149 +2343,6 @@ def setup_telemetry(config: dict):
 
 
 # =============================================================================
-# Post-Migration Section Skip Logic
-# =============================================================================
-
-
-def _model_section_has_credentials(config: dict) -> bool:
-    """Return True when any known inference provider has usable credentials.
-
-    Sources of truth:
-      * ``PROVIDER_REGISTRY`` in ``hermes_cli.auth`` — lists every supported
-        provider along with its ``api_key_env_vars``.
-      * ``active_provider`` in the auth store — covers OAuth device-code /
-        external-OAuth providers (Nous, Codex, Qwen, Gemini CLI, ...).
-      * The legacy OpenRouter aggregator env vars, which route generic
-        ``OPENAI_API_KEY`` / ``OPENROUTER_API_KEY`` values through OpenRouter.
-    """
-    try:
-        from hermes_cli.auth import get_active_provider
-        if get_active_provider():
-            return True
-    except Exception:
-        pass
-
-    try:
-        from hermes_cli.auth import PROVIDER_REGISTRY
-    except Exception:
-        PROVIDER_REGISTRY = {}  # type: ignore[assignment]
-
-    def _has_key(pconfig) -> bool:
-        for env_var in pconfig.api_key_env_vars:
-            # CLAUDE_CODE_OAUTH_TOKEN is set by Claude Code itself, not by
-            # the user — mirrors is_provider_explicitly_configured in auth.py.
-            if env_var == "CLAUDE_CODE_OAUTH_TOKEN":
-                continue
-            if get_env_value(env_var):
-                return True
-        return False
-
-    # Prefer the provider declared in config.yaml, avoids false positives
-    # from stray env vars (GH_TOKEN, etc.) when the user has already picked
-    # a different provider.
-    model_cfg = config.get("model") if isinstance(config, dict) else None
-    if isinstance(model_cfg, dict):
-        provider_id = (model_cfg.get("provider") or "").strip().lower()
-        if provider_id in PROVIDER_REGISTRY:
-            if _has_key(PROVIDER_REGISTRY[provider_id]):
-                return True
-        if provider_id == "openrouter":
-            for env_var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
-                if get_env_value(env_var):
-                    return True
-
-    # OpenRouter aggregator fallback (no provider declared in config).
-    for env_var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
-        if get_env_value(env_var):
-            return True
-
-    for pid, pconfig in PROVIDER_REGISTRY.items():
-        # Skip copilot in auto-detect: GH_TOKEN / GITHUB_TOKEN are
-        # commonly set for git tooling.  Mirrors resolve_provider in auth.py.
-        if pid == "copilot":
-            continue
-        if _has_key(pconfig):
-            return True
-    return False
-
-
-def _gateway_platform_short_label(label: str) -> str:
-    """Strip trailing parenthetical qualifiers from a gateway platform label."""
-    base = label.split("(", 1)[0].strip()
-    return base or label
-
-
-def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]:
-    """Return a short summary if a setup section is already configured, else None.
-
-    Used to detect which already-configured sections can be skipped.
-    ``get_env_value`` is the module-level import from hermes_cli.config
-    so that test patches on ``setup_mod.get_env_value`` take effect.
-    """
-    if section_key == "model":
-        if not _model_section_has_credentials(config):
-            return None
-        model = config.get("model")
-        if isinstance(model, str) and model.strip():
-            return model.strip()
-        if isinstance(model, dict):
-            return str(model.get("default") or model.get("model") or "configured")
-        return "configured"
-
-    elif section_key == "terminal":
-        backend = cfg_get(config, "terminal", "backend", default="local")
-        return f"backend: {backend}"
-
-    elif section_key == "agent":
-        max_turns = cfg_get(config, "agent", "max_turns", default=90)
-        return f"max turns: {max_turns}"
-
-    elif section_key == "gateway":
-        from hermes_cli.gateway import _all_platforms, _platform_status
-        # Count any non-empty status other than the "not configured" sentinel —
-        # platforms like WhatsApp ("enabled, not paired"), Matrix ("configured
-        # + E2EE"), and Signal ("partially configured") all indicate the user
-        # has already started setup and we shouldn't force the section to rerun.
-        configured = [
-            _gateway_platform_short_label(plat["label"])
-            for plat in _all_platforms()
-            if _platform_status(plat) and _platform_status(plat) != "not configured"
-        ]
-        if configured:
-            return ", ".join(configured)
-        return None  # No platforms configured — section must run
-
-    elif section_key == "tools":
-        tools = []
-        if get_env_value("ELEVENLABS_API_KEY"):
-            tools.append("TTS/ElevenLabs")
-        if get_env_value("BROWSERBASE_API_KEY"):
-            tools.append("Browser")
-        if get_env_value("FIRECRAWL_API_KEY"):
-            tools.append("Firecrawl")
-        if tools:
-            return ", ".join(tools)
-        return None
-
-    return None
-
-
-def _skip_configured_section(
-    config: dict, section_key: str, label: str
-) -> bool:
-    """Show an already-configured section summary and offer to skip.
-
-    Returns True if the user chose to skip, False if the section should run.
-    """
-    summary = _get_section_config_summary(config, section_key)
-    if not summary:
-        return False
-    print()
-    print_success(f"  {label}: {summary}")
-    return not prompt_yes_no(f"  Reconfigure {label.lower()}?", default=False)
-
-
-# =============================================================================
 # Main Wizard Orchestrator
 # =============================================================================
 
@@ -2719,8 +2576,6 @@ def run_setup_wizard(args):
         )
     )
 
-    migration_ran = False
-
     if is_existing:
         # Existing install — default is the full-wizard reconfigure flow.
         # Every prompt shows the current value as its default, so pressing
@@ -2778,12 +2633,10 @@ def run_setup_wizard(args):
     print_info("You can edit these files directly or use 'hermes config edit'")
 
     # Section 1: Model & Provider
-    if not (migration_ran and _skip_configured_section(config, "model", "Model & Provider")):
-        setup_model_provider(config)
+    setup_model_provider(config)
 
     # Section 2: Terminal Backend
-    if not (migration_ran and _skip_configured_section(config, "terminal", "Terminal Backend")):
-        setup_terminal_backend(config)
+    setup_terminal_backend(config)
 
     # Section 3: Agent Settings — no longer prompted. First installs get the
     # recommended defaults silently; existing installs keep whatever they have.
@@ -2792,17 +2645,10 @@ def run_setup_wizard(args):
         _apply_default_agent_settings(config)
 
     # Section 4: Messaging Platforms
-    if not (migration_ran and _skip_configured_section(config, "gateway", "Messaging Platforms")):
-        setup_gateway(config)
-    else:
-        # Section skipped (migrated config) — still make sure the gateway
-        # service exists so cron jobs and migrated platforms actually run.
-        from hermes_cli.gateway import ensure_gateway_service
-        ensure_gateway_service(context="setup")
+    setup_gateway(config)
 
     # Section 5: Tools
-    if not (migration_ran and _skip_configured_section(config, "tools", "Tools")):
-        setup_tools(config, first_install=not is_existing)
+    setup_tools(config, first_install=not is_existing)
 
     # Save and show summary
     save_config(config)

@@ -49,12 +49,11 @@ from utils import atomic_write_text, atomic_yaml_write
 
 logger = logging.getLogger(__name__)
 
-# Same entry delimiter as the Hermes memory store and the openclaw migration
-# script — memories/MEMORY.md entries are separated by bare "§" lines.
+# Same entry delimiter as the Hermes memory store — memories/MEMORY.md
+# entries are separated by bare "§" lines.
 ENTRY_DELIMITER = "\n§\n"
 
-# Character budget for merged memory files (matches the openclaw script's
-# default memory limit).
+# Character budget for merged memory files.
 MEMORY_CHAR_LIMIT = 20_000
 
 SUPPORTED_AGENTS = ("claude-code", "codex")
@@ -160,15 +159,14 @@ def dump_yaml_file(path: Path, data: Dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Memory-entry primitives (ported from openclaw_to_hermes.py)
+# Memory-entry primitives
 # ---------------------------------------------------------------------------
 
 def extract_markdown_entries(text: str) -> List[str]:
     """Split a markdown document into individual memory entries.
 
     Headings become context prefixes, bullets and paragraphs become entries.
-    Code blocks and tables are skipped.  Port of the openclaw migration
-    script's extractor.
+    Code blocks and tables are skipped.
     """
     entries: List[str] = []
     headings: List[str] = []
@@ -275,9 +273,8 @@ def parse_existing_memory_entries(path: Path) -> List[str]:
 def backup_memory_file(path: Path) -> Optional[Path]:
     """Snapshot ``path`` before a destructive rewrite; return the backup path.
 
-    Restores parity with the openclaw migration script this module was ported
-    from, which calls ``maybe_backup(destination)`` before rewriting a memory
-    store.  Uses the same ``<name>.bak.<unix_ts>`` naming as
+    Backs up before rewriting so a failed or unwanted rewrite is recoverable.
+    Uses the same ``<name>.bak.<unix_ts>`` naming as
     ``MemoryStore._backup_drifted_file``.  Returns None when there is nothing
     to back up.
     """

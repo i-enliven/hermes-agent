@@ -1553,10 +1553,9 @@ def mark_provider_active_if_unset(provider_id: str) -> None:
     Used by ``hermes auth add`` OAuth paths that create credential-pool
     entries directly (no singleton ``providers.<id>`` block). Adding the
     very first credential for a provider should make it the active provider
-    so the setup wizard's ``_model_section_has_credentials()`` check (which
-    consults ``get_active_provider()``) does not report "No inference
-    provider configured". Subsequent adds for an already-active setup leave
-    the user's chosen active provider untouched.
+    so the setup wizard and status commands see a configured inference
+    provider. Subsequent adds for an already-active setup leave the user's
+    chosen active provider untouched.
     """
     with _auth_store_lock():
         auth_store = _load_auth_store()
@@ -2807,9 +2806,8 @@ def _mark_qwen_oauth_active(creds: Dict[str, Any]) -> None:
     Qwen OAuth tokens live in the Qwen CLI credential file managed by
     _save_qwen_cli_tokens / resolve_qwen_runtime_credentials. This function
     only writes a minimal provider-state entry (base_url for display) and
-    sets active_provider so that get_active_provider() and
-    _model_section_has_credentials() detect the provider for the setup wizard
-    and status commands.
+    sets active_provider so that get_active_provider() detects the provider
+    for the setup wizard and status commands.
     """
     with _auth_store_lock():
         auth_store = _load_auth_store()
