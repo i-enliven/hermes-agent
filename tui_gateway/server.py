@@ -3494,19 +3494,15 @@ def _block(event: str, sid: str, payload: dict, timeout: float | None = 300) -> 
 
     # Emit an `.expire` notification on timeout for every blocking request type
     # whose `*.respond` handler tolerates a late reply (allow_expired=True).
-    # All four blocking bridges — secret, sudo, clarify, terminal.read — share
-    # the same lifecycle: the tool gives up on timeout and returns empty, but a
-    # slow renderer (or a reconnect that dropped tool.complete) can still answer
+    # All three blocking bridges — secret, sudo, clarify — share the same
+    # lifecycle: the tool gives up on timeout and returns empty, but a slow
+    # renderer (or a reconnect that dropped tool.complete) can still answer
     # afterward. Without this the late `*.respond` would hit the generic 4009
     # "no pending request" error and clients would surface a raw JSON-RPC string.
     if not answered and not answer_present and event in {
         "secret.request",
         "sudo.request",
         "clarify.request",
-        "terminal.read.request",
-        "preview.read.request",
-        "window.read.request",
-        "mcp.setup.request",
     }:
         _emit(
             f"{event.removesuffix('.request')}.expire",
@@ -4460,25 +4456,14 @@ def _load_tool_progress_mode() -> str:
     return mode if mode in {"off", "new", "all", "verbose"} else "all"
 
 
-def _gui_surface_toolsets(platform: str) -> set[str]:
+def _gui_surface_toolsets(platform: str = None) -> set[str]:
     """Toolsets that exist because of the CLIENT on the other end, not the host.
 
-    Both entries are deliberately off ``_HERMES_CORE_TOOLS`` — every other
-    platform would carry their schema for nothing — so this resolver is the one
-    gate that exposes them.
-
-    ``platform`` is the SESSION's source (``session.create``'s ``source``
-    field), never a process env var. The desktop app is a client: it can be
-    driving a local, SSH, URL, or cloud backend, and only the local/SSH spawn
-    paths run with ``HERMES_DESKTOP=1``. Keying GUI capability off that env var
-    silently stripped every pane/browser tool from URL and cloud gateways while
-    the same backend told the model it was "chatting inside the Hermes desktop
-    app". See the surface-capability rule in AGENTS.md.
+    Deliberately off ``_HERMES_CORE_TOOLS`` — every other platform would carry
+    their schema for nothing — so this resolver is the one gate that exposes
+    them.
     """
-    surfaces = {"project"}
-    if platform == "desktop":
-        surfaces.add("desktop_ui")
-    return surfaces
+    return {"project"}
 
 
 def _load_enabled_toolsets(platform: str | None = None) -> list[str] | None:
@@ -4649,11 +4634,10 @@ def _tool_progress_enabled(sid: str) -> bool:
 
 def _tool_lifecycle_required_for_ui(name: str) -> bool:
     """Return True for tool events that are interactive UI, not optional chrome."""
-    # Desktop renders the clarify choices/question from the tool-call part, then
+    # The TUI renders the clarify choices/question from the tool-call part, then
     # wires request_id from clarify.request. If tool progress is off, suppressing
     # clarify's lifecycle events leaves only the sidebar attention dot visible.
-    # setup_mcp is the same shape: its consent card mounts on the tool part.
-    return name in ("clarify", "setup_mcp")
+    return name == "clarify"
 
 
 def _restart_slash_worker(sid: str, session: dict):
@@ -6190,46 +6174,6 @@ def _agent_cbs(sid: str) -> dict:
                 else {"question": q, "choices": c}
             ),
             timeout=_clarify_timeout_seconds(),
-        ),
-        # read_terminal tool (desktop GUI): same blocking bridge as clarify — the
-        # renderer answers terminal.read.respond with the serialized buffer.
-        "read_terminal_callback": lambda start=None, count=None: _block(
-            "terminal.read.request",
-            sid,
-            {k: v for k, v in (("start", start), ("count", count)) if v is not None},
-            timeout=30,
-        ),
-        # read_preview tool (desktop GUI): the renderer serializes the active
-        # preview tab (a Browser webview's readable text, a file's identity)
-        # and answers preview.read.respond. Longer timeout than the terminal
-        # read — a URL tab extracts text from a live page.
-        "read_preview_callback": lambda start=None, count=None: _block(
-            "preview.read.request",
-            sid,
-            {k: v for k, v in (("start", start), ("count", count)) if v is not None},
-            timeout=45,
-        ),
-        # read_window_below tool (desktop GUI): the renderer asks its main
-        # process (which owns native window enumeration) which OS window sits
-        # directly underneath the Hermes window, and answers
-        # window.read.respond with the serialized metadata.
-        "read_window_below_callback": lambda: _block(
-            "window.read.request",
-            sid,
-            {},
-            timeout=30,
-        ),
-        # setup_mcp tool (desktop GUI): the renderer shows an inline consent
-        # card and walks the user through install/enable/OAuth via the REST
-        # endpoints, then answers mcp.setup.respond with the JSON outcome.
-        # Long timeout on purpose — the flow can include typing an API key or
-        # a browser OAuth round-trip. Same lifecycle as clarify: on timeout
-        # the tool returns "unanswered" and a late answer is tolerated.
-        "setup_mcp_callback": lambda server, action, reason: _block(
-            "mcp.setup.request",
-            sid,
-            {"server": server, "action": action, "reason": reason},
-            timeout=600,
         ),
     }
 
@@ -10186,73 +10130,6 @@ def _async_delegation_display_metadata(evt: dict) -> dict:
     return metadata
 
 
-def _wire_agent_terminal_output() -> None:
-    """Idempotently route background-process output (and tab-close requests) to
-    the desktop, keyed by process id. Read-only agent terminal tabs stream
-    `agent.terminal.output` chunks live instead of polling the output tail, and
-    `process_registry.request_close_terminal` emits `terminal.close` so the agent
-    can drop a tab without killing the process. Events are routed to the window
-    that owns the process (its gateway session); `_emit`/`write_json` is
-    `_stdout_lock`-guarded, so calling it from the registry's reader threads is
-    safe."""
-    from tools.process_registry import process_registry
-
-    has_output_sink = getattr(process_registry, "on_output", None) is not None
-    has_close_sink = getattr(process_registry, "on_close", None) is not None
-    if has_output_sink and has_close_sink:
-        return
-
-    def _owner_sid_for_process(session) -> str:
-        session_key = str(getattr(session, "session_key", "") or "")
-        if not session_key:
-            return ""
-        with _sessions_lock:
-            for sid, tui_session in _sessions.items():
-                if str(tui_session.get("session_key") or "") == session_key:
-                    return sid
-        return ""
-
-    def _emit_agent_terminal_output(session, chunk):
-        _emit(
-            "agent.terminal.output",
-            _owner_sid_for_process(session),
-            {"process_id": session.id, "chunk": chunk},
-        )
-
-    def _emit_agent_terminal_close(session, process_id):
-        # session may be None (process already finished/pruned) — the tab can
-        # still linger and be closed; route to the owning window when we can.
-        sid = _owner_sid_for_process(session) if session is not None else ""
-        _emit("terminal.close", sid, {"process_id": process_id})
-
-    if not has_output_sink:
-        process_registry.on_output = _emit_agent_terminal_output
-    if not has_close_sink:
-        process_registry.on_close = _emit_agent_terminal_close
-
-
-_desktop_ui_wired = False
-
-
-def _wire_desktop_ui() -> None:
-    """Bridge desktop-only tools (open_preview, focus_pane) to renderer events.
-
-    Idempotent. The tool hands back the turn's ``HERMES_UI_SESSION_ID`` as
-    ``sid`` so the event routes to the window that asked (``_emit`` /
-    ``write_json`` is ``_stdout_lock``-guarded, so calling it from the tool's
-    thread is safe)."""
-    global _desktop_ui_wired
-    if _desktop_ui_wired:
-        return
-    try:
-        from tools import desktop_ui
-    except Exception:
-        return
-
-    desktop_ui.set_emitter(lambda sid, event, payload: _emit(event, sid, payload))
-    _desktop_ui_wired = True
-
-
 # (stop_event, thread) for every poller ever started in this process.
 # Pruned of dead threads on each spawn; consumed by test teardowns to reap
 # leaked pollers (see _start_notification_poller).
@@ -10261,8 +10138,6 @@ _notification_pollers: list = []
 
 def _start_notification_poller(sid: str, session: dict) -> threading.Event:
     """Start the background notification poller for a TUI session."""
-    _wire_agent_terminal_output()
-    _wire_desktop_ui()
     stop = threading.Event()
     t = threading.Thread(
         target=_notification_poller_loop,
@@ -10282,15 +10157,6 @@ def _start_notification_poller(sid: str, session: dict) -> threading.Event:
     _notification_pollers.append((stop, t))
     t.start()
     return stop
-
-
-def _hud_surface_note(session: dict) -> str:
-    """The HUD-mode note for this turn, or "" when it was not typed there."""
-    if session.get("client_surface") != "hud":
-        return ""
-    from agent.prompt_builder import hud_surface_note
-
-    return hud_surface_note(getattr(session.get("agent"), "valid_tool_names", None))
 
 
 def _prepend_note(run_message: Any, note: str) -> Any:
@@ -10759,10 +10625,6 @@ def _run_prompt_submit(
 
             # Reactions the user added since the last turn.
             run_message = _prepend_note(run_message, _pending_reaction_notes(session))
-
-            # Which window the message was typed into. HUD mode is per-turn
-            # state, so it cannot live in the (byte-stable) system prompt.
-            run_message = _prepend_note(run_message, _hud_surface_note(session))
 
             def _stream(delta):
                 with session["history_lock"]:

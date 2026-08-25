@@ -553,12 +553,12 @@ class TestThreadSafety:
 
 class TestToolsetAvailabilityAggregation:
     def test_mixed_toolset_available_when_general_tool_passes(self):
-        """Desktop-only helpers must not hide general-purpose tools from doctor."""
+        """Gated tools must not hide general-purpose tools from doctor."""
         reg = ToolRegistry()
         reg.register(
-            name="read_terminal",
+            name="web_search",
             toolset="terminal",
-            schema=_make_schema("read_terminal"),
+            schema=_make_schema("web_search"),
             handler=_dummy_handler,
             check_fn=lambda: False,
         )
@@ -586,9 +586,9 @@ class TestToolsetAvailabilityAggregation:
     def test_mixed_toolset_unavailable_when_every_tool_is_gated(self):
         reg = ToolRegistry()
         reg.register(
-            name="read_terminal",
+            name="web_search",
             toolset="terminal",
-            schema=_make_schema("read_terminal"),
+            schema=_make_schema("web_search"),
             handler=_dummy_handler,
             check_fn=lambda: False,
         )

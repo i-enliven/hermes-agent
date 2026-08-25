@@ -2471,9 +2471,9 @@ def _get_platform_tools(
                 if not _toolset_allowed_for_platform(ts_key, platform):
                     continue
                 # Compare the toolset's STATIC membership: a tool registered
-                # into a toolset (e.g. delegate_cli -> delegation, desktop-only
-                # read_terminal -> terminal) that the composite never listed must
-                # not drop the whole toolset. See issue #49622.
+                # into a toolset (e.g. delegate_cli -> delegation) that the
+                # composite never listed must not drop the whole toolset.
+                # See issue #49622.
                 ts_tools = set(resolve_toolset(ts_key, include_registry=False))
                 if ts_tools and ts_tools.issubset(composite_tools):
                     expanded.add(ts_key)

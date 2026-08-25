@@ -318,11 +318,6 @@ def _(rid, params: dict) -> dict:
         return err
     if (limit_message := _ensure_active_session_slot(sid, session)) is not None:
         return _err(rid, 4090, limit_message)
-    # Which desktop window this message was typed into. Rewritten on every
-    # submit, because one session can be driven from the app window and the HUD
-    # in turn: a stale "hud" would tell the model the user is still floating
-    # over another app when they are back in Hermes.
-    session["client_surface"] = "hud" if params.get("surface") == "hud" else ""
     has_truncation = (
         truncate_user_ordinal is not None
         or params.get("truncate_before_row_id") is not None
@@ -1404,41 +1399,6 @@ def _(rid, params: dict) -> dict:
     # reconnect during the wait drops tool.complete. A late answer must resolve
     # gracefully instead of hitting the raw 4009 "no pending answer request".
     return _respond(rid, params, "answer", allow_expired=True)
-
-
-@method("terminal.read.respond")
-def _(rid, params: dict) -> dict:
-    # `text` is a JSON string of the serialized terminal buffer + line metadata.
-    # allow_expired=True: the read_terminal tool's _block() uses a short 30s
-    # timeout, so a slow renderer losing the race is the common case — a late
-    # response must not error after the tool already returned empty.
-    return _respond(rid, params, "text", allow_expired=True)
-
-
-@method("preview.read.respond")
-def _(rid, params: dict) -> dict:
-    # `text` is a JSON string of the active preview tab's serialized contents.
-    # allow_expired=True for the same reason as terminal.read: the tool's
-    # bounded wait can expire while a slow page extraction is still running.
-    return _respond(rid, params, "text", allow_expired=True)
-
-
-@method("window.read.respond")
-def _(rid, params: dict) -> dict:
-    # `text` is a JSON string describing the OS window underneath the Hermes
-    # window (read_window_below tool). allow_expired=True for the same reason
-    # as terminal.read: the tool's bounded wait can expire while the renderer's
-    # round-trip to the main process is still in flight.
-    return _respond(rid, params, "text", allow_expired=True)
-
-
-@method("mcp.setup.respond")
-def _(rid, params: dict) -> dict:
-    # `result` is a JSON string of the setup card's outcome ({status, server,
-    # detail?, tools?}). allow_expired=True: the setup_mcp tool waits 10
-    # minutes, but an OAuth round-trip or a slow install can outlive that —
-    # a late answer must resolve gracefully, not surface a raw 4009.
-    return _respond(rid, params, "result", allow_expired=True)
 
 
 @method("sudo.respond")

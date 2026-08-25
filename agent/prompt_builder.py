@@ -736,64 +736,6 @@ STEER_CHANNEL_NOTE += (
 )
 
 
-def hud_surface_note(valid_tool_names: "set[str] | None" = None) -> str:
-    """Per-turn note for a message typed into the desktop's floating HUD.
-
-    HUD mode is a strip of Hermes floating over another application, so the
-    user is rarely asking about Hermes — they are asking about the thing behind
-    it, and the work they want done usually belongs in that app rather than in
-    a surface of our own. Left to itself the model answers from its own
-    browser and panes, which is the wrong half of the screen.
-
-    It is a per-turn fact, not a platform — one desktop session can be driven
-    from the app window on one turn and the HUD on the next — so it rides the
-    model-bound message beside the reaction / speech-interrupted notes rather
-    than the system prompt, which has to stay byte-stable for a conversation's
-    whole life.
-
-    The same is true one level down: the app underneath changes as the user
-    drags the strip around, and they carry a thought across the move ("pause
-    that and play X here"). Earlier windows are already in context as
-    read_window_below results, so the note only has to say they still count —
-    without that, the latest window reads as the only one and half of a
-    two-app request is silently dropped.
-
-    Each sentence is gated on the tool it names — naming a tool outside this
-    agent's schema invites a hallucinated call — and the note as a whole is
-    withheld without the one it rests on.
-    """
-    names = valid_tool_names or set()
-    if "read_window_below" not in names:
-        return ""
-
-    sentences = [
-        "[Note: this message came from HUD mode — a small floating Hermes "
-        "window sitting over whatever the user is actually working in, so an "
-        'unqualified "this" or "here" usually means the app behind the HUD '
-        "rather than anything inside Hermes. read_window_below identifies "
-        "that app.",
-        "They move the HUD from app to app mid-conversation, so one you "
-        "identified on an earlier turn is still a live target: a reference "
-        "that does not fit the window below may name one from a turn or two "
-        "ago, and a single message can span both.",
-    ]
-    if "computer_use" in names:
-        sentences.append(
-            "Prefer carrying the work out in that same app — computer_use "
-            "takes its name in `app` — over pulling the task into a surface "
-            "of your own."
-        )
-        if "browser_navigate" in names:
-            sentences.append(
-                "When the app underneath is a browser, that means driving the "
-                "user's browser rather than opening yours with "
-                "browser_navigate."
-            )
-    sentences.append(
-        "This is a prior, not a rule: when the request names its own target, "
-        "follow the request.]"
-    )
-    return " ".join(sentences)
 
 
 # Model name substrings that should use the 'developer' role instead of
@@ -916,39 +858,6 @@ PLATFORM_HINTS = {
         "target a gateway-connected messaging platform (e.g. deliver='telegram' "
         "or 'all'). Do not promise the user that a deliver='origin' or "
         "default-deliver cron job will message them in this session."
-    ),
-    "desktop": (
-        "You are chatting inside the Hermes desktop app — a graphical chat "
-        "surface, not a terminal. Use markdown freely: it renders with full "
-        "GitHub flavor (tables, code blocks with syntax highlighting, math "
-        "via $...$, task lists, blockquote callouts). "
-        "You can deliver files natively — include MEDIA:/absolute/path/to/file "
-        "in your response. Images (.png, .jpg, .webp) appear inline, audio and "
-        "video play inline, and other files arrive as download links. You can "
-        "also include image URLs in markdown format ![alt](url) and they "
-        "render inline as photos. "
-        "To show an HTML file you wrote as a LIVE inline page right in your "
-        "message, put ::preview{file=\"path/to/file.html\"} alone on its own "
-        "line — desktop plugins can register more ::name{...} directives like "
-        "it. When the user asks for an inline widget, chart, or visualization "
-        "(anything living IN the chat rather than a standalone page), design "
-        "it as a native piece of the app by default: transparent background, "
-        "colors from the provided theme tokens — var(--foreground), "
-        "var(--muted-foreground), var(--accent), var(--border), var(--card) — "
-        "the inherited app font, no body padding or margin, content flush "
-        "left and filling the viewport width, no centering wrappers, decorative "
-        "backdrops, or page chrome. The frame auto-sizes to the content. "
-        "Widgets can talk back: window.hermes.send(\"prompt\") — or a "
-        "data-hermes-send=\"prompt\" attribute on any clickable element — sends "
-        "that prompt to you as a hidden user turn (no chat bubble), so give "
-        "interactive widgets buttons whose clicks mean something and answer "
-        "them by updating the widget's file, not with prose. Only "
-        "a standalone PAGE (a mockup, a poster, a game) should bring its own "
-        "background and layout. "
-        "When the user asks to add, enable, or authorize an MCP server (or a "
-        "task clearly needs one that is missing), use the setup_mcp tool if "
-        "it is available — it shows an inline consent card right in the chat; "
-        "never hand-edit mcp_servers config for them."
     ),
     "sms": (
         "You are communicating via SMS. Keep responses concise and use plain text "
