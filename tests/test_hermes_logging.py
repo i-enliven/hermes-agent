@@ -215,8 +215,7 @@ class TestGuiMode:
     def test_gui_log_receives_only_gui_components(self, hermes_home):
         hermes_logging.setup_logging(hermes_home=hermes_home, mode="gui")
 
-        logging.getLogger("hermes_cli.web_server").info("dashboard online")
-        logging.getLogger("tui_gateway.ws").info("ws connected")
+        logging.getLogger("tui_gateway.server").info("tui gateway online")
         logging.getLogger("gateway.run").info("gateway event")
 
         hermes_logging.flush_log_queue()
@@ -224,8 +223,7 @@ class TestGuiMode:
         gui_log = hermes_home / "logs" / "gui.log"
         assert gui_log.exists()
         content = gui_log.read_text()
-        assert "dashboard online" in content
-        assert "ws connected" in content
+        assert "tui gateway online" in content
         assert "gateway event" not in content
 
 

@@ -21,7 +21,7 @@ What makes Hermes different:
 - **Self-improving through skills** — Hermes learns from experience by saving reusable procedures as skills that load into future sessions.
 - **Persistent memory across sessions** — remembers who you are, your preferences, environment details, and lessons learned. Pluggable memory backends.
 - **Multi-platform gateway** — the same agent runs on Telegram, Discord, Slack, WhatsApp, iMessage, Signal, Matrix, Teams, Email, and a dozen more platforms with full tool access, not just chat.
-- **Many surfaces** — the same agent core drives the CLI, the Ink TUI, a web dashboard, and an ACP server for IDEs (VS Code / Zed / JetBrains).
+- **Many surfaces** — the same agent core drives the CLI, the Ink TUI, and an ACP server for IDEs (VS Code / Zed / JetBrains).
 - **Provider-agnostic** — swap models and providers mid-workflow; credential pools rotate across multiple API keys automatically.
 - **Profiles** — run multiple independent Hermes instances with isolated configs, sessions, skills, and memory.
 - **Extensible & themeable** — plugins, MCP servers, custom tools, webhook triggers, cron scheduling, skins that theme every surface, TUI widgets, and pet mascots.
@@ -58,7 +58,6 @@ hermes model
 hermes doctor
 
 # Other surfaces
-hermes dashboard               # web admin panel + embedded chat
 hermes proxy                   # OpenAI-compatible local proxy backed by your OAuth provider
 ```
 
@@ -187,7 +186,6 @@ terminal(command="tmux new-session -d -s resumed 'hermes --resume 20260225_14305
 
 ## Surfaces (quick orientation)
 
-- **Web dashboard** (`hermes dashboard`) — full admin panel: messaging channels, MCP catalog, webhooks, memory, profile builder, plus an embedded `hermes --tui` chat. Secured behind an OAuth/token gate.
 - **Ink TUI** (`hermes --tui` or `display.interface: tui`) — terminal UI with docked widget apps — `references/tui-widgets.md`.
 - **OpenAI-compatible proxy** (`hermes proxy`) — a local OpenAI API backed by whichever OAuth provider you're signed into. Point Codex CLI, Aider, Cline, or any script at it — no API key.
 

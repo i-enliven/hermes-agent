@@ -2520,7 +2520,7 @@ cua_driver_runtime_compatible() {
 install_computer_use_driver() {
     # cua-driver powers the computer_use toolset (background desktop control).
     # Provision it at install time so enabling the tool later — via
-    # `hermes tools`, the dashboard, or the desktop app — is a config flip,
+    # `hermes tools` or the desktop app — is a config flip,
     # not a surprise multi-minute binary fetch (the confusion this fixes:
     # users had to discover `hermes computer-use install` on their own).
     # Best-effort and non-fatal: the enable paths still lazy-install via

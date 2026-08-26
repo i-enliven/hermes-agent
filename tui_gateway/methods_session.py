@@ -80,7 +80,6 @@ def _(rid, params: dict) -> dict:
             "agent_error": None,
             "agent_ready": ready,
             "attached_images": [],
-            "close_on_disconnect": is_truthy_value(params.get("close_on_disconnect", False)),
             "active_session_lease": lease,
             "cols": cols,
             "created_at": now,
@@ -485,7 +484,6 @@ def _(rid, params: dict) -> dict:
                 history=history,
                 lease=lease,
                 source=source,
-                close_on_disconnect=is_truthy_value(params.get("close_on_disconnect", False)),
                 profile_home=profile_home,
                 lazy=True,
             )
@@ -552,7 +550,6 @@ def _(rid, params: dict) -> dict:
                 history=[],
                 lease=lease,
                 source=source,
-                close_on_disconnect=is_truthy_value(params.get("close_on_disconnect", False)),
                 profile_home=profile_home,
                 model_override=overrides.get("model_override"),
                 resume_runtime_overrides=overrides or None,
@@ -647,7 +644,6 @@ def _(rid, params: dict) -> dict:
                 history=history,
                 lease=lease,
                 source=source,
-                close_on_disconnect=is_truthy_value(params.get("close_on_disconnect", False)),
                 display_history_prefix=prefix,
                 profile_home=profile_home,
                 model_override=overrides.get("model_override"),
@@ -1007,15 +1003,14 @@ def _(rid, params: dict) -> dict:
     # Liveness filter (#38950): a session whose teardown has begun (``_finalized``)
     # is dead — its agent/worker are being released and it is no longer
     # attachable — but it can briefly remain in ``_sessions`` until the reaper
-    # pops it (the WS grace-reap and idle reaper both set ``_finalized`` inside
+    # pops it (the idle and LRU reapers both set ``_finalized`` inside
     # ``_teardown_session`` before the pop). Counting these inflated the footer's
     # "N sessions" count, which only ever went up until a gateway restart. Drop
     # them here so the count reflects genuinely attachable sessions. We do NOT
-    # filter on ``transport is _detached_ws_transport`` (the WS-detached drop
-    # sentinel): a detached session is still attachable via a quick reconnect /
-    # session.resume until the grace-reap finalizes it, and a standalone
-    # ``hermes --tui`` session legitimately rides the real stdio transport and
-    # must stay visible.
+    # filter on transport liveness: a session whose transport is momentarily
+    # closed is still attachable via a quick reconnect / session.resume until
+    # the reaper finalizes it, and a standalone ``hermes --tui`` session
+    # legitimately rides the real stdio transport and must stay visible.
     # Keep the natural creation/insertion order from ``_sessions``.  The
     # frontend marks the focused session with ``current``; it should not jump to
     # the top just because the user switched to it.

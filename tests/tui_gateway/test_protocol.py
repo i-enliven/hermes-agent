@@ -637,7 +637,7 @@ def test_enforce_session_cap_evicts_oldest_detached_only(server, monkeypatch):
         ev.set()
         return ev
 
-    detached = server._detached_ws_transport
+    detached = type("T", (), {"_closed": True})()  # dead/detached
     live = object()  # no _closed attr -> live transport, never evictable
 
     server._sessions.clear()

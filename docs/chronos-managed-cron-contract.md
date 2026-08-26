@@ -126,26 +126,21 @@ Arm (or re-arm, idempotently) exactly one one-shot for a job.
 
 ## Inbound `POST /api/cron/fire`  (NAS → agent) — agent side, already implemented
 
-This is the agent endpoint NAS calls in Endpoint 3 step 3. Two hops on hosted
-deployments:
+This is the agent endpoint NAS calls in Endpoint 3 step 3. It runs on the
+**Gateway `APIServerAdapter`** (`gateway/platforms/api_server.py`, loopback
+bind, default port 8642), which re-verifies the JWT (defense in depth) and
+runs the job with the gateway's **live platform adapters** — what makes
+relay-fronted logical platforms and E2EE rooms work (the standalone send
+path can serve neither).
 
-1. **Dashboard app** (`hermes_cli/web_server.py`) — the agent's only public
-   HTTP surface (the Fly proxy exposes exactly one port, the dashboard's). It
-   is in `PUBLIC_API_PATHS` so the dashboard cookie gate lets the bearer-JWT
-   callback through to the verifier. The dashboard verifies the JWT, resolves
-   the job's profile, then **forwards** the fire to hop 2 on loopback with the
-   NAS bearer preserved — it does NOT execute the job itself.
-2. **Gateway `APIServerAdapter`** (`gateway/platforms/api_server.py`, loopback
-   bind, default port 8642) — re-verifies the JWT (defense in depth) and runs
-   the job with the gateway's **live platform adapters**, which is what makes
-   delivery work for relay-fronted logical platforms and E2EE rooms (the
-   standalone send path can serve neither). Self-host API-server deployments
-   that expose the api_server directly hit hop 2 without hop 1.
+The endpoint is in `PUBLIC_API_PATHS` so the bearer-JWT callback passes
+through unauthenticated liveness to the verifier, which resolves the job's
+profile and executes it with the gateway adapters.
 
-Gateway unreachable from hop 1 (scale-to-zero wake still booting, restart
-window, api_server disabled) → the dashboard returns **503** and NAS retries
+Gateway unreachable (scale-to-zero wake still booting, restart window,
+api_server disabled) → the gateway returns **503** and NAS retries
 (non-2xx = retryable, below); the store CAS de-dupes the eventual double fire.
-There is deliberately no in-dashboard execution fallback. The verifier is
+There is deliberately no in-gateway execution fallback. The verifier is
 `plugins/cron/chronos/verify.py`.
 
 - **Auth:** `Authorization: Bearer <NAS-minted JWT>`. The agent verifies:

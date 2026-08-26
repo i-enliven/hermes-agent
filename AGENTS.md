@@ -8,7 +8,7 @@ Instructions for AI coding assistants and developers working on the hermes-agent
 
 Hermes is a personal AI agent that runs the same agent core across a CLI, a
 messaging gateway (Telegram, Discord, Slack, and ~20 other platforms), a TUI,
-and a web dashboard. It learns across sessions (memory + skills),
+It learns across sessions (memory + skills),
 delegates to subagents, runs scheduled jobs, and drives a real terminal and
 browser. It is extended primarily through **plugins and skills**, not by
 growing the core.
@@ -42,7 +42,7 @@ This is the project's intent layer. Use it two ways:
 
 Read the balance right: Hermes ships a **lot** — most merges are bug fixes to
 real reported behavior, and the product surface (platforms, channels,
-providers, models, TUI/dashboard features) expands aggressively and on purpose.
+providers, models, TUI features) expands aggressively and on purpose.
 The restraint below is aimed squarely at the **core agent + the model tool
 schema**, the one place where every addition is paid for on every API call.
 "Smallest footprint" governs *how a capability is wired into the core*, NOT
@@ -56,7 +56,7 @@ conservative at the waist.
   `main`, points to the exact line where it manifests, and fixes the whole bug
   class — sibling call paths included — not just the one site the reporter hit.
 - **Expand reach at the edges.** New platform adapters, channels, providers,
-  models, and TUI/dashboard features are welcome and land routinely,
+  models, and TUI features are welcome and land routinely,
   including large ones (a new messaging channel, a session-cap feature, a
   Windows PTY bridge). Breadth in the product is a goal, not a footprint
   concern — as long as it integrates with the existing setup/config UX
@@ -314,7 +314,7 @@ Browse with `hermes logs [--follow] [--level ...] [--session ...]`.
 
 ## TypeScript Style
 
-Applies to TypeScript across Hermes: TUI, web dashboard, `apps/shared`, `apps/bootstrap-installer`, and future TS packages.
+Applies to TypeScript across Hermes: TUI, `apps/shared`, `apps/bootstrap-installer`, and future TS packages.
 
 - Prefer small nanostores over component state when state is shared, reused, or read by distant UI.
 - Let each feature own its atoms. Chat state belongs near chat, shell state near shell, shared state in `src/store`.
@@ -513,21 +513,6 @@ npm run lint      # eslint
 npm run fmt       # prettier
 npm test          # vitest
 ```
-
-### TUI in the Dashboard (`hermes dashboard` → `/chat`)
-
-The dashboard embeds the real `hermes --tui` — **not** a rewrite.  See `hermes_cli/pty_bridge.py` + the `@app.websocket("/api/pty")` endpoint in `hermes_cli/web_server.py`.
-
-- Browser loads `web/src/pages/ChatPage.tsx`, which mounts xterm.js's `Terminal` with the WebGL renderer, `@xterm/addon-fit` for container-driven resize, and `@xterm/addon-unicode11` for modern wide-character widths.
-- `/api/pty?token=…` upgrades to a WebSocket; auth uses the same ephemeral `_SESSION_TOKEN` as REST, via query param (browsers can't set `Authorization` on WS upgrade).
-- The server spawns whatever `hermes --tui` would spawn, through `ptyprocess` (POSIX PTY — WSL works, native Windows does not).
-- Frames: raw PTY bytes each direction; resize via `\x1b[RESIZE:<cols>;<rows>]` intercepted on the server and applied with `TIOCSWINSZ`.
-
-**Do not re-implement the primary chat experience in React.** The main transcript, composer/input flow (including slash-command behavior), and PTY-backed terminal belong to the embedded `hermes --tui` — anything new you add to Ink shows up in the dashboard automatically. If you find yourself rebuilding the transcript or composer for the dashboard, stop and extend Ink instead.
-
-**Structured React UI around the TUI is allowed when it is not a second chat surface.** Sidebar widgets, inspectors, summaries, status panels, and similar supporting views (e.g. `ChatSidebar`, `ModelPickerDialog`, `ToolCall`) are fine when they complement the embedded TUI rather than replacing the transcript / composer / terminal. Keep their state independent of the PTY child's session and surface their failures non-destructively so the terminal pane keeps working unimpaired.
-
----
 
 ## Adding New Tools
 
@@ -1161,8 +1146,7 @@ kanban task.
   stale claims, promotes ready tasks, atomically claims, and spawns
   assigned profiles. Runs **inside the gateway** by default via
   `kanban.dispatch_in_gateway: true`.
-- **Plugin assets:** `plugins/kanban/dashboard/` (web UI) +
-  `plugins/kanban/systemd/` (`hermes-kanban-dispatcher.service` for
+- **Plugin assets:** `plugins/kanban/systemd/` (`hermes-kanban-dispatcher.service` for
   standalone dispatcher deployment).
 
 Isolation model:

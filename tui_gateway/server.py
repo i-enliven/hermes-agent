@@ -170,14 +170,6 @@ _SLASH_WORKER_TIMEOUT_S = max(5.0, _slash_timeout)
 # lingers forever — one leaked python process per refresh (#38591 fallout).
 # After this grace window, an orphaned (transport-detached, not-running) WS
 # session is reaped: its _SlashWorker is closed and the session finalized.
-# Set to 0 to disable (park forever, pre-fix behaviour).
-try:
-    _ws_orphan_reap_grace = float(
-        os.environ.get("HERMES_TUI_WS_ORPHAN_REAP_GRACE_S") or "20"
-    )
-except (ValueError, TypeError):
-    _ws_orphan_reap_grace = 20.0
-_WS_ORPHAN_REAP_GRACE_S = max(0.0, _ws_orphan_reap_grace)
 _TURN_SETTLE_BEFORE_CLOSE_SECONDS = 5.0
 _DETAIL_SECTION_NAMES = ("thinking", "tools", "subagents", "activity")
 _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
@@ -347,26 +339,10 @@ _current_runtime_session_record: contextvars.ContextVar[dict | None] = (
 _real_stdout = sys.stdout
 sys.stdout = sys.stderr
 
-
-class _DropTransport:
-    """Detached WS sink: keep sessions resumable without writing stale frames."""
-
-    def write(self, obj: dict) -> bool:
-        return False
-
-    def close(self) -> None:
-        return None
-
-
 # Module-level stdio transport — fallback sink when no transport is bound via
 # contextvar or session. Stream resolved through a lambda so runtime monkey-
 # patches of `_real_stdout` (used extensively in tests) still land correctly.
 _stdio_transport = StdioTransport(lambda: _real_stdout, _stdout_lock)
-
-# Detached websocket sessions use a drop sink instead of stdio. Desktop embeds
-# the gateway in-process and captures stdout into logs, so stale JSON-RPC frames
-# must not fall through there while the session waits for resume or reap.
-_detached_ws_transport = _DropTransport()
 
 
 def _prepend_tool_paths(env: dict[str, str]) -> dict[str, str]:
@@ -883,7 +859,7 @@ def _finalize_session(session: dict | None, end_reason: str = "tui_close") -> No
 # against an id the backend has already forgotten, which reads as the session
 # silently vanishing rather than being reclaimed. ``tui_close`` and friends are
 # deliberately absent: the client initiated those and already knows.
-_RECLAIM_END_REASONS = frozenset({"idle_timeout", "lru_evict", "ws_orphan_reap"})
+_RECLAIM_END_REASONS = frozenset({"idle_timeout", "lru_evict"})
 
 
 def _announce_session_reclaimed(session: dict, end_reason: str) -> None:
@@ -1033,19 +1009,6 @@ def _close_session_by_id(
     return _teardown_popped_session(session, end_reason=end_reason)
 
 
-def _ws_session_is_orphaned(session: dict | None) -> bool:
-    """True if a WS session has no live transport and no in-flight turn.
-
-    After ``handle_ws`` detaches a disconnected client it points the session at
-    ``_detached_ws_transport``. A session left on that transport (and not
-    mid-turn) is genuinely orphaned and safe to reap.
-    """
-    if not session or session.get("_finalized"):
-        return False
-    if session.get("running"):
-        return False
-    return session.get("transport") is _detached_ws_transport
-
 
 def _session_owns_durable_lifecycle(session_id: str | None) -> bool:
     """Whether this TUI/desktop session may end its durable DB row by key."""
@@ -1122,82 +1085,6 @@ def _session_has_active_delegations(sid: str, session: dict | None = None) -> bo
         return True
 
 
-def _schedule_ws_orphan_reap(sid: str) -> None:
-    """After a grace window, reap session ``sid`` iff it's still orphaned.
-
-    Called from the WS-disconnect path. The grace window lets a transient
-    reconnect (or a ``session.resume`` that reattaches the transport) cancel
-    the reap by re-binding a live transport. Disabled when the grace is 0.
-    """
-    if _WS_ORPHAN_REAP_GRACE_S <= 0:
-        return
-
-    def _reap() -> None:
-        # Serialize the orphan re-check against session.resume (which re-binds a
-        # live transport under _session_resume_lock and would make this session
-        # non-orphaned). Claim teardown by popping under both lifecycle locks,
-        # then release the global resume lock before the slow finalization work.
-        # The dict mutation still happens under _sessions_lock — consistent
-        # with every other _sessions mutator
-        # (#39591: _reap previously popped under _session_resume_lock, giving no
-        # mutual exclusion against _init_session / _close_session_by_id, which
-        # guard with _sessions_lock). _sessions_lock is an RLock and the global
-        # ordering is always resume_lock -> sessions_lock, so nesting is safe.
-        reschedule = False
-        session = None
-        with _session_resume_lock:
-            current = _sessions.get(sid)
-            if not _ws_session_is_orphaned(current):
-                return
-            if _session_has_active_delegations(sid, current):
-                reschedule = True
-            else:
-                session = _pop_session_by_id(sid)
-        if reschedule:
-            _schedule_ws_orphan_reap(sid)
-            return
-        _teardown_popped_session(session, end_reason="ws_orphan_reap")
-
-    timer = threading.Timer(_WS_ORPHAN_REAP_GRACE_S, _reap)
-    timer.daemon = True
-    timer.start()
-
-
-def _close_sessions_for_transport(
-    transport, *, end_reason: str = "ws_disconnect"
-) -> tuple[int, int]:
-    """On transport disconnect, reap the sessions that opted into
-    close_on_disconnect (sidecar/dashboard) immediately via the unified
-    ``_close_session_by_id`` path, and re-point the rest back to stdio so later
-    emits don't hit a dead socket.
-
-    Non-flagged detached sessions are handed to the grace-windowed WS-orphan
-    reaper (``_schedule_ws_orphan_reap``): a quick reconnect / session.resume
-    that re-binds a live transport cancels the reap, otherwise the orphan is
-    torn down through the same idempotent ``_teardown_session`` path. This is
-    the single WS-disconnect teardown entry point — there is no second
-    independent reap loop in ``handle_ws``.
-
-    Returns ``(reaped, detached)`` counts for disconnect-path observability."""
-    with _sessions_lock:
-        owned = [(sid, s) for sid, s in _sessions.items() if s.get("transport") is transport]
-    reaped = 0
-    detached = 0
-    for sid, session in owned:
-        if session.get("close_on_disconnect"):
-            _close_session_by_id(sid, end_reason=end_reason)
-            reaped += 1
-        else:
-            # Point detached sessions at the drop sentinel (NOT real stdio) so
-            # _ws_session_is_orphaned recognizes them and the grace-reap can
-            # actually fire; a standalone `hermes --tui` keeps real _stdio.
-            session["transport"] = _detached_ws_transport
-            detached += 1
-            try:
-                _schedule_ws_orphan_reap(sid)
-            except Exception:
-                pass
-    return reaped, detached
 
 
 def _shutdown_sessions() -> None:
@@ -1223,12 +1110,11 @@ _REAPER_SCAN_S = 300.0
 
 
 def _transport_is_dead(transport) -> bool:
-    # _detached_ws_transport is the post-WS-disconnect drop sentinel; a session
-    # parked on it has no live client. _stdio_transport is the REAL transport
-    # for a standalone `hermes --tui`, so it must NOT count as dead here (doing
-    # so let the idle reaper evict healthy standalone TUI sessions).
-    if transport is _detached_ws_transport:
-        return True
+    # A transport latches _closed on a real socket error / disconnect; a session
+    # parked on a dead transport has no live client. _stdio_transport is the
+    # REAL transport for a standalone `hermes --tui`, so it must NOT count as
+    # dead here (doing so let the idle reaper evict healthy standalone TUI
+    # sessions).
     return getattr(transport, "_closed", None) is True
 
 
@@ -6791,12 +6677,6 @@ def _make_agent(
     # AC-4 test seam: dead unless explicitly armed by the isolated certify
     # harness. Both inline and compute-host paths construct through _make_agent,
     # leaving the process boundary as the only experimental variable.
-    from tui_gateway.synthetic_turn import maybe_build_synthetic_agent
-
-    synthetic = maybe_build_synthetic_agent(session_id or key, model_override)
-    if synthetic is not None:
-        return synthetic
-
     from run_agent import AIAgent
 
     # MCP tool discovery runs in a background daemon thread at startup so a
@@ -8330,7 +8210,6 @@ def _deferred_session_record(
     history: list,
     lease,
     source: str = "tui",
-    close_on_disconnect: bool = False,
     display_history_prefix: list | None = None,
     profile_home: Path | None = None,
     lazy: bool = False,
@@ -8345,7 +8224,6 @@ def _deferred_session_record(
         "agent_error": None,
         "agent_ready": threading.Event(),
         "attached_images": [],
-        "close_on_disconnect": close_on_disconnect,
         "active_session_lease": lease,
         "cols": cols,
         "created_at": now,

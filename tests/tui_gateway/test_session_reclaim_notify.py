@@ -30,7 +30,7 @@ def _session():
     return {"_sid": "live-abc", "session_key": "20260731_120000_aaaaaa"}
 
 
-@pytest.mark.parametrize("reason", ["idle_timeout", "lru_evict", "ws_orphan_reap"])
+@pytest.mark.parametrize("reason", ["idle_timeout", "lru_evict"])
 def test_reclaim_reasons_announce_to_clients(captured, reason):
     server._teardown_session(_session(), end_reason=reason)
 

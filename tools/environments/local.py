@@ -305,8 +305,7 @@ def _build_provider_env_blocklist() -> frozenset:
         "EMAIL_SMTP_HOST",
         "EMAIL_HOME_ADDRESS",
         "EMAIL_HOME_ADDRESS_NAME",
-        "HERMES_DASHBOARD_SESSION_TOKEN",
-        "GATEWAY_ALLOWED_USERS",
+                "GATEWAY_ALLOWED_USERS",
         "GH_TOKEN",
         "GITHUB_APP_ID",
         "GITHUB_APP_PRIVATE_KEY_PATH",
@@ -580,8 +579,7 @@ _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
     "GATEWAY_RELAY_DELIVERY_KEY",
     "HASS_TOKEN",
     "EMAIL_PASSWORD",
-    "HERMES_DASHBOARD_SESSION_TOKEN",
-    # Remote-compute / infrastructure secrets
+        # Remote-compute / infrastructure secrets
     "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET",
     "DAYTONA_API_KEY",

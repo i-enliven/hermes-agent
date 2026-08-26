@@ -8,7 +8,7 @@ Log files produced:
     agent.log   — INFO+, all agent/tool/session activity (the main log)
     errors.log  — WARNING+, errors and warnings only (quick triage)
     gateway.log — INFO+, gateway-only events (created when mode="gateway")
-    gui.log     — INFO+, dashboard/websocket/TUI-gateway events
+    gui.log     — INFO+, TUI-gateway events
                   (created when mode="gui")
 
 All files use ``RotatingFileHandler`` with ``RedactingFormatter`` so
@@ -17,8 +17,7 @@ secrets are never written to disk.
 Component separation:
     gateway.log only receives records from ``gateway.*`` loggers —
     platform adapters, session management, slash commands, delivery.
-    gui.log receives dashboard-side records from ``hermes_cli.web_server``,
-    ``hermes_cli.pty_bridge``, ``tui_gateway.*``, and ``uvicorn.*``.
+    gui.log receives TUI-gateway records from ``tui_gateway.*`` and ``uvicorn.*``.
     agent.log remains the catch-all (everything goes there).
 
 Session context:
@@ -244,8 +243,6 @@ COMPONENT_PREFIXES = {
     "cli": ("hermes_cli", "cli"),
     "cron": ("cron",),
     "gui": (
-        "hermes_cli.web_server",
-        "hermes_cli.pty_bridge",
         "tui_gateway",
         "uvicorn",
     ),

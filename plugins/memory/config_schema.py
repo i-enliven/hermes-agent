@@ -14,9 +14,9 @@ which must not load into the web server. A ``config_schema.py`` may only
 import from this module.
 
 This module is intentionally pure data: it imports nothing from the
-config/env layer. ``web_server`` owns the generic read/write logic that
-interprets these declarations, dispatching on ``ProviderConfigSchema.storage``
-to the matching backend.
+config/env layer. The config read/write logic that interprets these
+declarations dispatches on ``ProviderConfigSchema.storage`` to the
+matching backend.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ KIND_BOOL = "bool"
 KIND_NUMBER = "number"
 KIND_JSON = "json"
 
-# Storage backends understood by web_server (see its read/write dispatch).
+# Storage backends understood by the config read/write layer.
 STORAGE_FLAT_JSON = "flat_json"
 STORAGE_HONCHO_HOST_BLOCK = "honcho_host_block"
 

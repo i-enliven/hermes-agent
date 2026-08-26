@@ -45,25 +45,6 @@ _mcp_discovery_thread = None
 _mcp_discovery_enabled = False
 
 
-def _install_sidecar_publisher() -> None:
-    """Mirror every dispatcher emit to the dashboard sidebar via WS.
-
-    Activated by `HERMES_TUI_SIDECAR_URL`, set by the dashboard's
-    ``/api/pty`` endpoint when a chat tab passes a ``channel`` query param.
-    Best-effort: connect failure or runtime drop falls back to stdio-only.
-    """
-    url = os.environ.get("HERMES_TUI_SIDECAR_URL")
-
-    if not url:
-        return
-
-    from tui_gateway.event_publisher import WsPublisherTransport
-
-    server._stdio_transport = TeeTransport(
-        server._stdio_transport, WsPublisherTransport(url)
-    )
-
-
 # How long to wait for orderly shutdown (atexit + finalisers) before
 # falling back to ``os._exit(0)`` so a wedged worker mid-flush can't
 # strand the process.  1s covers the gateway's own shutdown work
@@ -419,7 +400,6 @@ def ensure_mcp_discovery_started() -> None:
 
 
 def main():
-    _install_sidecar_publisher()
 
     # MCP tool discovery — backgrounded so a slow or unreachable MCP server
     # can't freeze TUI startup (a dead stdio/http server burns 1+2+4s of
