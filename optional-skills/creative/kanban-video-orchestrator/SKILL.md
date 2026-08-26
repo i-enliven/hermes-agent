@@ -117,7 +117,6 @@ Run `setup.sh`. Then provide the user with monitoring commands:
 ```bash
 hermes kanban watch --tenant <project-tenant>     # live events
 hermes kanban list  --tenant <project-tenant>     # board snapshot
-hermes dashboard                                   # visual board UI
 ```
 
 The director profile takes over from here, decomposing the work and routing
@@ -163,7 +162,7 @@ task graphs. See **[references/examples.md](references/examples.md)**.
    `workspace_kind="dir"` + `workspace_path="<absolute project path>"`.
 
 4. **Tenant every project.** Use a project-specific tenant
-   (`--tenant <project-slug>`). Keeps the dashboard scoped and prevents
+   (`--tenant <project-slug>`). Keeps the board scoped and prevents
    cross-pollination with other ongoing kanbans.
 
 5. **Respect existing skills.** When a scene fits an existing skill, the

@@ -17,8 +17,6 @@ hermes kanban list --tenant <project-slug> --json     # machine-readable
 # Per-status counts + oldest-ready age
 hermes kanban stats --tenant <project-slug>
 
-# Visual dashboard (browser)
-hermes dashboard
 
 # Inspect a specific task (includes comments + events)
 hermes kanban show <task-id>

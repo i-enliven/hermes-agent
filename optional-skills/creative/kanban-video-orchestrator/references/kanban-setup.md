@@ -251,7 +251,7 @@ firing a kanban that will hit credential errors mid-execution.
 
 1. **`workspace_kind="dir"` + `workspace_path="<absolute>"` on every kanban_create.** Otherwise profiles can't share artifacts.
 
-2. **Tenant every task.** `--tenant <project-slug>` keeps the dashboard scoped
+2. **Tenant every task.** `--tenant <project-slug>` keeps the board scoped
    and prevents cross-pollination with other ongoing kanbans.
 
 3. **Idempotency keys.** For tasks that should not duplicate on re-run (e.g.,
