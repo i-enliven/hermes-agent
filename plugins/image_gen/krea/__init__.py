@@ -176,41 +176,11 @@ def _resolve_model(explicit: Optional[str] = None) -> Tuple[str, Dict[str, Any]]
 
 
 def _resolve_managed_krea_gateway():
-    """Return managed Krea gateway config when the user is on the managed path.
-
-    Mirrors ``_resolve_managed_fal_gateway`` in ``tools/image_generation_tool.py``:
-    the Nous-hosted Krea gateway wins when it is resolvable AND either no direct
-    ``KREA_API_KEY`` is configured or the user explicitly opted into the gateway
-    for ``image_gen``. Returns ``None`` (direct/BYO path) otherwise, and never
-    raises — plugin discovery and availability scans must stay robust.
-    """
-    try:
-        from tools.managed_tool_gateway import resolve_managed_tool_gateway
-        from tools.tool_backend_helpers import prefers_gateway
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Managed Krea gateway resolution unavailable: %s", exc)
-        return None
-
-    if get_secret("KREA_API_KEY") and not prefers_gateway("image_gen"):
-        return None
-
-    try:
-        return resolve_managed_tool_gateway("krea")
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Managed Krea gateway resolution failed: %s", exc)
-        return None
+    return None
 
 
 def _managed_krea_gateway_ready() -> bool:
-    """Cheap, offline-friendly probe for managed Krea availability."""
-    try:
-        from tools.managed_tool_gateway import is_managed_tool_gateway_ready
-    except Exception:  # noqa: BLE001
-        return False
-    try:
-        return bool(is_managed_tool_gateway_ready("krea"))
-    except Exception:  # noqa: BLE001
-        return False
+    return False
 
 
 def _resolve_creativity(value: Optional[str]) -> str:

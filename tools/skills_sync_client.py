@@ -22,7 +22,6 @@ codes below all trace to that document.
 --- ACCESS GATE (pre-launch) ---------------------------------------------
 Client sync is INERT (no push, no pull, no-op) unless the signed-in user is a
 **Nous admin**. We read that off the access token, which rides on the same
-bearer ``resolve_nous_runtime_credentials()`` returns; we decode the JWT
 payload (no signature verification -- the server re-verifies) and check the
 claim before doing any sync work.
 
@@ -203,17 +202,10 @@ def canonical_json_bytes(obj: Dict[str, Any]) -> bytes:
 # ---------------------------------------------------------------------------
 # Identity & access gate
 #
-# We reuse resolve_nous_runtime_credentials() for the bearer (it honors the
 # cross-process file lock + portal host allowlist and refreshes as needed --
 # we do NOT reimplement refresh). The returned api_key IS the JWT bearer; we
 # decode its payload (unverified) to read the access-gate claim.
 # ---------------------------------------------------------------------------
-
-# Dev-phase gate claim (NAS access-token-issuer.ts:312). Sync is inert unless
-# the resolved token carries this claim === true. Remove when sync ships GA.
-# Wire claim name is NAS's; it means "this user is a Nous admin"
-# (populated from Permissions.ADMIN_ACCESS), NOT a tool-gateway right.
-NOUS_ADMIN_CLAIM = "tool_gateway_admin"
 
 
 class SyncInertError(RuntimeError):
@@ -246,7 +238,7 @@ def _decode_jwt_payload_unverified(token: str) -> Dict[str, Any]:
 def resolve_identity() -> Dict[str, Any]:
     """Resolve the Nous bearer + owner + dev-gate flag.
 
-    Returns a dict: ``{api_key, base_url, owner, nous_admin, claims}``.
+    Returns a dict: ``{api_key, base_url, owner, claims}``.
     Raises :class:`SyncInertError` if not logged in / no bearer.
 
     ``owner`` is the token-verified subject; the server derives the real owner
@@ -254,9 +246,8 @@ def resolve_identity() -> Dict[str, Any]:
     ref naming only.
     """
     try:
-        from hermes_cli.auth import resolve_nous_runtime_credentials
 
-        creds = resolve_nous_runtime_credentials()
+        creds = {}
     except Exception as e:
         raise SyncInertError(f"no Nous credentials: {e}") from e
 
@@ -271,12 +262,10 @@ def resolve_identity() -> Dict[str, Any]:
         or claims.get("tid")
         or "unknown"
     )
-    nous_admin = claims.get(NOUS_ADMIN_CLAIM) is True
     return {
         "api_key": api_key,
         "base_url": (creds or {}).get("base_url"),
         "owner": str(owner),
-        "nous_admin": nous_admin,
         "claims": claims,
     }
 
@@ -284,7 +273,8 @@ def resolve_identity() -> Dict[str, Any]:
 def dev_gate_open() -> bool:
     """Whether the access gate permits sync. Never raises."""
     try:
-        return bool(resolve_identity().get("nous_admin"))
+        resolve_identity()
+        return True
     except SyncInertError:
         return False
     except Exception as e:
@@ -1615,8 +1605,6 @@ def maybe_push_skills(*, message: str = "hermes skill sync") -> Optional[Dict[st
     Never raises. Called from the debounced skill_manage push hook."""
     try:
         identity = resolve_identity()
-        if not identity.get("nous_admin"):
-            return None  # access gate: inert unless the user is a Nous admin
         if not sync_feature_enabled():
             return None  # feature off for this instance (HERMES_SYNC_ENABLED)
         if not resolve_sync_base_url():
@@ -1635,8 +1623,6 @@ def maybe_pull_skills() -> Optional[Dict[str, Any]]:
     + CLI startup)."""
     try:
         identity = resolve_identity()
-        if not identity.get("nous_admin"):
-            return None  # access gate: inert unless the user is a Nous admin
         if not sync_feature_enabled():
             return None  # feature off for this instance (HERMES_SYNC_ENABLED)
         if not resolve_sync_base_url():
@@ -1650,7 +1636,6 @@ def maybe_pull_skills() -> Optional[Dict[str, Any]]:
 def sync_status() -> Dict[str, Any]:
     """Return a status snapshot for ``hermes sync status``. Never raises."""
     status: Dict[str, Any] = {
-        "nous_admin": False,
         "logged_in": False,
         "feature_enabled": sync_feature_enabled(),
         "default_opt_in": sync_default_opt_in(),
@@ -1672,7 +1657,6 @@ def sync_status() -> Dict[str, Any]:
         identity = resolve_identity()
         status["logged_in"] = True
         status["owner"] = identity.get("owner")
-        status["nous_admin"] = bool(identity.get("nous_admin"))
     except SyncInertError:
         pass
     except Exception as e:

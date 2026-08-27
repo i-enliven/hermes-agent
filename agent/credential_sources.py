@@ -245,19 +245,6 @@ def _clear_auth_store_provider(provider: str) -> bool:
     return False
 
 
-def _remove_nous_device_code(provider: str, removed) -> RemovalResult:
-    """Nous OAuth lives in auth.json providers.nous — clear it and suppress.
-
-    We suppress in addition to clearing because nothing else stops a future
-    `hermes auth add nous` (or any other path that writes providers.nous)
-    from re-seeding before the user has decided to.  Suppression forces
-    them to go through `hermes auth add nous` to re-engage, which is the
-    documented re-add path and clears the suppression atomically.
-    """
-    result = RemovalResult()
-    if _clear_auth_store_provider(provider):
-        result.cleaned.append(f"Cleared {provider} OAuth tokens from auth store")
-    return result
 
 
 def _remove_minimax_oauth(provider: str, removed) -> RemovalResult:
@@ -414,11 +401,7 @@ def _register_all_sources() -> None:
         remove_fn=_remove_hermes_pkce,
         description="~/.hermes/.anthropic_oauth.json",
     ))
-    register(RemovalStep(
-        provider="nous", source_id="device_code",
-        remove_fn=_remove_nous_device_code,
-        description="auth.json providers.nous",
-    ))
+
     register(RemovalStep(
         provider="openai-codex", source_id="device_code",
         match_fn=lambda src: src == "device_code" or src.endswith(":device_code"),

@@ -530,15 +530,7 @@ _managed_fal_video_client_lock = threading.Lock()
 
 
 def _resolve_managed_fal_video_gateway():
-    """Return managed fal-queue gateway config when the user prefers the gateway
-    or direct FAL credentials are absent."""
-    from tools.tool_backend_helpers import fal_key_is_configured, prefers_gateway
-
-    if fal_key_is_configured() and not prefers_gateway("video_gen"):
-        return None
-    from tools.managed_tool_gateway import resolve_managed_tool_gateway
-
-    return resolve_managed_tool_gateway("fal-queue")
+    return None
 
 
 def _get_managed_fal_video_client(managed_gateway):

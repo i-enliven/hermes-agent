@@ -785,7 +785,6 @@ from hermes_cli import __version__, __release_date__
 from hermes_cli.model_setup_flows import (
     _prompt_auth_credentials_choice,
     _model_flow_openrouter,
-    _model_flow_nous,
     _model_flow_openai_codex,
     _model_flow_xai_oauth,
     _model_flow_qwen_oauth,
@@ -3879,8 +3878,6 @@ def select_provider_and_model(args=None):
         _model_flow_moa(config, current_model)
     elif selected_provider == "ai-gateway":
         _model_flow_ai_gateway(config, current_model)
-    elif selected_provider == "nous":
-        _model_flow_nous(config, current_model, args=args)
     elif selected_provider == "openai-codex":
         _model_flow_openai_codex(config, current_model)
     elif selected_provider == "xai-oauth":
@@ -5386,11 +5383,6 @@ def cmd_sync(args):
             )
         if not status.get("logged_in"):
             print("\nNot logged into Nous Portal — sync is inert.", file=sys.stderr)
-        elif not status.get("nous_admin"):
-            print(
-                "\nSync is not enabled for your account yet.",
-                file=sys.stderr,
-            )
         elif not status.get("feature_enabled"):
             print(
                 "\nSync feature is off for this instance (set HERMES_SYNC_ENABLED=1 "
@@ -5410,12 +5402,6 @@ def cmd_sync(args):
         identity = ssc.resolve_identity()
     except ssc.SyncInertError as e:
         print(f"sync inert: {e}", file=sys.stderr)
-        return 1
-    if not identity.get("nous_admin"):
-        print(
-            "sync unavailable: not enabled for your account yet.",
-            file=sys.stderr,
-        )
         return 1
     if not ssc.resolve_sync_base_url():
         print(
@@ -8389,7 +8375,7 @@ def _build_provider_choices() -> list[str]:
     except Exception:
         # Fallback: static list guarantees the CLI always works
         return [
-            "auto", "openrouter", "nous", "openai-codex", "xai-oauth", "copilot-acp", "copilot",
+            "auto", "openrouter", "openai-codex", "xai-oauth", "copilot-acp", "copilot",
             "anthropic", "gemini", "vertex", "xai", "bedrock", "azure-foundry",
             "ollama-cloud", "huggingface", "zai", "kimi-coding", "kimi-coding-cn",
             "stepfun", "minimax", "minimax-cn", "kilocode", "novita", "xiaomi", "arcee",
@@ -9500,7 +9486,6 @@ def main():
     # =========================================================================
     # portal command — Nous Portal status + Tool Gateway routing
     # =========================================================================
-    from hermes_cli.portal_cli import add_parser as _add_portal_parser
     _add_portal_parser(subparsers)
 
     # =========================================================================

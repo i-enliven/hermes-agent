@@ -90,10 +90,7 @@ def _resolve_provider_key(env_var: str, provider_id: str) -> str:
         return str(get_env_value(env_var) or "").strip()
     return resolve_provider_secret(env_var, provider_id, env_getter=get_env_value)
 
-from tools.managed_tool_gateway import resolve_managed_tool_gateway
 from tools.tool_backend_helpers import (
-    managed_nous_tools_enabled,
-    nous_tool_gateway_unavailable_message,
     prefers_gateway,
     resolve_openai_audio_api_key,
 )
@@ -3797,33 +3794,18 @@ def _resolve_openai_audio_client_config() -> tuple[str, str, bool]:
     openai_cfg = (tts_config.get("openai") if isinstance(tts_config, dict) else None) or {}
     cfg_api_key = openai_cfg.get("api_key") or ""
     cfg_base_url = openai_cfg.get("base_url") or ""
-    if cfg_api_key and not prefers_gateway("tts"):
+    if cfg_api_key:
         return cfg_api_key, (cfg_base_url or DEFAULT_OPENAI_BASE_URL), False
 
     direct_api_key = resolve_openai_audio_api_key()
-    if direct_api_key and not prefers_gateway("tts"):
+    if direct_api_key:
         return direct_api_key, (cfg_base_url or DEFAULT_OPENAI_BASE_URL), False
 
-    managed_gateway = resolve_managed_tool_gateway("openai-audio")
-    if managed_gateway is None:
-        message = (
-            "Neither tts.openai.api_key in config nor "
-            "VOICE_TOOLS_OPENAI_KEY/OPENAI_API_KEY is set"
-        )
-        if managed_nous_tools_enabled() or prefers_gateway("tts"):
-            message += (
-                ". "
-                + nous_tool_gateway_unavailable_message(
-                    "managed OpenAI audio for TTS",
-                )
-            )
-        raise ValueError(message)
-
-    return (
-        managed_gateway.nous_user_token,
-        urljoin(f"{managed_gateway.gateway_origin.rstrip('/')}/", "v1"),
-        True,
+    message = (
+        "Neither tts.openai.api_key in config nor "
+        "VOICE_TOOLS_OPENAI_KEY/OPENAI_API_KEY is set"
     )
+    raise ValueError(message)
 
 
 def _has_openai_audio_backend() -> bool:
@@ -3831,7 +3813,7 @@ def _has_openai_audio_backend() -> bool:
     openai_cfg = (_load_tts_config().get("openai") or {})
     if openai_cfg.get("api_key"):
         return True
-    return bool(resolve_openai_audio_api_key() or resolve_managed_tool_gateway("openai-audio"))
+    return bool(resolve_openai_audio_api_key())
 
 
 # ===========================================================================

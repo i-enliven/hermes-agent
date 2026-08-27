@@ -8,14 +8,8 @@ Currently supports:
                           ``force=True`` before upload so credentials in
                           ``~/.hermes/logs/*.log`` are not leaked into
                           the public paste service. Pass ``--no-redact``
-                          to disable.
-                          Pass ``--nous`` to upload instead to Nous-internal
-                          storage (AWS S3) via a signed URL minted by the
-                          Nous account service: the bundle is private
-                          (viewable only by Nous staff / allowlisted mods via
-                          a Google-login-gated viewer) and auto-deletes after
-                          14 days, rather than going to a public paste.
-"""
+ to disable.
+ """
 
 import datetime
 import gzip
@@ -603,13 +597,8 @@ def collect_debug_report(
 
 
 # ---------------------------------------------------------------------------
-# Shared bundle collection (used by both the paste.rs and Nous-S3 paths)
+# Shared bundle collection
 # ---------------------------------------------------------------------------
-
-# Bundle format identifier embedded in the Nous-S3 JSON envelope. The
-# discord-support viewer keys off this string to parse the bundle.
-_NOUS_BUNDLE_FORMAT = "hermes-debug-share/1"
-
 
 def collect_share_bundle(
     log_lines: int = 200,
@@ -622,12 +611,10 @@ def collect_share_bundle(
     would be uploaded.  Keys for logs that are absent/empty are simply
     omitted.
 
-    This is the single source of collection + redaction shared by both
-    destinations: the paste.rs path (:func:`build_debug_share`) and the
-    Nous-S3 path (``--nous``).  Centralising it guarantees the Nous bundle is
-    built from the *same* force-redacted snapshots as the public paste path —
-    redaction is the safety boundary, so the Nous path must never see raw
-    logs.
+    This is the single source of collection + redaction shared by all
+    destinations.  Centralising it guarantees every bundle is built from the
+    *same* force-redacted snapshots as the public paste path —
+    redaction is the safety boundary, so no path ever sees raw logs.
 
     The dump header is prepended to each full log (mirroring the historical
     paste behaviour) so every file is self-contained, and the redaction
@@ -673,26 +660,6 @@ def collect_share_bundle(
     return bundle
 
 
-def build_nous_bundle(bundle: dict[str, str], redact: bool = True) -> bytes:
-    """Gzip-compress a :func:`collect_share_bundle` mapping into the Nous envelope.
-
-    The JSON shape is what the discord-support viewer (Repo 3) parses::
-
-        {"format": "hermes-debug-share/1",
-         "redacted": <bool>,
-         "created": <iso8601>,
-         "files": {"report": ..., "agent.log": ..., ...}}
-    """
-    created = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    envelope = {
-        "format": _NOUS_BUNDLE_FORMAT,
-        "redacted": bool(redact),
-        "created": created,
-        "files": bundle,
-    }
-    return gzip.compress(json.dumps(envelope).encode("utf-8"))
-
-
 # ---------------------------------------------------------------------------
 # CLI entry points
 # ---------------------------------------------------------------------------
@@ -733,9 +700,9 @@ def build_debug_share(
     _best_effort_sweep_expired_pastes()
 
     # Collect the report + full logs (force-redacted when redact=True) via the
-    # shared collector so the paste.rs and Nous-S3 paths build identical,
-    # identically-redacted bundles. The dump header + redaction banner are
-    # applied inside collect_share_bundle.
+    # shared collector so every path builds identical, identically-redacted
+    # bundles. The dump header + redaction banner are applied inside
+    # collect_share_bundle.
     bundle = collect_share_bundle(log_lines=log_lines, redact=redact)
 
     if redact:
@@ -810,7 +777,6 @@ def run_debug_share(args):
     log_lines = getattr(args, "lines", 200)
     expiry = getattr(args, "expire", 7)
     local_only = getattr(args, "local", False)
-    nous = getattr(args, "nous", False)
     redact = not getattr(args, "no_redact", False)
 
     if local_only:
@@ -832,10 +798,6 @@ def run_debug_share(args):
                 print(title)
                 print(f"{'=' * 60}\n")
                 print(body)
-        return
-
-    if nous:
-        _run_debug_share_nous(args, log_lines=log_lines, redact=redact)
         return
 
     print(_PRIVACY_NOTICE)
@@ -872,81 +834,6 @@ def run_debug_share(args):
 
     print("\nShare these links with the Hermes team for support.")
 
-
-_NOUS_PRIVACY_NOTICE = """\
-⚠️  --nous: This uploads your debug bundle to Nous-INTERNAL storage (AWS S3),
-    NOT a public paste service. The following is included:
-  • System info (OS, Python/Hermes version, provider, which API keys are
-    configured — NOT the actual keys)
-  • Full agent.log, gateway.log, and gui.log (up to 512 KB each — likely
-    contains conversation content, tool outputs, and file paths)
-
-  • The bundle is viewable only by Nous staff (and allowlisted Discord mods)
-    via a Google-login-gated viewer.
-  • It is NOT a public paste — there is no public URL to the contents.
-  • It auto-deletes after 14 days.
-"""
-
-
-def _run_debug_share_nous(args, *, log_lines: int, redact: bool) -> None:
-    """Handle ``hermes debug share --nous``: upload the bundle to Nous-S3.
-
-    Collects the same force-redacted bundle as the paste path, gzips it into
-    the Nous envelope, requests a signed URL from NAS, uploads, and prints the
-    private viewer link. On any failure falls back to a clear error that
-    suggests ``--local``.
-    """
-    from hermes_cli.diagnostics_upload import share_to_nous
-
-    print(_NOUS_PRIVACY_NOTICE)
-    if not _confirm_upload(args):
-        return
-    if not redact:
-        print(
-            "⚠️  --no-redact is set: secrets in your logs will NOT be redacted "
-            "before upload.\n"
-        )
-    print("Collecting debug report...")
-    _best_effort_sweep_expired_pastes()
-
-    bundle = collect_share_bundle(log_lines=log_lines, redact=redact)
-    if redact:
-        logger.info(
-            "hermes debug share --nous: applied force-mode redaction before upload"
-        )
-    blob = build_nous_bundle(bundle, redact=redact)
-
-    print("Uploading to Nous diagnostics storage...")
-    try:
-        res = share_to_nous(blob)
-    except Exception as exc:
-        print(
-            f"\nNous upload failed: {exc}\n"
-            "\nThe Nous diagnostics service may be unavailable or not yet "
-            "provisioned.\n"
-            "Run `hermes debug share --local` to print the report instead, "
-            "or `hermes debug share` to upload to a public paste service.\n",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    view_url = res.get("viewUrl") or res.get("view_url")
-    print("\nDebug bundle uploaded to Nous (private):")
-    if view_url:
-        print(f"  View URL  {view_url}")
-    else:
-        print(f"  (no view URL returned; upload id: {res.get('id', '?')})")
-
-    expires_at = res.get("expiresAt") or res.get("expires_at")
-    if expires_at:
-        print(f"\n⏱  Auto-deletes at {expires_at} (14-day retention).")
-    else:
-        print("\n⏱  Auto-deletes after 14 days.")
-
-    print(
-        "\nShare this private link with the Nous team — only Nous staff "
-        "(via Google login) can open it."
-    )
 
 
 def run_debug_delete(args):
@@ -999,8 +886,6 @@ def run_debug(args):
         print("  --lines N    Number of log lines to include (default: 200)")
         print("  --expire N   Paste expiry in days (default: 7)")
         print("  --local      Print report locally instead of uploading")
-        print("  --nous       Upload to Nous-internal storage (private, staff-only,")
-        print("               auto-deletes in 14 days) instead of a public paste")
         print("  --no-redact  Disable upload-time secret redaction (default: redact)")
         print()
         print("Options (delete):")

@@ -695,13 +695,6 @@ def init_agent(
         # AWS Bedrock — auto-detect from provider name or base URL
         # (bedrock-runtime.<region>.amazonaws.com).
         agent.api_mode = "bedrock_converse"
-    elif agent.provider in {"nous", "nous-portal", "nousresearch"}:
-        # Portal is dual-wire: anthropic/* → Messages, everything else →
-        # chat_completions. Callers that already pass api_mode win above;
-        # this covers direct AIAgent construction without a resolved runtime.
-        from hermes_cli.providers import nous_api_mode
-
-        agent.api_mode = nous_api_mode(agent.model)
     else:
         # Host-mandated wire check — LAST, so the elif chain's provider-slug
         # rewrites (e.g. api.anthropic.com → provider="anthropic", #63425)
@@ -990,7 +983,6 @@ def init_agent(
     agent._credits_state = None
     agent._credits_session_start_micros = None
     # Threshold-notice latch (L4): active sticky-notice keys + the crossing gates.
-    from agent.credits_tracker import new_credits_latch
 
     agent._credits_latch = new_credits_latch()
 

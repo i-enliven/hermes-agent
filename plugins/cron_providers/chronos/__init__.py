@@ -82,7 +82,7 @@ class ChronosCronScheduler(CronScheduler):
         """
         try:
             from hermes_cli.auth import get_provider_auth_state
-            state = get_provider_auth_state("nous") or {}
+            state = {}
             return bool(state.get("access_token"))
         except Exception:
             return False

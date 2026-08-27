@@ -5,9 +5,8 @@ customer-managed and internet-exposed). This command is the gateway half of the
 zero-touch enrollment in the connector repo's
 ``docs/connector-gateway-auth-design.md``:
 
-  1. Resolve a fresh Nous Portal access token from the existing login
-     (``~/.hermes/auth.json``) — the same path ``hermes dashboard register``
-     uses (``resolve_nous_access_token``). This proves *which Nous org (tenant)*
+  1. Resolve a fresh access token from the existing login
+     (``~/.hermes/auth.json``). This proves *which org (tenant)*
      the caller owns; the connector derives the authoritative tenant from it via
      ``GET /api/oauth/account`` (never from anything the gateway asserts).
   2. POST ``{enrollmentToken, gatewayId}`` to the connector's ``/relay/enroll``
@@ -87,12 +86,11 @@ def _resolve_connector_url(override: Optional[str]) -> Optional[str]:
 
 
 def _resolve_identity_token() -> str:
-    """Resolve the caller-identity bearer token (generic-OIDC or Nous Portal).
+    """Resolve the caller-identity bearer token.
 
     Delegates to the canonical resolver in ``gateway.relay`` so the enroll CLI and
-    the runtime self-provision path share ONE implementation (generic OAuth2
-    client-credentials when ``gateway.idp.token_url`` is set — the air-gapped /
-    self-hosted-IdP path; otherwise Nous Portal). Raises RuntimeError on failure.
+    the runtime self-provision path share ONE implementation.
+    Raises RuntimeError on failure.
     """
     from gateway.relay import _resolve_relay_identity_token
 
@@ -137,8 +135,8 @@ def _post_enroll(
             pass
         if exc.code == 401:
             raise RuntimeError(
-                "Connector rejected the caller identity (401). Your Nous Portal "
-                "token could not be verified — try `hermes auth add nous` and retry."
+                "Connector rejected the caller identity (401). Your token "
+                "could not be verified."
             ) from exc
         if exc.code == 403:
             raise RuntimeError(
@@ -194,17 +192,11 @@ def cmd_gateway_enroll(args) -> None:
 
     gateway_id = (getattr(args, "gateway_id", None) or _default_gateway_id()).strip()
 
-    # 1. Resolve the caller-identity token (the tenant-proving identity). Generic
-    #    OIDC client-credentials when an IdP token endpoint is configured (air-
-    #    gapped / self-hosted-IdP, NO Nous Portal); otherwise the Nous Portal token.
+    # 1. Resolve the caller-identity token (the tenant-proving identity).
     try:
         access_token = _resolve_identity_token()
     except AuthError as exc:
-        if getattr(exc, "relogin_required", False):
-            print("✗ You're not logged into Nous Portal.")
-            print("  Run `hermes setup` (or `hermes auth add nous`) first, then retry.")
-        else:
-            print(f"✗ Could not resolve a Nous Portal access token: {exc}")
+        print(f"✗ Could not resolve an access token: {exc}")
         sys.exit(1)
     except Exception as exc:
         print(f"✗ Could not resolve a caller-identity token: {exc}")
