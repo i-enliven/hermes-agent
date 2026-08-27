@@ -44,14 +44,6 @@ class TestSttCategory:
 
 
 
-    def test_managed_row_shares_tts_coverage_category(self):
-        from hermes_cli.nous_subscription import MANAGED_FEATURE_COVERAGE_CATEGORY
-
-        managed = [p for p in _stt_cat()["providers"] if p.get("managed_nous_feature")]
-        assert managed, "expected a Nous Subscription row"
-        for p in managed:
-            assert p["managed_nous_feature"] == "stt"
-        assert MANAGED_FEATURE_COVERAGE_CATEGORY["stt"] == "openai-audio"
 
 
 class TestConfigWrites:
@@ -63,16 +55,6 @@ class TestConfigWrites:
         assert config["stt"]["use_gateway"] is False
 
 
-    def test_apply_provider_selection_stt(self):
-        config = {}
-        with patch(
-            "hermes_cli.tools_config.get_nous_subscription_features"
-        ) as feats:
-            feats.return_value = MagicMock(
-                nous_auth_present=False, account_info=None
-            )
-            apply_provider_selection("stt", "OpenAI", config)
-        assert config["stt"]["provider"] == "openai"
 
 
 class TestActiveDetection:

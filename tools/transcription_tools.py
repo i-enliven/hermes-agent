@@ -40,7 +40,6 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
-from urllib.parse import urljoin
 
 from hermes_cli._subprocess_compat import windows_hide_flags
 from utils import is_truthy_value
@@ -208,7 +207,7 @@ def _resolve_stt_language(
 
 
 def _has_openai_audio_backend() -> bool:
-    """Return True when OpenAI audio can use config credentials, env credentials, or the managed gateway."""
+    """Return True when OpenAI audio can use config or env credentials."""
     try:
         _resolve_openai_audio_client_config()
         return True
@@ -3257,7 +3256,7 @@ def transcribe_audio_local_fallback(
 
 
 def _resolve_openai_audio_client_config() -> tuple[str, str]:
-    """Return direct OpenAI audio config or a managed gateway fallback."""
+    """Return direct OpenAI audio config."""
     stt_config = _load_stt_config()
     openai_cfg = stt_config.get("openai") or {}
     cfg_api_key = openai_cfg.get("api_key", "")
@@ -3274,8 +3273,10 @@ def _resolve_openai_audio_client_config() -> tuple[str, str]:
     if direct_api_key:
         return direct_api_key, OPENAI_BASE_URL
 
-    message = "Neither stt.openai.api_key in config nor VOICE_TOOLS_OPENAI_KEY/OPENAI_API_KEY is set"
-    raise ValueError(message)
+    raise ValueError(
+        "Neither stt.openai.api_key in config nor "
+        "VOICE_TOOLS_OPENAI_KEY/OPENAI_API_KEY is set"
+    )
 
 
 def _extract_transcript_text(transcription: Any) -> str:

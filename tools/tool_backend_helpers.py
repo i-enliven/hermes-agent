@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_BROWSER_PROVIDER = "local"
 _DEFAULT_MODAL_MODE = "auto"
-_VALID_MODAL_MODES = {"auto", "direct", "managed"}
+_VALID_MODAL_MODES = {"auto", "direct"}
 
 
 def normalize_browser_cloud_provider(value: object | None) -> str:
@@ -46,45 +46,6 @@ def has_direct_modal_credentials() -> bool:
         (os.getenv("MODAL_TOKEN_ID") and os.getenv("MODAL_TOKEN_SECRET"))
         or modal_file_exists
     )
-
-
-def resolve_modal_backend_state(
-    modal_mode: object | None,
-    *,
-    has_direct: bool,
-    managed_ready: bool,
-    managed_enabled: bool | None = None,
-) -> Dict[str, Any]:
-    """Resolve direct vs managed Modal backend selection.
-
-    Semantics:
-    - ``direct`` means direct-only
-    - ``managed`` means managed-only
-    - ``auto`` prefers managed when available, then falls back to direct
-    """
-    requested_mode = coerce_modal_mode(modal_mode)
-    normalized_mode = normalize_modal_mode(modal_mode)
-    if managed_enabled is None:
-        managed_enabled = False
-    managed_mode_blocked = (
-        requested_mode == "managed" and not managed_enabled
-    )
-
-    if normalized_mode == "managed":
-        selected_backend = "managed" if managed_enabled and managed_ready else None
-    elif normalized_mode == "direct":
-        selected_backend = "direct" if has_direct else None
-    else:
-        selected_backend = "managed" if managed_enabled and managed_ready else "direct" if has_direct else None
-
-    return {
-        "requested_mode": requested_mode,
-        "mode": normalized_mode,
-        "has_direct": has_direct,
-        "managed_ready": managed_ready,
-        "managed_mode_blocked": managed_mode_blocked,
-        "selected_backend": selected_backend,
-    }
 
 
 def _scoped_credential(name: str) -> str:
@@ -219,21 +180,6 @@ def resolve_openai_audio_api_key() -> str:
         resolve_provider_secret("VOICE_TOOLS_OPENAI_KEY", "")
         or resolve_provider_secret("OPENAI_API_KEY", "openai-api")
     )
-
-
-def prefers_gateway(config_section: str) -> bool:
-    """Return True when the user opted into the Tool Gateway for this tool.
-
-    Reads ``<section>.use_gateway`` from config.yaml.  Never raises.
-    """
-    try:
-        from hermes_cli.config import load_config
-        section = (load_config() or {}).get(config_section)
-        if isinstance(section, dict):
-            return is_truthy_value(section.get("use_gateway"), default=False)
-    except Exception:
-        pass
-    return False
 
 
 def fal_key_is_configured() -> bool:

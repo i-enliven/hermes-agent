@@ -62,7 +62,6 @@ def _arm(monkeypatch, *, url="wss://connector.example/relay", token="nas-token")
     monkeypatches resolve_nous_access_token to raise instead.
     """
     monkeypatch.setattr(relay, "relay_url", lambda: url)
-    monkeypatch.setattr("hermes_cli.auth.resolve_nous_access_token", lambda: token)
 
 
 # ─────────────────────────── config readers ───────────────────────────
@@ -225,19 +224,6 @@ def test_wake_url_absent_forwards_none(monkeypatch):
 
 # ─────────────────────────── fail-soft ───────────────────────────
 
-def test_no_nas_token_is_non_fatal(monkeypatch):
-    """A self-hosted box with a relay URL but no resolvable NAS identity skips
-    quietly (this is the branch that replaces the old is_managed() gate for the
-    non-NAS case)."""
-    monkeypatch.setattr(relay, "relay_url", lambda: "wss://connector.example/relay")
-
-    def _boom():
-        raise RuntimeError("no token")
-
-    monkeypatch.setattr("hermes_cli.auth.resolve_nous_access_token", _boom)
-    # Must not raise; returns False; no creds set.
-    assert relay.self_provision_relay() is False
-    assert relay.relay_connection_auth() == (None, None)
 
 
 # ─────────────────────────── displayName (Phase 1 parity, gg#171) ───────────────────────────

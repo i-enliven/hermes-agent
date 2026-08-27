@@ -152,7 +152,6 @@ class TestUsageAccountSection:
         )
         # The credits block routes through the shared nous_credits_lines() helper;
         # stub it so this account-section test stays hermetic (no portal/auth lookup).
-        monkeypatch.setattr("agent.account_usage.nous_credits_lines", lambda markdown=False: [])
 
         event = MagicMock()
         result = await runner._handle_usage_command(event)
@@ -167,8 +166,8 @@ class TestUsageAccountSection:
         runner = _make_runner(SK)
         runner._session_db = AsyncSessionDB(MagicMock())
         runner._session_db._db.get_session.return_value = {
-            "billing_provider": "nous",
-            "billing_base_url": "https://inference-api.nousresearch.com/v1/",
+            "billing_provider": "openai",
+            "billing_base_url": "https://api.openai.com/v1/",
         }
         runner._session_db._db.get_dominant_session_model_route.return_value = {
             "model": "z-ai/glm-5.2",
@@ -193,7 +192,6 @@ class TestUsageAccountSection:
             "gateway.slash_commands.render_account_usage_lines",
             lambda snapshot, markdown=False: ["account limits"],
         )
-        monkeypatch.setattr("agent.account_usage.nous_credits_lines", lambda markdown=False: [])
 
         await runner._handle_usage_command(MagicMock())
 

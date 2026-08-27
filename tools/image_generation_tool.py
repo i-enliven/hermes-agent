@@ -59,14 +59,8 @@ def _load_fal_client() -> Any:
 
 
 from tools.debug_helpers import DebugSession
-from tools.fal_common import (
-    _ManagedFalSyncClient,
-    _extract_http_status,
-    _normalize_fal_queue_url_format,  # noqa: F401 — re-exported for tests
-)
 from tools.tool_backend_helpers import (
     fal_key_is_configured,
-    prefers_gateway,
 )
 
 logger = logging.getLogger(__name__)
@@ -409,9 +403,7 @@ FAL_MODELS: Dict[str, Dict[str, Any]] = {
         },
         "max_reference_images": 3,
     },
-    # Krea 2 on FAL — same model family as ``plugins/image_gen/krea``, but billed
-    # through FAL / the FAL managed gateway. Native ``krea-2-*`` ids route to the
-    # dedicated Krea plugin instead.
+    # Krea 2 on FAL — same model family as ``plugins/image_gen/krea``.
     "fal-ai/krea/v2/medium/text-to-image": {
         "display": "Krea 2 Medium",
         "speed": "~15-25s",
@@ -683,40 +675,6 @@ UPSCALER_NUM_INFERENCE_STEPS = 18
 
 
 _debug = DebugSession("image_tools", env_var="IMAGE_TOOLS_DEBUG")
-_managed_fal_client = None
-_managed_fal_client_config = None
-_managed_fal_client_lock = threading.Lock()
-
-
-# ---------------------------------------------------------------------------
-# Managed FAL gateway (Nous Subscription)
-# ---------------------------------------------------------------------------
-def _resolve_managed_fal_gateway():
-    return None
-
-
-def _get_managed_fal_client(managed_gateway):
-    """Reuse the managed FAL client so its internal httpx.Client is not leaked per call."""
-    global _managed_fal_client, _managed_fal_client_config
-
-    client_config = (
-        managed_gateway.gateway_origin.rstrip("/"),
-        managed_gateway.nous_user_token,
-    )
-    with _managed_fal_client_lock:
-        if _managed_fal_client is not None and _managed_fal_client_config == client_config:
-            return _managed_fal_client
-
-        # Resolve fal_client on the legacy module — preserves the test
-        # pattern of monkey-patching ``image_generation_tool.fal_client``.
-        _load_fal_client()
-        _managed_fal_client = _ManagedFalSyncClient(
-            fal_client,
-            key=managed_gateway.nous_user_token,
-            queue_run_origin=managed_gateway.gateway_origin,
-        )
-        _managed_fal_client_config = client_config
-        return _managed_fal_client
 
 
 class ImageGenerationInterrupted(Exception):
@@ -760,46 +718,11 @@ def _wait_fal_result(handler, *, poll_seconds: float = 0.5):
 
 
 def _submit_fal_request(model: str, arguments: Dict[str, Any]):
-    """Submit a FAL request using direct credentials or the managed queue gateway."""
+    """Submit a FAL request using direct credentials."""
     # Trigger the lazy import on first call. Idempotent.
     _load_fal_client()
     request_headers = {"x-idempotency-key": str(uuid.uuid4())}
-    managed_gateway = _resolve_managed_fal_gateway()
-    if managed_gateway is None:
-        return fal_client.submit(model, arguments=arguments, headers=request_headers)
-
-    managed_client = _get_managed_fal_client(managed_gateway)
-    try:
-        return managed_client.submit(
-            model,
-            arguments=arguments,
-            headers=request_headers,
-        )
-    except Exception as exc:
-        # 4xx from the managed gateway typically means the portal doesn't
-        # currently proxy this model (allowlist miss, billing gate, etc.)
-        # — surface a clearer message with actionable remediation instead
-        # of a raw HTTP error from httpx.
-        status = _extract_http_status(exc)
-        if status is not None and 400 <= status < 500:
-            gateway_message = ""
-            if status in {401, 402, 403}:
-                gateway_message = (
-                    "\n\n"
-                    + nous_tool_gateway_unavailable_message(
-                        "managed FAL image generation",
-                        force_fresh=True,
-                    )
-                )
-            raise ValueError(
-                f"Nous Subscription gateway rejected model '{model}' "
-                f"(HTTP {status}). This model may not yet be enabled on "
-                f"the Nous Portal's FAL proxy. Either:\n"
-                f"  • Set FAL_KEY in your environment to use FAL.ai directly, or\n"
-                f"  • Pick a different model via `hermes tools` → Image Generation."
-                f"{gateway_message}"
-            ) from exc
-        raise
+    return fal_client.submit(model, arguments=arguments, headers=request_headers)
 
 
 # ---------------------------------------------------------------------------
@@ -1184,7 +1107,7 @@ def image_generate_tool(
         if not prompt or not isinstance(prompt, str) or len(prompt.strip()) == 0:
             raise ValueError("Prompt is required and must be a non-empty string")
 
-        if not (fal_key_is_configured() or _resolve_managed_fal_gateway()):
+        if not fal_key_is_configured():
             raise ValueError(_build_no_backend_setup_message())
 
         # If the caller supplied source images but the active model has no
@@ -1328,8 +1251,8 @@ def image_generate_tool(
 
 
 def check_fal_api_key() -> bool:
-    """True if the FAL.ai API key (direct or managed gateway) is available."""
-    return bool(fal_key_is_configured() or _resolve_managed_fal_gateway())
+    """True if the FAL.ai API key is available."""
+    return fal_key_is_configured()
 
 
 def _build_no_backend_setup_message() -> str:
@@ -1337,7 +1260,6 @@ def _build_no_backend_setup_message() -> str:
 
     Used by the in-tree FAL path. Mentions:
       - FAL_KEY signup link
-      - managed-gateway status (if Nous tools are enabled)
       - plugin alternative pointer (so users on a stale ``image_gen.provider``
         know the registry exists and how to inspect it)
     """
@@ -1351,7 +1273,7 @@ def _build_no_backend_setup_message() -> str:
         "FAL_KEY=<your-key> (then restart the session)"
     )
     lines.append(
-        "  3. Configure a different image_gen provider via `hermes tools` "
+        "  2. Configure a different image_gen provider via `hermes tools` "
         "→ Image Generation (run `hermes plugins list` to see installed "
         "backends)"
     )
@@ -1680,118 +1602,6 @@ def _dispatch_to_plugin_provider(
     return json.dumps(result)
 
 
-# ---------------------------------------------------------------------------
-# Managed-mode Krea routing
-# ---------------------------------------------------------------------------
-#
-# Native ``krea-2-*`` plugin model ids are served by the dedicated Krea managed
-# gateway. ``fal-ai/krea/v2/*`` FAL catalog ids stay on the FAL path (BYO key
-# or FAL managed gateway). Routing only fires in managed mode; direct/BYO users
-# keep their unchanged pipeline.
-
-_KREA_NATIVE_MODELS = {"krea-2-medium", "krea-2-large", "krea-2-medium-turbo"}
-
-
-def _normalize_krea_model(model_id: Optional[str]) -> Optional[str]:
-    """Return the native Krea plugin model id when ``model_id`` is ``krea-2-*``."""
-    if not isinstance(model_id, str):
-        return None
-    candidate = model_id.strip()
-    if candidate in _KREA_NATIVE_MODELS:
-        return candidate
-    return None
-
-
-def is_krea_model(model_id: Optional[str]) -> bool:
-    """True when ``model_id`` is a native Krea plugin id (``krea-2-*``)."""
-    return _normalize_krea_model(model_id) is not None
-
-
-def _maybe_route_managed_krea(
-    prompt: str,
-    aspect_ratio: str,
-    image_url: Optional[str] = None,
-    reference_image_urls: Optional[list] = None,
-    upscale: Optional[bool] = None,
-) -> Optional[str]:
-    """Route a native ``krea-2-*`` model to the managed Krea gateway, in managed mode.
-
-    Returns a JSON result string when handled by the Krea managed gateway, or
-    ``None`` to fall through to the normal plugin/FAL pipeline. Fires only when
-    all hold:
-      - the configured image model is a native ``krea-2-*`` id, AND
-      - the user isn't already routed to the Krea plugin via
-        ``image_gen.provider`` (that path dispatches normally), AND
-      - the managed Krea gateway is resolvable (portal/managed mode).
-
-    Direct/BYO users (no managed gateway) fall through untouched.
-    """
-    # ``provider == "krea"`` is already handled by the standard plugin dispatch.
-    if _read_configured_image_provider() == "krea":
-        return None
-
-    normalized = _normalize_krea_model(_read_configured_image_model())
-    if normalized is None:
-        return None
-
-    # Only intercept on the managed path; BYO/direct users keep their pipeline.
-    try:
-        from plugins.image_gen.krea import _resolve_managed_krea_gateway
-
-        if _resolve_managed_krea_gateway() is None:
-            return None
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Managed Krea routing probe failed: %s", exc)
-        return None
-
-    try:
-        from agent.image_gen_registry import get_provider
-        from hermes_cli.plugins import _ensure_plugins_discovered
-
-        _ensure_plugins_discovered()
-        provider = get_provider("krea")
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Managed Krea routing: provider unavailable: %s", exc)
-        return None
-    if provider is None:
-        return None
-
-    kwargs: Dict[str, Any] = {
-        "prompt": prompt,
-        "aspect_ratio": aspect_ratio,
-        "model": normalized,
-    }
-    try:
-        if isinstance(image_url, str) and image_url.strip():
-            kwargs["image_url"] = image_url.strip()
-        norm_refs = None
-        if reference_image_urls is not None:
-            from agent.image_gen_provider import normalize_reference_images
-
-            norm_refs = normalize_reference_images(reference_image_urls)
-        if norm_refs:
-            kwargs["reference_image_urls"] = norm_refs
-        if upscale is not None:
-            kwargs["upscale"] = bool(upscale)
-        result = provider.generate(**kwargs)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Managed Krea routing failed: %s", exc)
-        return json.dumps({
-            "success": False,
-            "image": None,
-            "error": f"Managed Krea generation error: {exc}",
-            "error_type": "provider_exception",
-        })
-    if not isinstance(result, dict):
-        return json.dumps({
-            "success": False,
-            "image": None,
-            "error": "Krea provider returned a non-dict result",
-            "error_type": "provider_contract",
-        })
-    return json.dumps(result)
-
-
 def _confine_source_images(
     image_url, reference_image_urls, task_id, *, permitted: tuple = ("image",)
 ):
@@ -1848,16 +1658,15 @@ def _handle_image_generate(args, **kw):
 
     # Terminal-backend confinement chokepoint: convert path-like sources to
     # data: URLs via the shared resolver BEFORE any provider dispatch, so
-    # every backend (plugin, managed Krea, in-tree FAL) gets the same
-    # sandbox-confined bytes.
+    # every backend (plugin, in-tree FAL) gets the same sandbox-confined
+    # bytes.
     image_url, reference_image_urls, confine_error = _confine_source_images(
         image_url, reference_image_urls, task_id)
     if confine_error is not None:
         return confine_error
 
     # Route to a plugin-registered provider if one is active (and it's
-    # not the in-tree FAL path). When ``image_gen.provider == "krea"`` this
-    # already reaches the Krea plugin's managed gateway path.
+    # not the in-tree FAL path).
     dispatched = _dispatch_to_plugin_provider(
         prompt, aspect_ratio,
         image_url=image_url,
@@ -1866,20 +1675,6 @@ def _handle_image_generate(args, **kw):
     )
     if dispatched is not None:
         return _postprocess_image_generate_result(dispatched, task_id=task_id)
-
-    # Managed-mode Krea routing: when no explicit plugin provider is configured
-    # but the selected model is a native ``krea-2-*`` id, a portal user routes to
-    # the dedicated Krea managed gateway. ``fal-ai/krea/v2/*`` models stay on the
-    # FAL path below. Runs after plugin dispatch (which returns None when no
-    # provider is set) so the BYO/direct FAL path stays untouched.
-    krea_routed = _maybe_route_managed_krea(
-        prompt, aspect_ratio,
-        image_url=image_url,
-        reference_image_urls=reference_image_urls,
-        upscale=upscale,
-    )
-    if krea_routed is not None:
-        return _postprocess_image_generate_result(krea_routed, task_id=task_id)
 
     raw = image_generate_tool(
         prompt=prompt,

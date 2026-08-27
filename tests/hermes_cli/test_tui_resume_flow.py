@@ -237,14 +237,14 @@ def test_launch_tui_exports_model_provider_and_toolsets(monkeypatch, main_mod):
 
     with pytest.raises(SystemExit):
         main_mod._launch_tui(
-            model="nous/hermes-test", provider="nous", toolsets="web, terminal"
+            model="anthropic/claude-opus-4.6", provider="anthropic", toolsets="web, terminal"
         )
 
     env = captured["env"]
-    assert env["HERMES_MODEL"] == "nous/hermes-test"
-    assert env["HERMES_INFERENCE_MODEL"] == "nous/hermes-test"
-    assert env["HERMES_TUI_PROVIDER"] == "nous"
-    assert env["HERMES_INFERENCE_PROVIDER"] == "nous"
+    assert env["HERMES_MODEL"] == "anthropic/claude-opus-4.6"
+    assert env["HERMES_INFERENCE_MODEL"] == "anthropic/claude-opus-4.6"
+    assert env["HERMES_TUI_PROVIDER"] == "anthropic"
+    assert env["HERMES_INFERENCE_PROVIDER"] == "anthropic"
     assert env["HERMES_TUI_TOOLSETS"] == "web,terminal"
     active_path = Path(env["HERMES_TUI_ACTIVE_SESSION_FILE"])
     assert active_path.name.startswith("hermes-tui-active-session-")

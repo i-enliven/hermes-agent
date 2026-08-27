@@ -22,9 +22,8 @@ web tasks.
   compare).
 - **Resume-safe.** Completed cells in `results/*.jsonl` are skipped on rerun
   (same pattern as `scripts/toolperf_abeval`).
-- **Backend matrix.** `orchestrate.py` drives a local headless-Chrome CDP;
-  `orchestrate_cloud.py --backend nous-cloud|browserbase` provisions a real
-  cloud browser per cell through the same provider plumbing the product uses.
+- **Backend matrix.** `orchestrate.py` drives a local headless-Chrome CDP
+  through the same provider plumbing the product uses.
 
 ## Run
 

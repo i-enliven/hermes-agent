@@ -299,59 +299,6 @@ class TestAddressing:
 # Access gate (Nous admin) + per-skill opt-in
 # ---------------------------------------------------------------------------
 
-class TestDevGate:
-    def test_gate_open_with_claim(self, monkeypatch):
-        token = _jwt({"sub": "user1", "tool_gateway_admin": True})
-        monkeypatch.setattr(
-            ssc, "resolve_nous_runtime_credentials",
-            lambda **kw: {"api_key": token, "base_url": "https://x"}, raising=False,
-        )
-        # patch the lazily-imported symbol used inside resolve_identity
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token, "base_url": "https://x"})
-        ident = ssc.resolve_identity()
-        assert ident["nous_admin"] is True
-        assert ident["owner"] == "user1"
-
-    def test_gate_closed_without_claim(self, monkeypatch):
-        token = _jwt({"sub": "user1"})  # no tool_gateway_admin
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token, "base_url": "https://x"})
-        ident = ssc.resolve_identity()
-        assert ident["nous_admin"] is False
-
-    def test_gate_closed_when_claim_false(self, monkeypatch):
-        token = _jwt({"sub": "u", "tool_gateway_admin": False})
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token, "base_url": "https://x"})
-        assert ssc.dev_gate_open() is False
-
-    def test_maybe_push_inert_when_gate_closed(self, monkeypatch):
-        token = _jwt({"sub": "u"})
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token})
-        monkeypatch.setattr(ssc, "resolve_sync_base_url", lambda: "http://x")
-        # gate closed -> None (inert), never attempts a push
-        assert ssc.maybe_push_skills() is None
-
-    def test_maybe_pull_inert_when_not_logged_in(self, monkeypatch):
-        import hermes_cli.auth as auth_mod
-
-        def _raise(**kw):
-            raise RuntimeError("not logged in")
-
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials", _raise)
-        assert ssc.maybe_pull_skills() is None
-
-
-# ---------------------------------------------------------------------------
-# Object building (contract §2.2-§2.4)
-# ---------------------------------------------------------------------------
-
 class TestObjectBuilding:
     def test_build_tree_blob_and_exec(self, tmp_path):
         d = tmp_path / "skill"
@@ -873,43 +820,6 @@ def _org_identity(role=None, org_id="org-1", owner="owner1"):
             **({"org_id": org_id, "org_role": role} if role else {})}
 
 
-class TestOrgIdentityGate:
-    def test_org_identity_requires_role_claim(self, monkeypatch):
-        # Personal org: NAS stamps NO org_role -> inert, not an error path.
-        token = _jwt({"sub": "u", "org_id": "org-1"})
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token, "base_url": "https://x"})
-        with pytest.raises(ssc.SyncInertError):
-            ssc.resolve_org_identity()
-        assert ssc.org_sync_available() is False
-
-    def test_org_identity_with_role(self, monkeypatch):
-        token = _jwt({"sub": "u", "org_id": "org-9", "org_role": "MEMBER"})
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token, "base_url": "https://x"})
-        ident = ssc.resolve_org_identity()
-        assert ident["org_id"] == "org-9"
-        assert ident["org_role"] == "MEMBER"
-        assert ssc.org_sync_available() is True
-
-    def test_org_mirror_excluded_from_personal_sync(self, tmp_path, monkeypatch):
-        # A skill under _org/<id>/ must never be personal-sync eligible.
-        skills = tmp_path / "skills"
-        org_skill = skills / "_org" / "org-1" / "shared-x"
-        org_skill.mkdir(parents=True)
-        (org_skill / "SKILL.md").write_text("---\nname: shared-x\n---\n")
-        monkeypatch.setattr(ssc, "_skills_dir", lambda: skills)
-        import tools.skill_usage as su
-        monkeypatch.setattr(su, "is_bundled", lambda n: False)
-        monkeypatch.setattr(su, "is_hub_installed", lambda n: False)
-        monkeypatch.setattr(su, "_find_skill_dir", lambda n: org_skill)
-        import agent.skill_utils as sku
-        monkeypatch.setattr(sku, "is_external_skill_path", lambda p: False)
-        assert ssc.is_sync_eligible("shared-x") is False
-
-
 class TestOrgEndToEnd:
     def test_admin_propose_merges_directly(self, mock_server, synced_env):
         base, state = mock_server
@@ -1001,15 +911,6 @@ class TestOrgEndToEnd:
         client = ssc.SyncClient(base, identity["api_key"])
         with pytest.raises(ssc.SyncInertError):
             ssc.propose_skill("alpha", client, identity=ident)
-
-    def test_maybe_pull_org_inert_without_role(self, monkeypatch):
-        # Personal org: no org_role claim -> None, never raises.
-        token = _jwt({"sub": "u", "org_id": "org-1"})
-        import hermes_cli.auth as auth_mod
-        monkeypatch.setattr(auth_mod, "resolve_nous_runtime_credentials",
-                            lambda **kw: {"api_key": token})
-        assert ssc.maybe_pull_org_skills() is None
-
 
 class TestOrgEndpointScoping:
     """Org reads must use the ORG endpoints, not the personal ones.

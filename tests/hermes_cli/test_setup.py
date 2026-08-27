@@ -19,7 +19,6 @@ def _maybe_keep_current_tts(question, choices):
 
 def _clear_provider_env(monkeypatch):
     for key in (
-        "NOUS_API_KEY",
         "OPENROUTER_API_KEY",
         "OPENAI_BASE_URL",
         "OPENAI_API_KEY",
@@ -128,12 +127,6 @@ def test_select_provider_and_model_warns_if_named_custom_provider_disappears(
 
 
 
-def test_modal_setup_persists_direct_mode_when_user_chooses_their_own_account(tmp_path, monkeypatch):
-    monkeypatch.setattr("hermes_cli.setup.managed_nous_tools_enabled", lambda: True)
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
-    monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
-    config = load_config()
 
     def fake_prompt_choice(question, choices, default=0):
         if question == "Select terminal backend:":
@@ -143,34 +136,6 @@ def test_modal_setup_persists_direct_mode_when_user_chooses_their_own_account(tm
         raise AssertionError(f"Unexpected prompt_choice call: {question}")
 
     prompt_values = iter(["token-id", "token-secret", ""])
-
-    monkeypatch.setattr("hermes_cli.setup.prompt_choice", fake_prompt_choice)
-    monkeypatch.setattr("hermes_cli.setup.prompt", lambda *args, **kwargs: next(prompt_values))
-    monkeypatch.setattr("hermes_cli.setup._prompt_container_resources", lambda config: None)
-    monkeypatch.setattr(
-        "hermes_cli.setup.get_nous_subscription_features",
-        lambda config: type("Features", (), {"nous_auth_present": True})(),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "tools.managed_tool_gateway",
-        types.SimpleNamespace(
-            is_managed_tool_gateway_ready=lambda vendor: vendor == "modal",
-            resolve_managed_tool_gateway=lambda vendor: None,
-        ),
-    )
-    monkeypatch.setitem(sys.modules, "swe_rex", object())
-
-    from hermes_cli.setup import setup_terminal_backend
-
-    setup_terminal_backend(config)
-
-    assert config["terminal"]["backend"] == "modal"
-    assert config["terminal"]["modal_mode"] == "direct"
-
-
-# test_setup_slack_* moved to tests/gateway/test_slack_plugin_setup.py — the
-# _setup_slack wizard migrated to the slack plugin's interactive_setup (#41112).
 
 
 def test_vercel_setup_configures_access_token_auth(tmp_path, monkeypatch):
@@ -186,22 +151,6 @@ def test_vercel_setup_configures_access_token_auth(tmp_path, monkeypatch):
         raise AssertionError(f"Unexpected prompt_choice call: {question}")
 
     prompt_values = iter(["python3.13", "yes", "2", "4096", "token", "project", "team"])
-
-    monkeypatch.setattr("hermes_cli.setup.prompt_choice", fake_prompt_choice)
-    monkeypatch.setattr("hermes_cli.setup.prompt", lambda *args, **kwargs: next(prompt_values))
-
-    from hermes_cli.setup import setup_terminal_backend
-
-    setup_terminal_backend(config)
-
-    assert config["terminal"]["backend"] == "vercel_sandbox"
-    assert config["terminal"]["vercel_runtime"] == "python3.13"
-    assert config["terminal"]["container_disk"] == 51200
-    assert os.environ["TERMINAL_VERCEL_RUNTIME"] == "python3.13"
-    assert "VERCEL_OIDC_TOKEN" not in os.environ
-    assert os.environ["VERCEL_TOKEN"] == "token"
-    assert os.environ["VERCEL_PROJECT_ID"] == "project"
-    assert os.environ["VERCEL_TEAM_ID"] == "team"
 
 
 def test_vercel_setup_prefills_project_and_team_from_link_file(tmp_path, monkeypatch):

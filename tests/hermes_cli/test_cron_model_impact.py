@@ -26,7 +26,7 @@ def _job(**overrides: Any) -> dict[str, Any]:
 
 def _impact(jobs: object, **config: Any) -> dict[str, Any]:
     return build_cron_model_impact(
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config=config,
         jobs=jobs,
@@ -35,17 +35,17 @@ def _impact(jobs: object, **config: Any) -> dict[str, Any]:
 
 def test_drift_axes_match_unpinned_guard_semantics() -> None:
     assert cron_model_drift_axes(
-        _job(), current_provider=" NOUS ", current_model="NEW/MODEL", config={}
+        _job(), current_provider=" ANTHROPIC ", current_model="NEW/MODEL", config={}
     ) == ["provider", "model"]
     assert cron_model_drift_axes(
         _job(provider="openrouter"),
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config={},
     ) == ["model"]
     assert cron_model_drift_axes(
         _job(model="old/model", provider="openrouter"),
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config={},
     ) == []
@@ -54,25 +54,25 @@ def test_drift_axes_match_unpinned_guard_semantics() -> None:
 def test_fleet_defaults_and_literal_false_guard_suppress_only_intended_axes() -> None:
     assert cron_model_drift_axes(
         _job(),
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config={"cron": {"model": "fleet/model"}},
     ) == ["provider"]
     assert cron_model_drift_axes(
         _job(),
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config={"cron": {"model_provider": "openrouter"}},
     ) == ["model"]
     assert cron_model_drift_axes(
         _job(),
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config={"cron": {"model_drift_guard": False}},
     ) == []
     assert cron_model_drift_axes(
         _job(),
-        current_provider="nous",
+        current_provider="anthropic",
         current_model="new/model",
         config={"cron": {"model_drift_guard": "false"}},
     ) == ["provider", "model"]
@@ -194,7 +194,7 @@ def test_loader_exception_returns_unavailable(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(cron.jobs, "load_jobs", fail)
 
     impact = build_cron_model_impact(
-        current_provider="nous", current_model="new/model", config={}
+        current_provider="anthropic", current_model="new/model", config={}
     )
 
     assert impact["available"] is False

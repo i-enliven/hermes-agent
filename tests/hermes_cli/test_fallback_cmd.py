@@ -46,21 +46,21 @@ class TestReadChain:
         cfg = {
             "fallback_providers": [
                 {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.6"},
-                {"provider": "nous", "model": "Hermes-4-Llama-3.1-405B"},
+                {"provider": "anthropic", "model": "claude-sonnet-4-6"},
             ]
         }
         assert _read_chain(cfg) == [
             {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.6"},
-            {"provider": "nous", "model": "Hermes-4-Llama-3.1-405B"},
+            {"provider": "anthropic", "model": "claude-sonnet-4-6"},
         ]
 
 
     def test_returns_copies_not_aliases(self):
         from hermes_cli.fallback_cmd import _read_chain
-        cfg = {"fallback_providers": [{"provider": "nous", "model": "foo"}]}
+        cfg = {"fallback_providers": [{"provider": "anthropic", "model": "foo"}]}
         result = _read_chain(cfg)
         result[0]["provider"] = "mutated"
-        assert cfg["fallback_providers"][0]["provider"] == "nous"
+        assert cfg["fallback_providers"][0]["provider"] == "anthropic"
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ class TestListCommand:
             "model": {"provider": "anthropic", "default": "claude-sonnet-4-6"},
             "fallback_providers": [
                 {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.6"},
-                {"provider": "nous", "model": "Hermes-4"},
+                {"provider": "anthropic", "model": "claude-sonnet-4-6"},
             ],
         })
         from hermes_cli.fallback_cmd import cmd_fallback_list
@@ -108,7 +108,7 @@ class TestListCommand:
         out = capsys.readouterr().out
         assert "Fallback chain (2 entries)" in out
         assert "anthropic/claude-sonnet-4.6" in out
-        assert "Hermes-4" in out
+        assert "claude-sonnet-4-6" in out
         # Primary should be shown too
         assert "claude-sonnet-4-6" in out
 
@@ -227,12 +227,12 @@ class TestRemoveCommand:
         _write_config(isolated_home, {
             "fallback_providers": [
                 {"provider": "openrouter", "model": "gpt-5.4"},
-                {"provider": "nous", "model": "Hermes-4"},
                 {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+                {"provider": "xai", "model": "grok-4"},
             ],
         })
 
-        # Picker returns index 1 (the middle entry, "nous / Hermes-4")
+        # Picker returns index 1 (the middle entry, "anthropic / claude-sonnet-4-6")
         with patch("hermes_cli.setup._curses_prompt_choice", return_value=1):
             from hermes_cli.fallback_cmd import cmd_fallback_remove
             cmd_fallback_remove(types.SimpleNamespace())
@@ -240,11 +240,11 @@ class TestRemoveCommand:
         cfg = _read_config(isolated_home)
         assert cfg["fallback_providers"] == [
             {"provider": "openrouter", "model": "gpt-5.4"},
-            {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+            {"provider": "xai", "model": "grok-4"},
         ]
         out = capsys.readouterr().out
         assert "Removed fallback" in out
-        assert "Hermes-4" in out
+        assert "claude-sonnet-4-6" in out
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ class TestClearCommand:
         _write_config(isolated_home, {
             "fallback_providers": [
                 {"provider": "openrouter", "model": "gpt-5.4"},
-                {"provider": "nous", "model": "Hermes-4"},
+                {"provider": "anthropic", "model": "claude-sonnet-4-6"},
             ],
         })
         monkeypatch.setattr("builtins.input", lambda *a, **kw: "y")

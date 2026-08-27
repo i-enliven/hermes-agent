@@ -803,9 +803,9 @@ class TestModelsEndpoint:
 
         ctx = object()
         payload = {
-            "providers": [{"slug": "nous", "name": "Nous Portal", "models": ["gpt-5.5"]}],
+            "providers": [{"slug": "openrouter", "name": "OpenRouter", "models": ["gpt-5.5"]}],
             "model": "gpt-5.5",
-            "provider": "nous",
+            "provider": "openrouter",
         }
         seen = {"thread_calls": 0}
 
@@ -921,9 +921,6 @@ class TestToolsetsEndpoint:
             "hermes_cli.tools_config._get_platform_tools",
             return_value={"default"},
         ), patch(
-            "hermes_cli.tools_config.get_nous_subscription_features",
-            return_value=feature_snapshot,
-        ) as resolve_features, patch(
             "hermes_cli.tools_config._toolset_has_keys",
             return_value=True,
         ) as has_keys, patch(

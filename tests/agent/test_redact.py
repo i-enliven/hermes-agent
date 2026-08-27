@@ -846,12 +846,10 @@ class TestTerminalOutputRedaction:
         from agent.redact import redact_terminal_output
         out = (
             "MISTRAL_API_KEY=abc123opaqueSecretValue\n"
-            "NOUS_API_KEY=xyz789opaqueKey\n"
             "DEBUG=true\n"
         )
         red = redact_terminal_output(out, "cat .env")
         assert "abc123opaqueSecretValue" not in red
-        assert "xyz789opaqueKey" not in red
         assert "DEBUG=true" in red  # non-secret key preserved
 
     def test_cat_env_file_with_flags_masks_opaque_token(self):

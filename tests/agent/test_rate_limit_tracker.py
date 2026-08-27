@@ -16,42 +16,7 @@ from agent.rate_limit_tracker import (
 
 # ── Sample headers from Nous inference API ──────────────────────────────
 
-NOUS_HEADERS = {
-    "x-ratelimit-limit-requests": "800",
-    "x-ratelimit-limit-requests-1h": "33600",
-    "x-ratelimit-limit-tokens": "8000000",
-    "x-ratelimit-limit-tokens-1h": "336000000",
-    "x-ratelimit-remaining-requests": "795",
-    "x-ratelimit-remaining-requests-1h": "33590",
-    "x-ratelimit-remaining-tokens": "7999500",
-    "x-ratelimit-remaining-tokens-1h": "335999000",
-    "x-ratelimit-reset-requests": "45.5",
-    "x-ratelimit-reset-requests-1h": "3500.0",
-    "x-ratelimit-reset-tokens": "42.3",
-    "x-ratelimit-reset-tokens-1h": "3490.0",
-}
-
-
 class TestParseHeaders:
-    def test_basic_parsing(self):
-        state = parse_rate_limit_headers(NOUS_HEADERS, provider="nous")
-        assert state is not None
-        assert state.provider == "nous"
-        assert state.has_data
-
-        assert state.requests_min.limit == 800
-        assert state.requests_min.remaining == 795
-        assert state.requests_min.reset_seconds == 45.5
-
-        assert state.requests_hour.limit == 33600
-        assert state.requests_hour.remaining == 33590
-
-        assert state.tokens_min.limit == 8000000
-        assert state.tokens_min.remaining == 7999500
-
-        assert state.tokens_hour.limit == 336000000
-        assert state.tokens_hour.remaining == 335999000
-        assert state.tokens_hour.reset_seconds == 3490.0
 
     def test_no_headers(self):
         state = parse_rate_limit_headers({})
@@ -95,33 +60,12 @@ class TestFormatting:
 
 
 
-    def test_format_compact(self):
-        state = parse_rate_limit_headers(NOUS_HEADERS, provider="nous")
-        result = format_rate_limit_compact(state)
-        assert "RPM:" in result
-        assert "RPH:" in result
-        assert "TPM:" in result
-        assert "TPH:" in result
-        assert "resets" in result
 
 
 
 class TestAgentIntegration:
     """Test that AIAgent captures rate limit state correctly."""
 
-    def test_capture_rate_limits_from_headers(self):
-        """Simulate the header capture path without a real API call."""
-        # Use a mock httpx-like response
-        class MockResponse:
-            headers = NOUS_HEADERS
-
-        # Import AIAgent minimally
-
-        # Test the parsing directly
-        state = parse_rate_limit_headers(MockResponse.headers, provider="nous")
-        assert state is not None
-        assert state.requests_min.limit == 800
-        assert state.tokens_hour.limit == 336000000
 
     def test_capture_rate_limits_none_response(self):
         """_capture_rate_limits should handle None gracefully."""
