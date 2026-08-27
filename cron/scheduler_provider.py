@@ -1,7 +1,7 @@
 """CronScheduler provider interface (Axis B — the trigger).
 
 ⚠️ EXPERIMENTAL — this interface is validated by exactly ONE consumer (the
-built-in) until an external provider (Chronos, Phase 4) shakes it out. Until
+built-in) until a second external provider shakes it out. Until
 then the module path, method signatures, and start() kwargs MAY change without
 a deprecation cycle. Once a second provider validates the shape it becomes
 stable. Any growth MUST be additive (new optional method with a default), never
@@ -13,8 +13,7 @@ shared by all providers. Providers must never reimplement agent construction or
 delivery.
 
 The built-in InProcessCronScheduler runs the historical 60s daemon-thread
-ticker. Alternative providers (e.g. Chronos, a NAS-mediated managed-cron
-provider for scale-to-zero deployments) live under plugins/cron_providers/<name>/ and are
+ticker. Alternative external providers live under plugins/cron_providers/<name>/ and are
 selected via the `cron.provider` config key (empty = built-in).
 """
 from __future__ import annotations
@@ -77,7 +76,7 @@ class CronScheduler(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Short identifier, e.g. 'builtin', 'chronos'."""
+        """Short identifier, e.g. 'builtin', 'external'."""
 
     def is_available(self) -> bool:
         """Whether this provider can run in the current environment.
@@ -117,8 +116,7 @@ class CronScheduler(ABC):
 
     def on_jobs_changed(self) -> None:
         """Called after a successful store mutation (create/update/remove/
-        pause/resume). External providers reconcile their registry here (e.g.
-        Chronos re-provisions/cancels the affected one-shot via NAS).
+        pause/resume). External providers reconcile their registry here.
         Built-in: no-op (it re-reads jobs.json on every tick)."""
         return None
 
@@ -273,8 +271,7 @@ def provider_supports_split_fire(provider: Any) -> bool:
     if claim_fire_impl is not None and claim_fire_impl is not CronScheduler.claim_fire:
         return True
     # Overriding the second phase is also proof of split-awareness (the
-    # provider composes with the inherited claim path) — e.g. Chronos keeps
-    # its re-arm logic in ``fire_claimed`` only.
+    # provider composes with the inherited claim path).
     if fire_claimed_impl is not None and fire_claimed_impl is not CronScheduler.fire_claimed:
         return True
     if fire_due_impl is None or fire_due_impl is CronScheduler.fire_due:
@@ -334,7 +331,7 @@ def fire_overdue_jobs(
     """Fire jobs whose scheduled time passed without an external fire arriving.
 
     The misfire catch-up half of the hosted fire path. External providers
-    (Chronos) deliver scheduled fires over HTTP to this process's api_server
+    deliver scheduled fires over HTTP to this process's api_server
     adapter; when that hop is down at fire time (gateway restart window,
     api_server not bound, scheduler retry budget exhausted), the job's
     ``next_run_at`` stays parked in the past and — because external providers
@@ -350,8 +347,8 @@ def fire_overdue_jobs(
       landing concurrently is de-duplicated) and then ``fire_claimed`` in
       a daemon thread, mirroring the webhook admission pattern. The
       housekeeping loop that calls this must never block for the length
-      of an agent run. Provider-specific re-arm logic (Chronos NAS
-      one-shots) runs exactly as for a normal fire.
+      of an agent run. Provider-specific re-arm logic runs exactly as
+      for a normal fire.
     - **Waits out a grace window** (``cron.misfire_grace_minutes``, default
       10, non-positive disables) so the external scheduler's own retry
       backoff gets first right to deliver — catch-up is the backstop, not

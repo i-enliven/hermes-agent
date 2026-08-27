@@ -6536,7 +6536,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
     _cron_drain_timeout: float = DEFAULT_GATEWAY_CRON_DRAIN_TIMEOUT
     _exit_code: Optional[int] = None
     _draining: bool = False
-    _external_drain_active: bool = False
     _restart_requested: bool = False
     _restart_task_started: bool = False
     _restart_detached: bool = False
@@ -6718,16 +6717,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         self._draining = False
         self._profile_failed_platforms: Dict[str, Dict[Platform, asyncio.Task]] = {}
         self._systemd_watchdog = None
-        # External (NAS-driven) drain state — distinct from the shutdown
-        # ``_draining`` flag above. Set by ``_drain_control_watcher`` when the
-        # ``.drain_request.json`` marker is present: the gateway flips
-        # ``gateway_state -> draining`` and refuses NEW turns, but the process
-        # does NOT exit (the whole point — quiesce-without-restart, D4a). It is
-        # fully reversible: removing the marker reverts to ``running`` and
-        # re-accepts turns. ``_draining`` (shutdown) is one-way and ends in
-        # process exit; this one is a steady state NAS polls during its
-        # request -> poll -> proceed loop.
-        self._external_drain_active = False
         self._restart_requested = False
         # Set by shutdown_signal_handler when a SIGTERM/SIGINT arrived
         # WITHOUT a planned-stop / takeover marker — i.e. an unexpected
@@ -7040,18 +7029,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         self._loop_heartbeat_task: Optional[asyncio.Task] = None
         self._loop_floor_timer_handle = None
         self._loop_liveness_watchdog = None
-
-        # scale-to-zero (Phase 0, F13): gateway-scoped "last inbound seen" clock.
-        # There is no such clock today (only a per-agent _last_activity_ts), so the
-        # idle predicate needs this. Stamped in _handle_message (the single inbound
-        # chokepoint all adapters call); seeded to "now" so a fresh gateway isn't
-        # considered idle from epoch. The scale-to-zero watcher (started only when
-        # the instance is opted in + relay-only + has a wakeUrl) reads it.
-        self._last_inbound_at: float = time.time()
-        # Set after a wake (re-arm cooldown, 0.F) so we don't immediately re-go
-        # dormant before the drained backlog has a chance to update the clock.
-        self._scale_to_zero_cooldown_until: float = 0.0
-
 
     def _open_session_db_for_active_scope(self, raise_on_error: bool = False) -> Any:
         """Return the AsyncSessionDB for the profile scope active on this task.
@@ -8396,66 +8373,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             logger.debug("Failed interrupting api_server runs during shutdown: %s", exc)
             return 0
 
-    # ── scale-to-zero idle detection / dormant-quiesce (Phase 0) ──────────────
-    # The gateway-side BEHAVIOUR that consumes the relay scale-to-zero primitives
-    # (gateway-gateway Phase 5). Pure logic lives in gateway/scale_to_zero.py; the
-    # methods here bind it to the live runner/transport. See ~/nous/specs/
-    # scale-to-zero (decisions.md) for the design + the F12/F14 distinctions.
-
-    def _scale_to_zero_has_live_background_work(self) -> bool:
-        """Live background work that must block a suspend (D3/F7).
-
-        Backgrounded delegate_task / kanban / terminal(background=true) are NOT
-        counted by _running_agent_count(), but suspending mid-flight loses them.
-        Checks the runner's own tracked tasks + the process registry's running
-        processes + any pending process-completion watchers.
-
-        PERMANENT supervised watchers (tagged _hermes_supervised_watcher by
-        _spawn_supervised) are excluded: they live for the whole process —
-        including the scale-to-zero watcher itself — so counting them would
-        make this predicate True forever and the gateway could never go
-        dormant. Verified live on staging (2026-08-12): an armed, fully idle
-        instance never logged "going dormant" because ~9 supervised watchers
-        sat in _background_tasks. Fly's coarse autostop used to mask this;
-        with the gateway owning the suspend it became load-bearing.
-        """
-        if any(
-            not t.done() and not getattr(t, "_hermes_supervised_watcher", False)
-            for t in self._background_tasks
-        ):
-            return True
-        try:
-            from tools.async_delegation import active_count
-
-            if active_count() > 0:
-                return True
-        except Exception:  # noqa: BLE001 - never let the idle check raise
-            logger.debug("scale-to-zero async-delegation check failed", exc_info=True)
-        try:
-            from tools.process_registry import process_registry
-
-            if process_registry.has_any_active():
-                return True
-            if process_registry.pending_watchers:
-                return True
-        except Exception:  # noqa: BLE001 - never let the idle check raise
-            logger.debug("scale-to-zero bg-work check failed", exc_info=True)
-        return False
-
-    def _scale_to_zero_idle_timeout_seconds(self) -> float:
-        from gateway.scale_to_zero import parse_idle_timeout_seconds
-
-        raw = None
-        try:
-            user_cfg = _load_gateway_config()
-            gw = user_cfg.get("gateway") if isinstance(user_cfg, dict) else None
-            stz = gw.get("scale_to_zero") if isinstance(gw, dict) else None
-            if isinstance(stz, dict):
-                raw = stz.get("idle_timeout_minutes")
-        except Exception:  # noqa: BLE001
-            raw = None
-        return parse_idle_timeout_seconds(raw)
-
     def _restart_loop_guard_config(self) -> tuple:
         """Return ``(max_restarts, window_seconds, max_gap_seconds)`` for the
         auto-resume restart-loop breaker (#30719, defense-3), read from
@@ -8489,234 +8406,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             pass
         return max_restarts, window_seconds, max_gap_seconds
 
-    def _scale_to_zero_active_messaging_platforms(self) -> list:
-        """ENABLED platforms that count for the relay-only arm gate (D1/F6).
-
-        Two filters, both load-bearing:
-        - enabled only: config.platforms is pre-seeded with disabled
-          placeholders for the full platform catalog (the F25 bug).
-        - MESSAGING only: non-messaging surfaces must not disarm scale-to-zero.
-          The api_server is a loopback listener force-enabled by the presence
-          of API_SERVER_KEY (which the Docker stage2 hook now generates for
-          every container, so hosted instances ALWAYS have it enabled) — it
-          holds no outbound socket and Chronos fires through it already reset
-          the idle clock. Counting it made messaging_is_relay_only_or_absent
-          False on every hosted instance, silently disarming the feature.
-          Mirrors the non-messaging exclusion set used for handoff eligibility
-          (see the `messaging_platforms` computation in _connect_platforms).
-        """
-        if not self.config:
-            return []
-        non_messaging = {Platform.LOCAL, Platform.API_SERVER, Platform.WEBHOOK}
-        try:
-            return [
-                p
-                for p, pc in self.config.platforms.items()
-                if getattr(pc, "enabled", False) and p not in non_messaging
-            ]
-        except Exception:  # noqa: BLE001
-            return []
-
-    def _scale_to_zero_should_arm(self) -> bool:
-        """Whether to start the idle watcher (D1/D11/§3.4(1))."""
-        from gateway.relay import relay_wake_url
-        from gateway.scale_to_zero import (
-            messaging_is_relay_only_or_absent,
-            scale_to_zero_enabled,
-            should_arm,
-        )
-
-        platforms = self._scale_to_zero_active_messaging_platforms()
-        try:
-            wake_url = relay_wake_url()
-        except Exception:  # noqa: BLE001
-            wake_url = None
-        return should_arm(
-            enabled=scale_to_zero_enabled(),
-            relay_only_or_absent=messaging_is_relay_only_or_absent(platforms),
-            wake_url=wake_url,
-        )
-
-    def _log_scale_to_zero_not_armed_reason(self) -> None:
-        """Log why the idle watcher did NOT arm — but only for an OPTED-IN instance.
-
-        A non-opted instance (no HERMES_SCALE_TO_ZERO stamp) not arming is the normal
-        case and must stay silent. When the Labs stamp IS set but the watcher still
-        didn't arm, that's the surprising case worth one INFO line so "why won't it
-        suspend/wake?" is a log grep, not a box-dive.
-        """
-        from gateway.relay import relay_wake_url
-        from gateway.scale_to_zero import (
-            messaging_is_relay_only_or_absent,
-            scale_to_zero_enabled,
-        )
-
-        try:
-            enabled = scale_to_zero_enabled()
-            if not enabled:
-                return  # not opted in — normal, stay quiet
-            active = [
-                getattr(p, "value", p)
-                for p in self._scale_to_zero_active_messaging_platforms()
-            ]
-            relay_only = messaging_is_relay_only_or_absent(active)
-            try:
-                wake_url = relay_wake_url()
-            except Exception:  # noqa: BLE001
-                wake_url = None
-            logger.info(
-                "scale-to-zero: NOT armed despite opt-in — "
-                "relay_only_or_absent=%s (enabled platforms=%s), wake_url=%s. "
-                "Need relay-only messaging + a registered wake URL.",
-                relay_only,
-                active or "none",
-                "set" if wake_url else "MISSING",
-            )
-        except Exception:  # noqa: BLE001 - diagnostics must never block startup
-            logger.debug("scale-to-zero: not-armed reason logging failed", exc_info=True)
-
-    def _scale_to_zero_is_idle(self) -> bool:
-        from gateway.scale_to_zero import is_idle
-
-        return is_idle(
-            running_agent_count=self._running_agent_count(),
-            seconds_since_last_inbound=time.time() - self._last_inbound_at,
-            idle_timeout_seconds=self._scale_to_zero_idle_timeout_seconds(),
-            has_live_background_work=self._scale_to_zero_has_live_background_work(),
-        )
-
-    def _scale_to_zero_note_real_inbound(self) -> None:
-        """Stamp real inbound and restore lifecycle after a dormant wake.
-
-        The watcher marks runtime status `draining` as it quiesces the relay, but
-        dormancy is not the stop/restart drain path: the process remains alive and
-        should present as running once real traffic wakes it and re-enters the
-        gateway. Internal completion/replay events intentionally do not call this
-        helper, so they do not keep an otherwise idle gateway awake.
-        """
-        self._last_inbound_at = time.time()
-        if getattr(self, "_scale_to_zero_cooldown_until", 0.0) > 0:
-            try:
-                self._update_runtime_status("running")
-            except Exception:  # noqa: BLE001 - status restoration is best-effort
-                logger.debug("scale-to-zero: status restore failed", exc_info=True)
-            self._scale_to_zero_cooldown_until = 0.0
-
-    def _relay_adapter_for_dormancy(self):
-        """Return the connected RELAY adapter, if any (the one go_dormant targets)."""
-        try:
-            from gateway.platforms.base import Platform
-        except Exception:  # noqa: BLE001
-            return None
-        return self.adapters.get(Platform.RELAY)
-
-    async def _scale_to_zero_watcher(self, interval: float = 30.0) -> None:
-        """Watch for idle, drive the relay dormant, then self-suspend the machine.
-
-        Started ONLY when _scale_to_zero_should_arm() (opted in via the Labs
-        HERMES_SCALE_TO_ZERO stamp + relay-only/absent messaging + a wakeUrl).
-        On a sustained idle window it runs the DORMANT sequence (D12/F12/F14):
-          - mark runtime status `draining` (composes with the existing state
-            machine, §3.4(6); does NOT set _running=False),
-          - relay adapter.go_dormant() — going_idle->ack + supervisor-preserving
-            socket close (NOT disconnect(), NOT the run.py stop path),
-          - deliberately NO mark_resume_pending (D13 — suspend preserves RAM),
-          - THEN suspend this machine through the local flaps socket
-            (gateway.scale_to_zero.suspend_self). The gateway owns the suspend
-            because Fly Proxy autostop judges idle on INBOUND connections only:
-            it cannot see an in-flight agent turn (outbound-only LLM traffic)
-            and, since the mid-2026 proxy change, an open outbound relay socket
-            no longer holds the machine awake — autostop:"suspend" would freeze
-            the machine mid-job or before the relay flip (the buffered-event
-            black hole). NAS therefore provisions scale-to-zero machines with
-            autostop:"off"; the suspend only ever happens HERE, strictly after
-            the idle predicate held and the dormant quiesce completed.
-        Autostart stays platform-side: the connector's wakeUrl poke (Fly-proxied)
-        wakes the machine, the preserved reconnect supervisor re-dials, and the
-        connector drains the buffered backlog. After driving dormant we set a
-        re-arm cooldown so a wake's drained backlog isn't immediately re-quiesced.
-        Off-Fly (no flaps socket / machine identity) the suspend step is skipped:
-        dormancy still happens, the process just stays running — fail-awake.
-        """
-        await asyncio.sleep(min(interval, 30.0))  # let startup settle
-        while self._running:
-            try:
-                await asyncio.sleep(interval)
-                if not self._running:
-                    return
-                if time.time() < self._scale_to_zero_cooldown_until:
-                    continue
-                if not self._scale_to_zero_is_idle():
-                    continue
-                adapter = self._relay_adapter_for_dormancy()
-                if adapter is None:
-                    continue
-                go_dormant = getattr(adapter, "go_dormant", None)
-                if not callable(go_dormant):
-                    continue
-                logger.info(
-                    "scale-to-zero: gateway idle for >= %.0fs — going dormant "
-                    "(relay buffered, socket closed) then self-suspending",
-                    self._scale_to_zero_idle_timeout_seconds(),
-                )
-                try:
-                    self._update_runtime_status("draining")
-                except Exception:  # noqa: BLE001 - status is best-effort
-                    logger.debug("scale-to-zero: status mark failed", exc_info=True)
-                dormant_ok = True
-                try:
-                    result = go_dormant()
-                    if asyncio.iscoroutine(result):
-                        await result
-                except Exception:  # noqa: BLE001 - dormancy is best-effort
-                    dormant_ok = False
-                    logger.debug("scale-to-zero: go_dormant failed", exc_info=True)
-                # 0.F: after a wake the drained inbound updates _last_inbound_at,
-                # but give it a window so we don't immediately re-go-dormant on the
-                # same idle reading before traffic lands.
-                self._scale_to_zero_cooldown_until = time.time() + max(interval, 60.0)
-                # Self-suspend ONLY after a clean quiesce: the relay flip must be
-                # set (buffered delivery + wake poke armed) before the freeze, or
-                # inbound events black-hole while we sleep. Re-check idle one last
-                # time — inbound may have landed during the quiesce await.
-                if not dormant_ok:
-                    continue
-                if not self._scale_to_zero_is_idle():
-                    logger.info(
-                        "scale-to-zero: inbound arrived during quiesce — skipping suspend"
-                    )
-                    continue
-                await self._scale_to_zero_self_suspend()
-            except asyncio.CancelledError:
-                raise
-            except Exception:  # noqa: BLE001 - the watcher must never crash the gateway
-                logger.debug("scale-to-zero watcher iteration error", exc_info=True)
-
-    async def _scale_to_zero_self_suspend(self) -> None:
-        """Suspend this Fly machine via the local flaps socket (fail-awake).
-
-        Runs the blocking unix-socket call in a worker thread so the event loop
-        stays live right up to the kernel freeze. On success the process is
-        frozen shortly after — nothing meaningful runs until the wake resume.
-        Off-Fly (self_suspend_available() False) this is a silent no-op.
-        """
-        from gateway.scale_to_zero import self_suspend_available, suspend_self
-
-        try:
-            if not self_suspend_available():
-                logger.debug(
-                    "scale-to-zero: flaps socket / machine identity absent — "
-                    "dormant without platform suspend"
-                )
-                return
-            accepted = await asyncio.to_thread(suspend_self)
-            if not accepted:
-                logger.warning(
-                    "scale-to-zero: self-suspend not accepted — machine stays "
-                    "awake (fail-awake); will retry on the next idle window"
-                )
-        except Exception:  # noqa: BLE001 - suspend is best-effort, never crash
-            logger.debug("scale-to-zero: self-suspend failed", exc_info=True)
 
     def _status_action_label(self) -> str:
         return "restart" if self._restart_requested else "shutdown"
@@ -8881,91 +8570,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             pass
 
     # ------------------------------------------------------------------
-    # External drain control (NAS-driven quiesce-without-restart, Phase 2).
-    # The dashboard's begin/cancel-drain endpoint writes/removes the
-    # ``.drain_request.json`` marker (gateway/drain_control.py); this watcher
-    # observes the marker and flips the gateway between accepting and refusing
-    # NEW turns, WITHOUT exiting the process. Reversible by design (D4a): NAS
-    # POSTs begin-drain, polls /api/status until active_agents hits 0, proceeds
-    # with its lifecycle action, then (on cancel/abort) the marker is removed
-    # and the gateway re-accepts turns.
-    # ------------------------------------------------------------------
-    def _enter_external_drain(self) -> None:
-        """Begin external drain: stop accepting new turns, flip state.
-
-        Idempotent — re-entering while already draining is a no-op beyond a
-        best-effort status re-write. In-flight turns are NOT interrupted (the
-        whole point is to let them finish); only NEW turns are refused.
-        """
-        if self._external_drain_active:
-            return
-        self._external_drain_active = True
-        logger.info(
-            "External drain ENGAGED (.drain_request.json present) — refusing "
-            "new turns; %d in-flight turn(s) will finish. Process stays up.",
-            self._active_work_count(),
-        )
-        # Flip the persisted lifecycle state so /api/status.gateway_busy /
-        # gateway_drainable track the drain. Preserve active_agents (the
-        # read-merge keeps the live count); only the state changes.
-        self._update_runtime_status("draining")
-
-    def _exit_external_drain(self) -> None:
-        """Cancel external drain: revert state, re-accept new turns.
-
-        Idempotent. Only reverts to ``running`` when we are actually mid-drain
-        AND not also shutting down (a real shutdown ``_draining`` must win —
-        never resurrect a stopping gateway to ``running``).
-        """
-        if not self._external_drain_active:
-            return
-        self._external_drain_active = False
-        if self._draining or not self._running:
-            # A shutdown drain is in progress / the loop has stopped — do not
-            # clobber the terminal state back to running.
-            logger.info(
-                "External drain marker cleared during shutdown — not reverting "
-                "to running (shutdown takes precedence)."
-            )
-            return
-        logger.info(
-            "External drain RELEASED (.drain_request.json removed) — "
-            "re-accepting new turns; gateway_state -> running."
-        )
-        self._update_runtime_status("running")
-
-    async def _drain_control_watcher(self, interval: float = 1.0) -> None:
-        """Background task: reconcile gateway accept-state with the drain marker.
-
-        Polls ``.drain_request.json`` (presence-based contract,
-        gateway/drain_control.py). Marker present -> ``_enter_external_drain``;
-        marker absent -> ``_exit_external_drain``. The 1s cadence bounds the
-        observe-the-marker latency the live-validation gate checks (point a).
-        Reconciles once at startup. A marker stamped with a PRIOR
-        instantiation epoch (one that survived a machine restart on the durable
-        HERMES_HOME volume — NS-570) is treated as absent by ``drain_requested``
-        and is NOT honoured; only a marker from the current instantiation flips
-        the gateway into drain. Best-effort: any tick error is logged and the
-        loop continues (a transient stat() failure must not wedge the gateway).
-        """
-        from gateway.drain_control import drain_requested
-
-        while self._running:
-            try:
-                if drain_requested():
-                    self._enter_external_drain()
-                    # API and cron work live outside messaging's
-                    # _running_agents map. Refresh the aggregate while an
-                    # external caller polls this reversible drain state.
-                    self._persist_active_agents()
-                else:
-                    self._exit_external_drain()
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.debug("Drain-control watcher tick error: %s", exc, exc_info=True)
-            await asyncio.sleep(interval)
-
     def _update_platform_runtime_status(
         self,
         platform: str,
@@ -10667,32 +10271,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if self._restart_requested and restart_source is not None:
             logger.debug("Skipping home-channel shutdown notifications for in-chat restart")
             return
-
-        # Suppress ONLY the home-channel broadcast when the drain that is ending
-        # in this shutdown asked us to be quiet (e.g. a NAS auto-update image
-        # migration — drain-gated, then the machine is recreated). On the
-        # always-on Hermes Cloud fleet that broadcast would otherwise fire on
-        # every routine auto-update, spamming home channels with operator-
-        # flavoured "gateway shutting down" pings the user doesn't care about.
-        # The per-active-session interrupt pings above are deliberately NOT
-        # gated: on a drained shutdown they're empty by construction, and in the
-        # force-interrupt (deadline-exceeded) case they carry the genuinely
-        # useful "your task was cut off, message me to resume" hint. The flag is
-        # only honoured for a CURRENT-epoch marker (drain_notification_suppressed
-        # reuses the NS-570 staleness check), so an orphaned marker can never
-        # silence a fresh gateway's legitimate broadcast.
-        try:
-            from gateway.drain_control import drain_notification_suppressed
-            if drain_notification_suppressed():
-                logger.info(
-                    "Home-channel shutdown broadcast suppressed by drain marker "
-                    "(suppress_notification=true)"
-                )
-                return
-        except Exception as e:
-            # Never let the suppression check block the shutdown broadcast —
-            # fail toward the louder, more-visible behaviour.
-            logger.debug("drain_notification_suppressed check failed: %s", e)
 
         # Snapshot adapters up front: adapter.send() can hit a fatal error
         # path that pops the adapter from self.adapters (see _handle_fatal
@@ -12406,16 +11984,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             from gateway.relay import (
                 register_relay_adapter,
                 relay_url,
-                self_provision_relay,
                 send_relay_policy,
             )
-
-            # Boot-time relay self-provision: resolve the agent's NAS token ->
-            # POST /relay/provision -> set GATEWAY_RELAY_* in os.environ BEFORE
-            # registration reads them. No-op when relay is unconfigured, a secret
-            # is already pinned, or no NAS token resolves (self-hosted, unenrolled).
-            # Never raises.
-            self_provision_relay()
 
             if register_relay_adapter():
                 logger.info("relay adapter registered (connector at %s)", relay_url())
@@ -13084,37 +12654,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         # (SessionDB loop:* rows) and injects due wakeup prompts into their
         # originating chats while the session is idle.
         self._spawn_supervised(self._loop_wakeup_watcher, "loop_wakeup_watcher")
-
-        # Start the scale-to-zero idle watcher ONLY when this instance is opted
-        # in (the NAS "Labs" HERMES_SCALE_TO_ZERO stamp), messaging is
-        # relay-only/absent, and a wakeUrl is registered (decisions.md D1/D11/
-        # §3.4(1)). A non-opted instance never starts it, so behaviour is exactly
-        # as today. When armed, the watcher drives the relay dormant on sustained
-        # idle and then suspends the machine itself via the local flaps socket
-        # (Fly Proxy autostop is inbound-only and job-blind, so the gateway owns
-        # the suspend decision; NAS provisions these machines autostop:"off").
-        try:
-            if self._scale_to_zero_should_arm():
-                logger.info(
-                    "scale-to-zero: armed (idle timeout %.0fs) — watching for idle",
-                    self._scale_to_zero_idle_timeout_seconds(),
-                )
-                self._spawn_supervised(self._scale_to_zero_watcher, "scale_to_zero_watcher")
-            else:
-                # Surface WHY an OPTED-IN instance didn't arm (a non-opted instance
-                # not arming is normal — stay silent there). Without this, a failed
-                # arm is invisible and "why won't it suspend/wake?" needs a box-dive.
-                self._log_scale_to_zero_not_armed_reason()
-        except Exception:  # noqa: BLE001 - arming must never block startup
-            logger.debug("scale-to-zero: arm check failed at startup", exc_info=True)
-
-        # Start background drain-control watcher — reconciles the gateway's
-        # new-turn accept-state with the external ``.drain_request.json`` marker
-        # the dashboard begin/cancel-drain endpoint writes (Phase 2). A marker
-        # left behind by a prior instantiation (durable-volume restart, NS-570)
-        # is ignored via its instantiation epoch; only a current-epoch marker
-        # engages drain on the first tick.
-        self._spawn_supervised(self._drain_control_watcher, "drain_control_watcher")
 
         logger.info("Press Ctrl+C to stop")
         
@@ -15151,7 +14690,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         """Install the profile-scoped handlers shared by startup and reconnect."""
         # Runtime status is process-scoped even while message/config work is
         # profile-scoped.  Preserve both dimensions in the key so dashboard
-        # and NAS health aggregation can see which secondary profile failed.
+        # can see which secondary profile failed.
         adapter._runtime_status_platform_key = f"{profile_name}:{platform.value}"
         adapter.set_message_handler(self._make_profile_message_handler(profile_name))
         adapter.set_fatal_error_handler(
@@ -16297,14 +15836,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         ):
             self._queue_startup_restore_event(event)
             return None
-
-        # scale-to-zero (Phase 0, 0.B/F13): stamp the gateway-scoped last-inbound
-        # clock for real (user-originated) inbound only. Internal/system events
-        # (background-process completions, startup-restore replays) are NOT
-        # traffic — counting them would keep a genuinely idle gateway awake. This
-        # clock is what the idle predicate (gateway/scale_to_zero.is_idle) reads.
-        if not is_internal:
-            self._scale_to_zero_note_real_inbound()
 
         # Fire pre_gateway_dispatch plugin hook for user-originated messages.
         # Plugins receive the MessageEvent and may return a dict influencing flow:
@@ -17693,27 +17224,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             if self._should_send_telegram_lobby_reminder(source):
                 return self._telegram_topic_root_lobby_message()
             return None
-
-        # ── External-drain new-turn gate (Phase 2) ────────────────────
-        # When NAS has engaged an external drain (.drain_request.json present,
-        # observed by _drain_control_watcher), refuse to START a new turn so
-        # the in-flight set can only fall to zero — eliminating the TOCTOU race
-        # (D4a: stop accepting new turns FIRST, then NAS polls until
-        # active_agents==0). In-flight turns are untouched; this only blocks the
-        # claim of a NEW session slot. Internal/system events (restart-recovery
-        # replays, background-process completions) bypass the gate — they are
-        # not user-initiated new work and must still flow during a drain.
-        # Reversible: once the marker is removed the gate opens again.
-        if self._external_drain_active and not is_internal:
-            logger.info(
-                "Refusing new turn for session %s — external drain active.",
-                _quick_key,
-            )
-            return (
-                "⏳ This agent is draining for a maintenance action and isn't "
-                "accepting new turns right now. It'll be back in a moment — "
-                "please resend shortly."
-            )
 
         # ── Claim this session before any await ───────────────────────
         # Between here and _run_agent registering the real AIAgent, there
@@ -30382,7 +29892,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
 
     # Start the background cron scheduler via the resolved provider so
     # scheduled jobs fire automatically. The built-in provider is the
-    # historical in-process 60s ticker; an external provider (e.g. chronos)
+    # historical in-process 60s ticker; an external provider
     # may arm a schedule and return. Pass the event loop so cron delivery can
     # use live adapters (E2EE support).
     from cron.scheduler_provider import (
@@ -30427,9 +29937,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     # in-process ticker polls local due jobs, so only it receives the local
     # external-drain dispatch gate.
     if isinstance(cron_provider, InProcessCronScheduler):
-        cron_start_kwargs["can_dispatch"] = lambda: not (
-            runner._draining or runner._external_drain_active
-        )
+        cron_start_kwargs["can_dispatch"] = lambda: not runner._draining
     cron_thread = threading.Thread(
         target=cron_provider.start,
         args=(cron_stop,),
@@ -30440,7 +29948,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     cron_thread.start()
 
     # Preflight tell for the hosted fire path: an external cron provider
-    # (Chronos) delivers scheduled fires over HTTP to THIS process's
+    # (an external provider) delivers scheduled fires over HTTP to THIS process's
     # api_server adapter on loopback. If that adapter never came up (most
     # commonly API_SERVER_KEY missing from this process's environment —
     # e.g. a gateway relaunched outside its supervisor without the profile

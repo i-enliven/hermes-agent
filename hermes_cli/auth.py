@@ -5153,11 +5153,6 @@ def _auth_file_cache_key() -> Tuple[str, Optional[float]]:
 
 
 
-# Enum values reported on the dashboard /api/status as ``nous_session_valid``.
-# NAS's health sweep re-mints the bootstrap session ONLY on "terminal"; "valid"
-# and "unknown" are no-ops. Keep this set small and stable — NAS parses it with
-# a permissive schema, so new members are non-breaking but should stay rare.
-
 
 
 

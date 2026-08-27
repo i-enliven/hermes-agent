@@ -1214,7 +1214,7 @@ def derive_gateway_busy(
 ) -> bool:
     """Whether the gateway is actively processing in-flight turns.
 
-    The contract NAS gates lifecycle actions on.  Busy iff the gateway is live
+    Busy iff the gateway is live
     (``gateway_running``), in the ``running`` state, AND at least one agent is
     mid-turn (``active_agents > 0``).  Degrades to ``False`` whenever liveness
     is unknown, the state is anything but ``running``, or the count is

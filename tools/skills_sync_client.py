@@ -26,7 +26,7 @@ payload (no signature verification -- the server re-verifies) and check the
 claim before doing any sync work.
 
 NAMING: the claim on the wire is ``tool_gateway_admin``, which is misleading
--- it is NOT a tool-gateway-specific right. NAS populates it from
+-- it is NOT a tool-gateway-specific right. It is populated from
 ``Permissions.ADMIN_ACCESS`` (access-token-issuer.ts), the same global portal
 admin permission that guards ``/admin/*``; the claim is simply named for its
 first consumer. We keep the wire name (other services read it) but call it
@@ -1402,7 +1402,7 @@ def _resolve_push_conflict(
             "actual_head": actual_head,
             "message": (
                 f"{len(overlaps)} skill(s) changed on both sides; wrote "
-                f"{conflict_ref}. Resolve out-of-band (hermes sync / NAS UI)."
+                f"{conflict_ref}. Resolve out-of-band (hermes sync)."
             ),
         }
 
@@ -1712,8 +1712,8 @@ def list_org_skill_names() -> List[str]:
 # set is `refs/org/<org_id>/HEAD` — the SAME object model as personal sync.
 #
 # PERSONAL-ORG GATE (the sync contract REFINED, Ben 2026-07-23): a personal org
-# has NO org workflow. The discriminator travels in the token: NAS stamps the
-# `org_role` claim ONLY for multi-member orgs. No claim ⇒ every org helper
+# has NO org workflow. The discriminator travels in the token: the `org_role`
+# claim is stamped ONLY for multi-member orgs. No claim ⇒ every org helper
 # here is inert (org_sync_available() False; pull/propose raise SyncInertError)
 # and the personal personal sync experience is untouched.
 #

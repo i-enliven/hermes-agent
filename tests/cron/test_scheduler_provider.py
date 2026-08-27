@@ -178,7 +178,8 @@ def test_discover_cron_schedulers_returns_list():
 
     result = discover_cron_schedulers()
     assert isinstance(result, list)
-    assert any(name == "chronos" for name, _desc, _available in result)
+    # A fresh checkout with no bundled non-default provider may return [] —
+    # the built-in is core and not discovered here.
 
 
 def test_load_unknown_cron_scheduler_returns_none():

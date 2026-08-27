@@ -264,10 +264,23 @@ def test_provider_start_recovers_interrupted_records_before_tick(monkeypatch):
 
 
 def test_external_provider_start_recovers_interrupted_records(monkeypatch):
-    from plugins.cron_providers.chronos import ChronosCronScheduler
+    # A minimal generic external provider (the pluggable-provider framework,
+    # not the built-in) exercising the shared start() lifecycle.
+    from cron.scheduler_provider import CronScheduler
 
-    provider = ChronosCronScheduler()
-    provider._client = type("Client", (), {"arm": lambda self, **kwargs: None})()
+    class _External(CronScheduler):
+        @property
+        def name(self) -> str:
+            return "external"
+
+        def start(self, stop_event, **kwargs) -> None:
+            self.recover_interrupted()
+            self.reconcile()
+
+        def reconcile(self) -> None:
+            return None
+
+    provider = _External()
     events = []
     monkeypatch.setattr(
         "cron.executions.recover_interrupted_executions",

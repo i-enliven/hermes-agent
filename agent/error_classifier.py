@@ -1196,7 +1196,7 @@ def _classify_by_status(
         return _classify_402(error_msg, result_fn)
 
     if status_code == 404:
-        # Nous API currently surfaces HA/NAS credit depletion as a paid model
+        # Nous API currently surfaces HA credit depletion as a paid model
         # becoming unavailable on the Free Tier, returned as 404 rather than
         # 402. Treat that as entitlement/billing exhaustion, not a missing
         # model, so the retry loop can show credit/top-up guidance.

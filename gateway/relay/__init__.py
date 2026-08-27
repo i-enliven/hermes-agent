@@ -180,9 +180,8 @@ def relay_endpoint() -> Optional[str]:
     tenant's route rows. It is gateway-asserted (the connector scopes it to the
     verified tenant, so a dishonest gateway can only misdirect its OWN inbound).
     The *source* of the value differs by deployment but the code path is uniform:
-    a self-hosted operator sets ``GATEWAY_RELAY_ENDPOINT``; a hosted/NAS
-    container has the same var stamped in (NAS knows the public URL only in
-    that case). Absent -> the
+    a self-hosted operator sets ``GATEWAY_RELAY_ENDPOINT`` (or it is stamped
+    in by the hosting platform). Absent -> the
     gateway provisions outbound-only (no inbound routes written).
 
     Env first (Docker), then ``gateway.relay_endpoint`` in config.yaml.
@@ -225,76 +224,18 @@ def relay_route_keys() -> list[str]:
     return [k.strip() for k in raw.split(",") if k.strip()]
 
 
-def relay_instance_id() -> Optional[str]:
-    """Stable per-instance id this gateway forwards at provision (Phase 6 Unit α).
-
-    Binds the connector's ``gatewayId -> instanceId`` so the connector can route
-    inbound per-instance (not tenant-broadcast) once Phase 6 delivery lands. The
-    value is the NAS ``AgentInstance.id`` for a managed agent (NAS stamps
-    ``GATEWAY_RELAY_INSTANCE_ID`` into the container env, beside
-    ``GATEWAY_RELAY_URL``); a self-hosted operator may set it explicitly. It is
-    gateway-asserted but safely scoped: the org/tenant stays token-verified, so a
-    dishonest gateway can only bind ITS OWN tenant's instance — the same posture
-    as ``relay_endpoint()``. Absent -> the connector stores null and per-instance
-    routing simply has no binding for this connection yet (back-compat).
-
-    Env first (Docker/NAS), then ``gateway.relay_instance_id`` in config.yaml.
-    """
-    value = os.environ.get("GATEWAY_RELAY_INSTANCE_ID", "").strip()
-    if not value:
-        try:
-            from gateway.run import _load_gateway_config  # late import to avoid cycle
-
-            cfg = (_load_gateway_config().get("gateway") or {})
-            value = str(cfg.get("relay_instance_id", "") or "").strip()
-        except Exception:  # noqa: BLE001 - config absence/parse must never crash boot
-            value = ""
-    return value or None
-
-
-def relay_wake_url() -> Optional[str]:
-    """The gateway's WAKE URL, forwarded at provision (Phase 5 §5.2 wake PRIMITIVE).
-
-    A poke target the connector issues a payload-free GET to when a buffered-only
-    (going-idle) destination for this instance receives its first buffered event,
-    so a suspended gateway wakes, reconnects its relay WS, and drains its
-    delivery-leg backlog. The value's *source* differs by deployment but the code
-    path is uniform: a managed/NAS container has ``GATEWAY_RELAY_WAKE_URL`` stamped
-    in (NAS knows the Fly autostart / dashboard hostname); a self-hosted operator
-    sets it explicitly (or passes ``--wake-url`` to ``hermes gateway enroll``).
-
-    Gateway-asserted but safely scoped: the org/tenant stays token-verified, so a
-    dishonest gateway can only register a wake target for ITS OWN instance — the
-    same posture as ``relay_instance_id()`` / the retired ``relay_endpoint()``.
-    Absent -> the connector stores null and simply can't wake this instance
-    (buffering still works; the gateway drains whenever it next reconnects).
-
-    Env first (Docker/NAS), then ``gateway.relay_wake_url`` in config.yaml.
-    """
-    value = os.environ.get("GATEWAY_RELAY_WAKE_URL", "").strip()
-    if not value:
-        try:
-            from gateway.run import _load_gateway_config  # late import to avoid cycle
-
-            cfg = (_load_gateway_config().get("gateway") or {})
-            value = str(cfg.get("relay_wake_url", "") or "").strip()
-        except Exception:  # noqa: BLE001 - config absence/parse must never crash boot
-            value = ""
-    return value.rstrip("/") or None
-
-
 def relay_display_name() -> Optional[str]:
     """The human-facing agent display name, forwarded at provision (Phase 1 parity).
 
     The PRIMARY source for the connector's multi-agent reply-attribution prefix
     (gateway-gateway #171): in a multi-agent scope the shared bot prepends
     ``**<displayName>:** `` to this instance's replies. Gateway-asserted but
-    safely scoped exactly like ``relay_instance_id()`` / ``relay_wake_url()`` —
-    the tenant stays token-verified, so a dishonest gateway can only label its
-    OWN instance. Absent -> the connector stores null and attribution falls
-    back to the instance's linked-owner identity, else skips the prefix.
+    safely scoped — the tenant stays token-verified, so a dishonest gateway can
+    only label its OWN instance. Absent -> the connector stores null and
+    attribution falls back to the instance's linked-owner identity, else skips
+    the prefix.
 
-    Env first (Docker/NAS stamps ``GATEWAY_RELAY_DISPLAY_NAME``), then the
+    Env first (``GATEWAY_RELAY_DISPLAY_NAME``), then the
     skin's branded agent name (``get_branding("agent_name")`` — the same value
     the CLI banner shows), so a self-hosted rename via skin config propagates
     on the next boot's re-provision (the connector rotates on change, same as
@@ -450,14 +391,12 @@ def _post_provision(
     bot_id: str,
     gateway_endpoint: Optional[str],
     route_keys: list[str],
-    instance_id: Optional[str] = None,
-    wake_url: Optional[str] = None,
     display_name: Optional[str] = None,
     timeout: float = 15.0,
 ) -> dict:
     """POST to the connector's ``/relay/provision`` and return the JSON body.
 
-    The connector validates ``access_token`` against NAS, derives the
+    The connector validates ``access_token``, derives the
     authoritative tenant, mints the per-gateway secret + per-tenant delivery key,
     upserts the tenant's route rows, and returns
     ``{secret, deliveryKey, tenant, gatewayId, routeKeys}``. Raises RuntimeError
@@ -474,14 +413,6 @@ def _post_provision(
         "gatewayEndpoint": gateway_endpoint or "",
         "routeKeys": route_keys,
     }
-    # Only send instanceId when we actually have one — omitting it lets the
-    # connector store null (back-compat) rather than binding an empty string.
-    if instance_id:
-        body["instanceId"] = instance_id
-    # Same for the wake URL (Phase 5 §5.2): omit when absent so the connector
-    # stores null and simply can't wake this instance (buffering still works).
-    if wake_url:
-        body["wakeUrl"] = wake_url
     # Same for the display name (Phase 1 parity, gg#171): omit when absent so
     # the connector stores null and attribution falls back to the linked-owner
     # identity.
@@ -634,144 +565,6 @@ def _resolve_relay_identity_token() -> str:
     return access_token.strip()
 
 
-def self_provision_relay() -> bool:
-    """Boot-time relay self-provision: mint relay creds in-process, no human, no disk.
-
-    Fires when relay is configured (``relay_url()`` set) and NO per-gateway secret
-    is already present, AND the agent can resolve its own access token. In
-    that case the runtime resolves the agent's own access token,
-    POSTs ``/relay/provision`` asserting its own endpoint + route keys, and sets
-    ``GATEWAY_RELAY_ID`` / ``GATEWAY_RELAY_SECRET`` / ``GATEWAY_RELAY_DELIVERY_KEY``
-    into ``os.environ`` so the subsequent ``register_relay_adapter()`` picks them
-    up. The creds live ONLY in process memory — never written to ``~/.hermes/.env``.
-
-    The trigger is deliberately NOT ``is_managed()``: that means
-    "package-manager/NixOS-managed" and is False on a NAS-hosted Fly agent (which
-    sets neither ``HERMES_MANAGED`` nor a ``.managed`` marker), so gating on it
-    blocked the exact hosted case this is for. The real signal is "you pointed me
-    at a connector and didn't pin a secret" — which is both NAS-independent and
-    self-guarding:
-
-      - A NAS-hosted agent: has ``GATEWAY_RELAY_URL``, no pinned secret, and a
-        bootstrapped NAS token -> self-provisions.
-      - A self-hosted operator who ran ``hermes gateway enroll``: has a PINNED
-        ``GATEWAY_RELAY_SECRET`` -> skipped (the secret-present guard below).
-      - A self-hosted box with a relay URL but no identity:
-        token resolution fails -> graceful no-op.
-
-    Stateless: process-env creds don't survive a restart, so a hosted container
-    re-provisions every boot; the connector's rotation window covers a still-
-    connected prior instance. An explicitly-pinned ``GATEWAY_RELAY_SECRET`` (env
-    or config) is RESPECTED — self-provision skips so an operator pin isn't
-    stomped.
-
-    Returns True if it provisioned, False otherwise. NEVER raises: a provision
-    failure logs and returns False so the gateway still boots (and
-    ``register_relay_adapter`` will simply dial unauthenticated / be rejected,
-    rather than the whole gateway crashing).
-    """
-    import logging
-
-    logger = logging.getLogger("gateway.relay")
-
-    dial_url = relay_url()
-    if not dial_url:
-        return False
-
-    # Respect an already-present (pinned/stamped) secret — don't stomp it. This
-    # is also what makes a self-hosted, enrolled gateway skip self-provision.
-    existing_id, existing_secret = relay_connection_auth()
-    if existing_id and existing_secret:
-        logger.info("relay self-provision skipped: GATEWAY_RELAY_SECRET already set")
-        return False
-
-    try:
-        access_token = _resolve_relay_identity_token()
-    except Exception as exc:  # noqa: BLE001 - boot must survive a token failure
-        # No resolvable identity (e.g. a self-hosted box that hasn't enrolled and
-        # configured no IdP) -> nothing to provision with; skip quietly and boot.
-        logger.warning("relay self-provision skipped: could not resolve identity token (%s)", exc)
-        return False
-
-    identities = relay_platform_identities()
-    # gatewayId default mirrors the enroll CLI's hostname-based slug.
-    import socket
-
-    try:
-        host = socket.gethostname().strip()
-    except Exception:  # noqa: BLE001
-        host = ""
-    gateway_id = os.environ.get("GATEWAY_RELAY_ID", "").strip() or f"gw-{host or 'hermes'}"
-    endpoint = relay_endpoint()
-    route_keys = relay_route_keys()
-    instance_id = relay_instance_id()
-    wake_url = relay_wake_url()
-    display_name = relay_display_name()
-
-    # Phase 1.5 (D-Q1.5c): provision EACH fronted platform under the SAME
-    # gatewayId + the SAME (platform-less) per-gateway secret. The connector's
-    # secret record is (gatewayId -> tenant) only; platform/botId live on the
-    # per-platform route rows (relayProvision.ts:124/148), so N provision POSTs
-    # with one gatewayId add N platforms' routes under one secret. The loop is
-    # PARTIAL-FAILURE-TOLERANT: a platform that fails to provision is logged and
-    # skipped (it just isn't fronted) — the others still come up. The FIRST
-    # successful provision sets the in-process creds; later platforms re-provision
-    # against the same gatewayId (idempotent on the secret, additive on routes).
-    provisioned: list[str] = []
-    result: dict = {}
-    for platform, bot_id in identities:
-        try:
-            result = _post_provision(
-                provision_url=_provision_url(dial_url),
-                access_token=access_token,
-                gateway_id=gateway_id,
-                platform=platform,
-                bot_id=bot_id,
-                gateway_endpoint=endpoint,
-                route_keys=route_keys,
-                instance_id=instance_id,
-                wake_url=wake_url,
-                display_name=display_name,
-            )
-        except RuntimeError as exc:
-            logger.warning(
-                "relay self-provision failed for platform=%s (%s); continuing with the rest",
-                platform,
-                exc,
-            )
-            continue
-        provisioned.append(platform)
-        # Set creds in-process on the FIRST success so register_relay_adapter()
-        # reads them from os.environ (the per-gateway secret authenticates the
-        # outbound WS upgrade). Subsequent platforms share the same gatewayId +
-        # secret (the connector returns the same record for the same gatewayId).
-        # Never logged.
-        if "GATEWAY_RELAY_SECRET" not in os.environ or not os.environ.get("GATEWAY_RELAY_SECRET"):
-            os.environ["GATEWAY_RELAY_ID"] = str(result.get("gatewayId") or gateway_id)
-            os.environ["GATEWAY_RELAY_SECRET"] = str(result.get("secret") or "")
-            os.environ["GATEWAY_RELAY_DELIVERY_KEY"] = str(result.get("deliveryKey") or "")
-
-    if not provisioned:
-        logger.warning(
-            "relay self-provision failed for ALL platforms (%s); gateway will boot without relay auth",
-            ",".join(p for p, _ in identities),
-        )
-        return False
-
-    tenant = str(result.get("tenant") or "")
-    logger.info(
-        "relay self-provisioned (gateway_id=%s tenant=%s platforms=%s routes=%d inbound=%s instance=%s wake=%s)",
-        os.environ.get("GATEWAY_RELAY_ID", gateway_id),
-        tenant or "?",
-        ",".join(provisioned),
-        len(route_keys),
-        "yes" if endpoint else "outbound-only",
-        instance_id or "unbound",
-        "yes" if wake_url else "none",
-    )
-    return True
-
-
 def _post_policy(*, policy_url: str, token: str, policy: dict, timeout: float = 15.0) -> int:
     """POST the relevance policy to the connector's ``/relay/policy``; return the HTTP status.
 
@@ -803,6 +596,7 @@ def _post_policy(*, policy_url: str, token: str, policy: dict, timeout: float = 
         return int(exc.code)
     except urllib.error.URLError as exc:
         raise RuntimeError(f"could not reach connector: {exc.reason}") from exc
+
 
 
 def send_relay_policy() -> bool:

@@ -239,7 +239,7 @@ one-time code, redeemed by DMing the shared bot:
 1. The owner triggers a link from the Portal (or a self-hosted CLI). The
    connector mints a short-lived **link code** for the **authenticated**
    instance (`POST /manage/link`; instanceId comes from the caller's principal —
-   a NAS-signed `aud=agent:{instanceId}` token or the instance's own per-gateway
+   an instance-signed `aud=agent:{instanceId}` token or the instance's own per-gateway
    secret — **never** the request body).
 2. The user sends `/link <code>` as a **direct message** to the shared bot from
    the account they want to bind.
@@ -259,8 +259,8 @@ stays retryable (a cold-start / not-yet-provisioned race, not a revocation).
 
 ### 3.2 Going-idle / buffered-flip primitive (§5.3)
 
-A scale-to-zero PRIMITIVE (not the behaviour — nothing here decides to sleep or
-suspends a machine; a later workstream consumes these frames). It lets a gateway
+A drain/idle PRIMITIVE (not the behaviour — nothing here decides to sleep or
+suspend a machine; a later workstream consumes these frames). It lets a gateway
 enter a drain/idle transition without losing inbound that arrives while it is
 gone, by making the connector buffer for that instance and replay on reconnect.
 
@@ -292,94 +292,9 @@ connector→gateway delivery leg. Connector-authoritative throughout: a gateway 
 only flip/drain ITS OWN instance.
 
 > NOT in scope (deferred behaviour): the autonomous idle timer that DECIDES to
-> drain, the actual machine suspend, and the NAS suspended-health model. The
-> primitive is "when the gateway drains, relay flips to buffered + replays on
-> reconnect, with no loss/dup"; WHAT triggers the drain is out of scope.
-
-### 3.3 Wake poke (§5.2)
-
-The other half of the sleep/wake loop: how a SUSPENDED gateway finds out it has
-buffered work waiting. A PRIMITIVE — nothing here suspends a machine; it wires
-the wake SIGNAL so a future scale-to-zero behaviour layer can rely on "buffered
-⇒ wake poked."
-
-- **Registration.** The gateway registers a **wake URL** at enroll/provision —
-  any reachable URL the connector can GET to wake it (a Fly autostart hostname,
-  a dashboard host). Self-hosted: `hermes gateway enroll --wake-url <url>` (or
-  `GATEWAY_RELAY_WAKE_URL` / `gateway.relay_wake_url`). Managed/NAS: stamped into
-  the container env beside `GATEWAY_RELAY_URL`. Forwarded in the
-  `/relay/provision` body as `wakeUrl` and stored per-instance on the connector's
-  secret record (gateway-asserted but safely scoped — same posture as
-  `instanceId`; the org/tenant stays token-verified, so a gateway can only
-  register a wake target for ITS OWN instance). DISTINCT from the retired
-  `gatewayEndpoint`: a **poke target**, not a delivery target.
-- **The poke.** When a buffered-only (going-idle) destination receives its FIRST
-  buffered event, the connector issues a **payload-free, unsigned GET** to that
-  instance's registered `wakeUrl`, **directly** (NOT NAS-mediated — relay stays
-  NAS-independent). It carries no tenant data and no inbound: it only says "you
-  have buffered work, reconnect." Tenant authority is re-established the normal
-  way when the gateway re-dials (the authenticated WS upgrade), so a leaked/
-  guessed wake URL can at worst cause a spurious reconnect of ITS OWN instance.
-  Rate-limited per instance (one poke per cooldown window, not per event), and
-  best-effort — a failed poke is swallowed; the gateway still drains whenever it
-  next reconnects on its own. No new frame: the wake is an out-of-band HTTP GET,
-  not a relay-WS message (the socket is down — that's the whole point).
-
-> NOT in scope (deferred behaviour): the actual machine suspend (Fly
-> `autostop:"suspend"`) and the autonomous idle timer that decides to sleep. The
-> primitive is "buffered event for a sleeping instance ⇒ its wakeUrl gets poked";
-> WHAT makes the instance sleep (and wake-to-serve) is the behaviour layer.
-
-### 3.4 Obligations on a future scale-to-zero behaviour layer
-
-§3.2 and §3.3 ship the **primitives**; this section is the **contract a separate
-scale-to-zero behaviour workstream must honour to consume them safely.** It owns
-the *decision* to suspend, the actual machine suspend, and the platform/health
-model — none of which live here — but it MUST hold these guarantees, which the
-primitives assume:
-
-1. **Register a `wakeUrl` before the instance can ever be suspended.** A
-   suspended instance with no registered `wakeUrl` is a black hole — buffered
-   inbound never triggers a poke, so it sleeps through its own traffic until
-   something else reconnects it. The behaviour layer MUST ensure a reachable
-   wake target is registered (self-hosted: `--wake-url`; managed: stamped) as a
-   precondition of allowing suspend. A wake URL that is unreachable while the
-   machine is suspended (e.g. points at the suspended machine itself with no
-   platform autostart in front) is equivalent to none.
-2. **Drain through `going_idle` → await `going_idle_ack` BEFORE tearing down the
-   socket or suspending.** Never suspend with an un-acked flip in flight. The
-   ack is the connector's confirmation that delivery for this instance is now
-   buffered-only; a machine that suspends after sending `going_idle` but before
-   the ack can drop the inbound that races the flip. The gateway already gates
-   socket teardown on the ack (Q-5.3c); the suspend step MUST sit *after* a
-   clean drain completes, not race it.
-3. **Keep the NET-NEW reconnect loop live as a precondition of suspend.** The
-   wake→drain contract is "poke ⇒ the gateway re-dials ⇒ the connector drains on
-   the reconnect handshake." If the reconnect loop is disabled, a poke lands on a
-   machine that never re-dials and the buffer strands. The behaviour layer must
-   not suspend an instance whose relay transport won't reconnect on wake.
-4. **Treat suspended ≠ down in the health model (Q-5.3b).** A suspended instance
-   is healthy-asleep, not failed. The health/monitoring layer MUST distinguish
-   the two (e.g. via the platform machine-state) so a suspended instance is not
-   restarted, alerted on, or reaped as unhealthy — that would defeat the suspend
-   and can race the wake/drain.
-5. **The wake poke is best-effort and rate-limited — do not assume exactly-once
-   or immediate wake.** At most one poke per cooldown window per instance, and a
-   failed poke is swallowed. The behaviour layer must not rely on the poke as a
-   guaranteed/prompt signal; correctness still rests on "the gateway drains
-   whenever it next reconnects." A belt-and-suspenders wake (e.g. a scheduled
-   job that also reconnects) is the behaviour layer's call, not the primitive's.
-6. **Suspend only when genuinely idle — and idle is connector-observable, not
-   gateway-guessed.** WHAT counts as idle (no in-flight turn + no inbound for N
-   min) is the behaviour layer's policy, but it must compose with the existing
-   drain machinery (`gateway_state` running→draining) rather than introduce a
-   parallel relay-only idle path — the same integration constraint §3.2 places
-   on `going_idle`.
-
-These are guarantees the behaviour layer OWES the primitives; the primitives owe
-the behaviour layer only what §3.2/§3.3 already specify (a flip-on-going_idle,
-a durable per-instance buffer + ack-gated reconnect drain, and a poke on the
-first buffered event for a flipped instance).
+> drain. The primitive is "when the gateway drains, relay flips to buffered +
+> replays on reconnect, with no loss/dup"; WHAT triggers the drain is out of
+> scope.
 
 ---
 
@@ -619,7 +534,7 @@ A2 makes the connector the sole holder of platform secrets while the gateway may
 be **customer-managed and internet-exposed**, so the connector⇄gateway channel
 is itself authenticated. The gateway holds an enrollment- or provision-issued
 **per-gateway secret** (`hermes gateway enroll` → connector `/relay/enroll`, or
-managed self-provision → `/relay/provision`) that authenticates its outbound WS
+provision → `/relay/provision`) that authenticates its outbound WS
 upgrade. It is an HMAC-SHA256 scheme with a multi-secret rotation verify list
 (gateway side: `gateway/relay/auth.py`; connector side:
 `src/core/relayAuthToken.ts`).
@@ -669,7 +584,7 @@ full design + invariants live in the connector repo
 ### 7.2 Management routes (connector-side, authenticated)
 
 The connector mounts authenticated management routes. They share the **same
-dual-auth** as the WS upgrade: either a managed NAS-signed `aud=agent:{instanceId}`
+dual-auth** as the WS upgrade: an instance-signed `aud=agent:{instanceId}`
 RS256 JWT, **or** the gateway's own per-gateway secret bearer (§6.1
 `make_upgrade_token`). In both cases the connector resolves the authoritative
 `{tenant, instanceId}` from its **stored** record — **never** from the request
@@ -714,9 +629,9 @@ layered on the authorization gate (§7.1), never a boot dependency. There is **n
 new gateway inbound surface** and **no new credential** — it reuses the
 per-gateway secret and the same host as `/relay/provision`.
 
-> A relevance drop happens **before** the connector wakes a scaled-to-zero agent
-> (Phase 5), so excluded chatter never spins an agent up — relevance is the
-> primary scale-to-zero lever as well as a correctness filter.
+> A relevance drop happens **before** the connector wakes a sleeping agent,
+> so excluded chatter never spins an agent up — relevance is also a
+> correctness filter.
 
 ---
 

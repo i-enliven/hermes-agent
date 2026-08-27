@@ -435,9 +435,9 @@ seed_one "SOUL.md" "docker/SOUL.md"
 # The gateway's aiohttp api_server refuses to start without a strong
 # API_SERVER_KEY (>=16 chars; startup guard in gateway/platforms/api_server.py).
 # Hosted deployments need that listener on loopback so the dashboard — the
-# container's only public HTTP door — can forward Chronos cron fires into the
+# container's only public HTTP door — can forward scheduled cron fires into the
 # GATEWAY process, where the live platform adapters (relay, E2EE) live. The
-# cron-fire route itself is NAS-JWT-authed, not key-authed; the key gates the
+# cron-fire route itself is JWT-authed, not key-authed; the key gates the
 # rest of the api_server surface. Generate once, persist in .env (mounted
 # volume), never overwrite an operator-provided value. Loopback-only: the
 # default bind host is 127.0.0.1 and the Fly service only exposes the

@@ -2335,30 +2335,10 @@ DEFAULT_CONFIG = {
         # Active cron SCHEDULER provider (Axis B — the trigger that decides
         # WHEN a due job fires). Empty string = the built-in in-process 60s
         # ticker (default). Name an installed provider (plugins/cron_providers/<name>/ or
-        # $HERMES_HOME/plugins/<name>/) to relocate the trigger — e.g. "chronos",
-        # the NAS-mediated managed-cron provider for scale-to-zero deployments.
+        # $HERMES_HOME/plugins/<name>/) to relocate the trigger.
         # An unknown or unavailable provider falls back to the built-in, so cron
         # never loses its trigger.
         "provider": "",
-        # Chronos (NAS-mediated managed cron) settings. Only consulted when
-        # provider == "chronos". All non-secret (URLs + the JWT audience): the
-        # agent holds NO external-scheduler credentials. For hosted agents, NAS
-        # sets these at provision time. The outbound provision call reuses the
-        # agent's existing Nous Portal token — there is no token key here.
-        "chronos": {
-            # NAS / portal base URL the agent calls to arm/cancel one-shots
-            # and that mints the inbound fire JWT (used as the expected issuer).
-            "portal_url": "https://portal.nousresearch.com",
-            # The agent's OWN publicly-reachable base URL for NAS→agent fires
-            # (NAS POSTs {callback_url}/api/cron/fire). Empty → Chronos is
-            # unavailable and the resolver falls back to the built-in ticker.
-            "callback_url": "",
-            # This agent's expected JWT audience (e.g. "agent:{instance_id}").
-            "expected_audience": "",
-            # NAS JWKS URL for verifying the inbound fire JWT's signature.
-            # Empty → the fire endpoint refuses all tokens (no unsigned decode).
-            "nas_jwks_url": "",
-        },
         # Wrap delivered cron responses with a header (task name) and footer
         # ("The agent cannot see this message").  Set to false for clean output.
         "wrap_response": True,
@@ -2725,18 +2705,6 @@ DEFAULT_CONFIG = {
         # external tooling and downgrade safety; set to false to stop
         # producing ~/.hermes/sessions/sessions.json entirely.
         "write_sessions_json": True,
-
-        # Scale-to-zero idle detection (Phase 0). The gateway watches for idle
-        # and, when an instance is opted in via the NAS "Labs" toggle (carried as
-        # the HERMES_SCALE_TO_ZERO env stamp) AND messaging is relay-only/absent
-        # AND a wakeUrl is registered, drives the relay transport dormant so the
-        # platform (e.g. Fly autostop:"suspend") can suspend the now-idle machine;
-        # it wakes on the connector's wakeUrl poke. This is the idle TIMEOUT only
-        # — whether the feature is enabled at all is the Labs toggle, never a
-        # config key (decisions.md D2/D11). 0/negative falls back to the default.
-        "scale_to_zero": {
-            "idle_timeout_minutes": 5,
-        },
 
         # Auto-resume restart-loop breaker (#30719, defense-3). When the
         # gateway is killed mid-turn (SIGTERM) and revived by a supervisor

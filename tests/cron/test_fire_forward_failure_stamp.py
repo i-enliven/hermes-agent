@@ -1,6 +1,6 @@
 """Tests for the last_fire_error stamp (missed scheduled fires made visible).
 
-When the hosted fire path (NAS -> dashboard -> loopback forward to the
+When the hosted fire path (dashboard -> loopback forward to the
 gateway api_server) cannot reach the gateway, no execution row is ever
 created — the miss used to be invisible outside gui.log. The dashboard fire
 webhook now stamps ``last_fire_error`` on the job record via

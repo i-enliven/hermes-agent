@@ -1,7 +1,7 @@
 """Tests for the store-level CAS fire claim (Phase 4C).
 
 `claim_job_for_fire` gives multi-machine at-most-once semantics when an external
-scheduler (Chronos) fires a job: across N gateway replicas, exactly ONE wins the
+an external scheduler fires a job: across N gateway replicas, exactly ONE wins the
 claim for a given fire. Single-machine deployments always win (unaffected).
 
 These exercise the real store against a temp HERMES_HOME (no mocks) per the

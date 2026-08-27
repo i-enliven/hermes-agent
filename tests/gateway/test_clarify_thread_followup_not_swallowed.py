@@ -86,7 +86,6 @@ def _make_runner(adapter):
 
     runner = GatewayRunner.__new__(GatewayRunner)
     runner._startup_restore_in_progress = False
-    runner._scale_to_zero_note_real_inbound = lambda: None
     runner._is_user_authorized = lambda source: True
     runner._session_key_for_source = lambda source: SESSION_KEY
     runner._adapter_for_source = lambda source: adapter

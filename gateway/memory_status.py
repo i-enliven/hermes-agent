@@ -14,19 +14,18 @@ want to know about, but all of it dies in log files:
   again log-only.
 
 So a hosted agent can be OOM-killed hourly (the BlueAtlas incident,
-NS-608) while its dashboard and the NAS agent card both look perfectly
+NS-608) while its dashboard and the agent card both look perfectly
 healthy.  This module is the read side that closes the gap: it distills
 the *already-persisted* heartbeat + lifecycle sentinel into a compact,
 public-safe block that ``/api/status`` can serve to the dashboard SPA
-and the NAS availability sweep — no new sampling, no IPC with the
+and the availability sweep — no new sampling, no IPC with the
 gateway process, just two small file reads.
 
 Public-safety note: ``/api/status`` is an unauthenticated liveness probe
-(``PUBLIC_API_PATHS``), which is exactly why NAS can consume it.  This
-block therefore carries only coarse numbers (MB granularity), enums, and
+(``PUBLIC_API_PATHS``), which is exactly why it can be consumed externally.
+This block therefore carries only coarse numbers (MB granularity), enums, and
 booleans — the same disclosure class as the existing ``active_agents``
-count (which was added for the same
-NAS-sweep audience).
+count.
 
 Everything here is best-effort and read-only: a missing/corrupt file
 degrades to ``pressure="unknown"`` rather than raising into the status

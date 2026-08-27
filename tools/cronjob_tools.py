@@ -1443,9 +1443,10 @@ def cronjob(
                 else _execute_job_now(job, extra_prompt=extra_prompt)
             )
             # A claimed direct run advances next_run_at and may race the
-            # external one-shot for the same occurrence. If Chronos loses that
-            # claim, its consumed fire cannot re-arm itself; reconcile from the
-            # winning direct path after the run has persisted its final state.
+            # external one-shot for the same occurrence. If the external provider
+            # loses that claim, its consumed fire cannot re-arm itself; reconcile
+            # from the winning direct path after the run has persisted its final
+            # state.
             if exec_result.get("claimed", False):
                 _notify_provider_jobs_changed_safe()
             # Re-read so the response reflects the post-run last_run_at/last_status.
