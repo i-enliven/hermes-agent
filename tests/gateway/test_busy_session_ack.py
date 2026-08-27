@@ -403,53 +403,6 @@ class TestBusySessionAck:
         assert "10 min" in content  # elapsed
 
 
-class TestBusySessionOnboardingHint:
-    """First-touch hint appended to the busy-ack the first time it fires."""
-
-    @pytest.mark.asyncio
-    async def test_first_busy_ack_appends_interrupt_hint(self, tmp_path, monkeypatch):
-        """First busy-while-running message gets an extra hint about /busy."""
-        import gateway.run as _gr
-
-        monkeypatch.setattr(_gr, "_hermes_home", tmp_path)
-        # mark_seen imports utils.atomic_yaml_write; make sure it resolves
-        # against a writable dir by pointing _hermes_home at tmp_path.
-        monkeypatch.setattr(_gr, "_load_gateway_config", lambda: {})
-
-        runner, _sentinel = _make_runner()
-        runner._busy_input_mode = "interrupt"
-        adapter = _make_adapter()
-
-        event = _make_event(text="ping")
-        sk = build_session_key(event.source)
-
-        agent = MagicMock()
-        agent.get_activity_summary.return_value = {
-            "api_call_count": 3, "max_iterations": 60,
-            "current_tool": None, "last_activity_ts": time.time(),
-            "last_activity_desc": "api", "seconds_since_activity": 0.1,
-        }
-        runner._running_agents[sk] = agent
-        runner._running_agents_ts[sk] = time.time() - 5
-        runner.adapters[event.source.platform] = adapter
-
-        await runner._handle_active_session_busy_message(event, sk)
-
-        call_kwargs = adapter._send_with_retry.call_args
-        content = call_kwargs.kwargs.get("content", "")
-
-        # Normal ack body
-        assert "Interrupting" in content
-        # First-touch hint appended
-        assert "First-time tip" in content
-        assert "/busy queue" in content
-
-        # The flag is now persisted to tmp_path/config.yaml
-        import yaml
-        cfg = yaml.safe_load((tmp_path / "config.yaml").read_text())
-        assert cfg["onboarding"]["seen"]["busy_input_prompt"] is True
-
-
 class TestLongRunningNotificationOwnership:
     """The long-running heartbeat must stop once its run no longer owns the
     session slot or the executor finished — otherwise a stale

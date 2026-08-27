@@ -52,11 +52,9 @@ class TurnContext:
     last_tool: list = field(default_factory=lambda: [None])
     last_was_terminal_block: list = field(default_factory=lambda: [False])
     repeat_count: list = field(default_factory=lambda: [0])
-    long_tool_hint_fired: list = field(default_factory=lambda: [False])
     agent_holder: list = field(default_factory=lambda: [None])
 
     # --- constants / cleanup bookkeeping ---------------------------------
-    _LONG_TOOL_THRESHOLD_S: float = 30.0
     _cleanup_progress: bool = False
     _cleanup_msg_ids: List[str] = field(default_factory=list)
 

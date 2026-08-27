@@ -2949,19 +2949,6 @@ DEFAULT_CONFIG = {
         "max_export_messages": 20000,
     },
 
-    # Contextual first-touch onboarding hints (see agent/onboarding.py).
-    # Each hint is shown once per install and then latched here so it
-    # never fires again.  Users can wipe the section to re-see all hints.
-    "onboarding": {
-        "seen": {},
-        # Structured profile-build path offered on the very first gateway
-        # message ever. "ask" (default) -> offer to build a user profile
-        # (opt-in, consent-gated; the agent asks before any lookup and never
-        # reads connected accounts silently). "off" -> plain intro only.
-        # The offer fires at most once (latched under onboarding.seen).
-        "profile_build": "ask",
-    },
-
     # Privacy-safe aggregate metrics written only to this profile's local
     # telemetry directory. Collection is opt-in and no remote sink exists.
     "telemetry": {

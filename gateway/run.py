@@ -4189,35 +4189,6 @@ class TurnRunner:
         if not ctx.progress_queue or not ctx._run_still_current():
             return
 
-        # First-touch onboarding: the first time a tool takes longer than
-        # _LONG_TOOL_THRESHOLD_S during a run that's streaming every tool
-        # (progress_mode == "all"), append a one-time hint suggesting
-        # /verbose.  We only fire when (a) the user hasn't seen the hint
-        # before and (b) /verbose is actually usable on this platform
-        # (gateway gate must be open).  The CLI has its own trigger.
-        if event_type == "tool.completed" and not ctx.long_tool_hint_fired[0]:
-            try:
-                duration = kwargs.get("duration") or 0
-                if duration >= ctx._LONG_TOOL_THRESHOLD_S and ctx.progress_mode == "all":
-                    from agent.onboarding import (
-                        TOOL_PROGRESS_FLAG,
-                        is_seen,
-                        mark_seen,
-                        tool_progress_hint_gateway,
-                    )
-                    _cfg = _load_gateway_config()
-                    gate_on = is_truthy_value(
-                        cfg_get(_cfg, "display", "tool_progress_command"),
-                        default=False,
-                    )
-                    if gate_on and not is_seen(_cfg, TOOL_PROGRESS_FLAG):
-                        ctx.long_tool_hint_fired[0] = True
-                        ctx.progress_queue.put(tool_progress_hint_gateway())
-                        mark_seen(_hermes_home / "config.yaml", TOOL_PROGRESS_FLAG)
-            except Exception as _hint_err:
-                logger.debug("tool-progress onboarding hint failed: %s", _hint_err)
-            return
-
         # "_thinking" is assistant scratch text between tool calls.  It
         # is never ordinary tool progress: only relay it when the platform
         # explicitly opted into thinking_progress.  Handle both legacy
@@ -9917,35 +9888,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 f"⚡ Interrupting current task{status_detail}. "
                 f"I'll respond to your message shortly."
             )
-
-        # First-touch onboarding: the very first time a user sends a message
-        # while the agent is busy, append a one-time hint explaining the
-        # queue/interrupt knob.  Flag is persisted to config.yaml so it never
-        # fires again on this install.
-        try:
-            from agent.onboarding import (
-                BUSY_INPUT_FLAG,
-                busy_input_hint_gateway,
-                is_seen,
-                mark_seen,
-            )
-            _user_cfg = _load_gateway_config()
-            if not is_seen(_user_cfg, BUSY_INPUT_FLAG):
-                if is_steer_mode:
-                    _hint_mode = "steer"
-                elif is_queue_mode:
-                    _hint_mode = "queue"
-                elif is_redirect_mode:
-                    _hint_mode = "redirect"
-                else:
-                    _hint_mode = "interrupt"
-                message = (
-                    f"{message}\n\n"
-                    f"{busy_input_hint_gateway(_hint_mode)}"
-                )
-                mark_seen(_hermes_home / "config.yaml", BUSY_INPUT_FLAG)
-        except Exception as _onb_err:
-            logger.debug("Failed to apply busy-input onboarding hint: %s", _onb_err)
 
         reply_anchor = self._reply_anchor_for_event(event)
         thread_meta = self._thread_metadata_for_source(event.source, reply_anchor)
@@ -19228,35 +19170,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 "Briefly introduce yourself and mention that /help shows available commands. "
                 "Keep the introduction concise -- one or two sentences max.]"
             )
-            # Opt-in structured profile-build path. When enabled (default
-            # "ask") and not yet offered on this install, swap the plain intro
-            # for a consent-gated directive that offers to build a user
-            # profile and persists confirmed facts via memory(target="user").
-            # The offer fires at most once (onboarding.seen flag); set
-            # onboarding.profile_build: off in config.yaml to disable.
-            try:
-                from agent.onboarding import (
-                    PROFILE_BUILD_FLAG,
-                    is_seen,
-                    mark_seen,
-                    profile_build_directive,
-                    profile_build_mode,
-                )
-                _onb_cfg = _load_gateway_config()
-                if (
-                    profile_build_mode(_onb_cfg) == "ask"
-                    and not is_seen(_onb_cfg, PROFILE_BUILD_FLAG)
-                ):
-                    turn_sidecar_notes.append(profile_build_directive().strip())
-                    mark_seen(_hermes_home / "config.yaml", PROFILE_BUILD_FLAG)
-                else:
-                    turn_sidecar_notes.append(_intro_note)
-            except Exception as _pb_err:
-                logger.debug(
-                    "Profile-build onboarding directive failed, using plain intro: %s",
-                    _pb_err,
-                )
-                turn_sidecar_notes.append(_intro_note)
+            turn_sidecar_notes.append(_intro_note)
         
         # One-time prompt if no home channel is set for this platform
         # Skip for webhooks - they deliver directly to configured targets (github_comment, etc.)
@@ -27476,10 +27390,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             _cleanup_progress = False
             _cleanup_adapter = None
         _cleanup_msg_ids: List[str] = []
-        # First-touch onboarding latch: fires at most once per run, even if
-        # several tools exceed the threshold.
-        long_tool_hint_fired = [False]
-        _LONG_TOOL_THRESHOLD_S = 30.0
 
         turn_ctx = TurnContext(
             source=source,
@@ -27496,8 +27406,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             last_tool=last_tool,
             last_was_terminal_block=last_was_terminal_block,
             repeat_count=repeat_count,
-            long_tool_hint_fired=long_tool_hint_fired,
-            _LONG_TOOL_THRESHOLD_S=_LONG_TOOL_THRESHOLD_S,
             _cleanup_progress=_cleanup_progress,
             _cleanup_msg_ids=_cleanup_msg_ids,
             message=message,

@@ -24,8 +24,8 @@ def test_no_pre_migration_backup_api():
 
 
 def test_no_onboarding_residue_api():
-    from agent import onboarding as onb
+    # The onboarding module itself was removed (TASK-05), so no residue API
+    # can survive there.
+    import importlib.util
 
-    assert not hasattr(onb, "detect_openclaw_residue")
-    assert not hasattr(onb, "openclaw_residue_hint_cli")
-    assert not hasattr(onb, "OPENCLAW_RESIDUE_FLAG")
+    assert importlib.util.find_spec("agent.onboarding") is None
