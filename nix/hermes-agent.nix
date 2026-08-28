@@ -82,14 +82,6 @@ let
   # strings instead of raw i18n keys (#23943 / #27632 / #35374).
   bundledLocales = lib.cleanSource ../locales;
 
-  # Shipped MCP catalog (optional-mcps/<name>/manifest.yaml). Same bare-data-dir
-  # case as locales: not a Python package, so it's symlinked into the store and
-  # exposed via HERMES_OPTIONAL_MCPS.
-  bundledOptionalMcps = lib.cleanSourceWith {
-    src = ../optional-mcps;
-    filter = path: _type: !(lib.hasInfix "/__pycache__/" path);
-  };
-
   runtimeDeps = [
     hermesNpmLib.nodejs
     ripgrep
@@ -173,7 +165,6 @@ stdenv.mkDerivation (finalAttrs: {
     ln -s ${bundledOptionalSkills} $out/share/hermes-agent/optional-skills
     ln -s ${bundledPlugins} $out/share/hermes-agent/plugins
     ln -s ${bundledLocales} $out/share/hermes-agent/locales
-    ln -s ${bundledOptionalMcps} $out/share/hermes-agent/optional-mcps
     ln -s ${hermesTui}/lib/hermes-tui $out/ui-tui
 
     ${lib.concatMapStringsSep "\n"
@@ -184,7 +175,6 @@ stdenv.mkDerivation (finalAttrs: {
           --set HERMES_OPTIONAL_SKILLS $out/share/hermes-agent/optional-skills \
           --set HERMES_BUNDLED_PLUGINS $out/share/hermes-agent/plugins \
           --set HERMES_BUNDLED_LOCALES $out/share/hermes-agent/locales \
-          --set HERMES_OPTIONAL_MCPS $out/share/hermes-agent/optional-mcps \
           --set HERMES_TUI_DIR $out/ui-tui \
           --set-default HERMES_BIN $out/bin/hermes \
           --set HERMES_PYTHON ${hermesVenv}/bin/python3 \

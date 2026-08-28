@@ -347,8 +347,8 @@ def noninteractive_git_env(
 ) -> dict[str, str]:
     """Environment for *internal* git invocations that must never prompt.
 
-    Hermes shells out to git from many non-interactive contexts — MCP catalog
-    installs, plugin install/update, profile distribution staging, worktree
+    Hermes shells out to git from many non-interactive contexts — plugin
+    install/update, profile distribution staging, worktree
     base fetches, desktop review-pane fetch/push. When the remote is private,
     misconfigured, or requires auth, git's default behavior is to prompt on
     the inherited terminal (or via an askpass helper), which silently hangs

@@ -18,7 +18,6 @@ _spec.loader.exec_module(_mod)
 def test_ci_review_status_links_to_each_sensitive_file_change():
     results = _mod.build_results(
         ci_review=True,
-        mcp_catalog=False,
         supply_chain=False,
         label_present=False,
         ci_review_files='[".github/workflows/ci.yml", "apps/desktop/eslint.config.mjs"]',
@@ -37,7 +36,6 @@ def test_ci_review_status_links_to_each_sensitive_file_change():
 def test_approved_ci_review_is_visible_info():
     results = _mod.build_results(
         ci_review=True,
-        mcp_catalog=False,
         supply_chain=False,
         label_present=True,
         ci_review_files='[".github/workflows/ci.yml"]',

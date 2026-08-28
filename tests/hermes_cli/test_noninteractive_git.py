@@ -1,6 +1,6 @@
 """Non-interactive internal git invocations (port of openai/codex#34540/#34612).
 
-Internal git plumbing (MCP catalog installs, plugin install/update, profile
+Internal git plumbing (plugin install/update, profile
 distribution staging, worktree base fetches, desktop review-pane git/gh) must
 never block on a credential prompt: nobody is attached to answer it, so a
 prompt is an indefinite hang (or a dead wait until the timeout).
@@ -12,8 +12,6 @@ Two layers of coverage:
    server answers 401 with a Basic challenge; ``git clone`` against it with
    the hardened env fails *fast* with "terminal prompts disabled" instead of
    waiting for a username.
-3. Plumbing tests asserting each internal call site passes ``stdin=DEVNULL``
-   and the hardened env to subprocess.
 """
 
 from __future__ import annotations
@@ -107,64 +105,3 @@ def test_git_clone_against_auth_remote_fails_fast(tmp_path: Path):
     finally:
         server.shutdown()
         server.server_close()
-
-
-# ---------------------------------------------------------------------------
-# 3. Call-site plumbing: internal git callers pass stdin=DEVNULL + env
-# ---------------------------------------------------------------------------
-
-
-def _capture_run(monkeypatch, module, **result_kwargs):
-    """Monkeypatch ``module.subprocess.run`` recording every call's kwargs."""
-    calls: list[dict] = []
-
-    class _Result:
-        returncode = result_kwargs.get("returncode", 0)
-        stdout = result_kwargs.get("stdout", "")
-        stderr = result_kwargs.get("stderr", "")
-
-    def fake_run(argv, **kwargs):
-        calls.append({"argv": list(argv), **kwargs})
-        return _Result()
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
-    return calls
-
-
-def _assert_noninteractive(call: dict):
-    assert call.get("stdin") is subprocess.DEVNULL, call["argv"]
-    env = call.get("env")
-    assert env is not None and env.get("GIT_TERMINAL_PROMPT") == "0", call["argv"]
-
-
-
-
-
-
-
-
-def test_mcp_catalog_git_install_runs_noninteractively(monkeypatch, tmp_path):
-    from hermes_cli import mcp_catalog
-
-    calls = _capture_run(monkeypatch, mcp_catalog)
-    monkeypatch.setattr(mcp_catalog.shutil, "which", lambda name: "/usr/bin/git")
-    monkeypatch.setattr(mcp_catalog, "_install_root", lambda: tmp_path)
-
-    entry = mcp_catalog.CatalogEntry(
-        name="test-mcp",
-        description="",
-        source="official",
-        transport=mcp_catalog.TransportSpec(type="stdio", command="python"),
-        auth=mcp_catalog.AuthSpec(type="none"),
-        install=mcp_catalog.InstallSpec(
-            type="git",
-            url="https://github.com/example/mcp.git",
-            ref="main",
-            bootstrap=[],
-        ),
-    )
-    mcp_catalog._do_git_install(entry)
-    assert calls
-    for call in calls:
-        if call["argv"][0].endswith("git") or "git" in call["argv"][0]:
-            _assert_noninteractive(call)

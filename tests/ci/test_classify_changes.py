@@ -31,12 +31,11 @@ DEFAULT = {
     "uv_lock": True,
     "npm_lock": True,
     "installer": True,
-    "mcp_catalog": False,
     "ci_review": True,
 }
 
 
-def _lanes(python=False, frontend=False, scan=False, deps=False, uv_lock=False, npm_lock=False, installer=False, mcp_catalog=False, docker_meta=False, ci_review=False, python_prod=None) -> dict[str, bool]:
+def _lanes(python=False, frontend=False, scan=False, deps=False, uv_lock=False, npm_lock=False, installer=False, docker_meta=False, ci_review=False, python_prod=None) -> dict[str, bool]:
     # python_prod tracks python except for tests-only diffs; default it to
     # python so the majority of cases don't need to spell it out.
     return {
@@ -49,7 +48,6 @@ def _lanes(python=False, frontend=False, scan=False, deps=False, uv_lock=False, 
         "uv_lock": uv_lock,
         "npm_lock": npm_lock,
         "installer": installer,
-        "mcp_catalog": mcp_catalog,
         "ci_review": ci_review,
     }
 
@@ -104,14 +102,6 @@ CASES = {
     # Supply-chain lanes
     ".pth file → scan": (["evil.pth"], _lanes(python=True, scan=True)),
     "setup.py → scan": (["setup.py"], _lanes(python=True, scan=True)),
-    "mcp catalog manifest → mcp_catalog": (
-        ["optional-mcps/foo/manifest.yaml"],
-        _lanes(python=True, mcp_catalog=True),
-    ),
-    "mcp_catalog.py → mcp_catalog": (
-        ["hermes_cli/mcp_catalog.py"],
-        _lanes(python=True, scan=True, mcp_catalog=True),
-    ),
     # CI-sensitive files require explicit review label.
     "eslint config → ci_review": (
         ["apps/desktop/eslint.config.mjs"],

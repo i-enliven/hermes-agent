@@ -767,7 +767,7 @@ def _(rid, params: dict) -> dict:
             or isinstance(params.get("enabled_mcp_servers"), list)
         )
         if needs_cfg:
-            # Launch profile's MCP catalog, read BEFORE the home override
+            # Launch profile's MCP servers, read BEFORE the home override
             # flips config resolution to the target profile.
             launch_mcp = {}
             if isinstance(params.get("enabled_mcp_servers"), list):

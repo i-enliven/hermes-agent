@@ -1679,7 +1679,7 @@ def _(rid, params: dict) -> dict:
     # Optional profile scoping: cronjob() keys off HERMES_HOME, so scoping the
     # env override lets a per-profile cron store be listed/mutated even when
     # that profile runs a separate gateway. Omitted/None = the launch profile.
-    # Mirrors ``skills.manage`` / ``mcp.catalog``.
+    # Mirrors ``skills.manage``.
     profile = str(params.get("profile") or "").strip()
     token = None
     if profile:
@@ -1894,78 +1894,6 @@ def _(rid, params: dict) -> dict:
                 reset_hermes_home_override(token)
             except Exception:
                 pass
-
-
-@method("mcp.catalog")
-def _(rid, params: dict) -> dict:
-    """Bundled MCP catalog with per-profile install/enable state.
-
-    Params: optional ``profile`` (defaults to the launch profile). Result:
-    ``{servers: [{name, description, installed, enabled, requires: [env
-    keys], transport}]}`` — the same catalog `hermes mcp` offers, so
-    capability UIs can present the full menu and know which entries need
-    setup (missing requires) before they'll work.
-    """
-    profile = str(params.get("profile") or "").strip()
-    token = None
-    try:
-        if profile:
-            from hermes_cli.profiles import get_profile_dir
-            from hermes_constants import set_hermes_home_override
-
-            profile_dir = get_profile_dir(profile)
-            if not profile_dir or not profile_dir.is_dir():
-                return _err(rid, 4064, f"profile '{profile}' not found")
-            token = set_hermes_home_override(str(profile_dir))
-
-        from hermes_cli import mcp_catalog
-
-        out = []
-        for entry in mcp_catalog.list_catalog():
-            try:
-                requires = [str(k) for k in (getattr(entry, "env_keys", None) or [])]
-            except Exception:
-                requires = []
-            out.append(
-                {
-                    "name": entry.name,
-                    "description": getattr(entry, "description", "") or "",
-                    "installed": bool(mcp_catalog.is_installed(entry.name)),
-                    "enabled": bool(mcp_catalog.is_enabled(entry.name)),
-                    "requires": requires,
-                    # TransportSpec object — reduce to its kind string.
-                    "transport": str(
-                        getattr(getattr(entry, "transport", None), "kind", "")
-                        or getattr(entry, "transport", "")
-                        or "stdio"
-                    ),
-                }
-            )
-        return _ok(rid, {"servers": out})
-    except Exception as e:
-        return _err(rid, 5024, str(e))
-    finally:
-        if token is not None:
-            try:
-                from hermes_constants import reset_hermes_home_override
-
-                reset_hermes_home_override(token)
-            except Exception:
-                pass
-
-
-# ─── Per-profile MCP server lifecycle (mcp.servers.*) ────────────────────────
-#
-# Gateway RPCs mirroring the dashboard's REST surface
-# (hermes_cli/web_routers/mcp.py) so a desktop plugin can manage MCP servers for
-# ANY profile, not just the launch profile. Each accepts an optional ``profile``
-# param that scopes HERMES_HOME via set_hermes_home_override (omitted/None = the
-# launch profile) in a try/finally, exactly like ``skills.manage`` / ``mcp.catalog``.
-# All persistence reuses hermes_cli/mcp_config.py helpers — no logic is duplicated.
-# Shared helpers (resolve_profile / reset_profile / summarize_server) live in
-# tui_gateway.mcp_rpc_helpers and are imported at call time: these handlers are
-# rebound onto server.py's globals at install time, so a plain module-level def
-# here would not be reachable from the rebound handler body.
 
 
 @method("mcp.servers.list")

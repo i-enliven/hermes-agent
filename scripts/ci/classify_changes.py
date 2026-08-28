@@ -22,7 +22,6 @@ Lanes:
   must not run it.
 * ``npm_lock``    — semantic package-lock.json diff PR comment.
 * ``installer``   — PowerShell installer tests (Windows runner).
-* ``mcp_catalog`` — bundled MCP catalog / installer review.
 
 Docker is not a lane — it builds on push-to-main and release only,
 never per-PR.
@@ -66,10 +65,6 @@ _CI_REVIEW_PATHS = (".github/workflows/", ".github/actions/")
 _SCAN_EXTS = (".py", ".pth")
 _SCAN_FILES = {"setup.cfg", "pyproject.toml"}
 
-# MCP catalog files that require explicit security review.
-_MCP_CATALOG_PATHS = ("optional-mcps/",)
-_MCP_CATALOG_FILES = {"hermes_cli/mcp_catalog.py"}
-
 # Windows installer + its PowerShell tests. These only run on a Windows runner,
 # so they get their own lane rather than riding along with ``python``.
 _INSTALLER_PATHS = ("scripts/tests/",)
@@ -99,10 +94,6 @@ def _py_test_only(p: str) -> bool:
 
 def _is_scan(p: str) -> bool:
     return p.endswith(_SCAN_EXTS) or p in _SCAN_FILES
-
-
-def _is_mcp_catalog(p: str) -> bool:
-    return p.startswith(_MCP_CATALOG_PATHS) or p in _MCP_CATALOG_FILES
 
 
 def _is_installer(p: str) -> bool:
@@ -135,7 +126,6 @@ def classify(files: list[str]) -> dict[str, bool]:
         "uv_lock": any(f in ("pyproject.toml", "uv.lock") for f in files),
         "npm_lock": any(f.split("/")[-1] == "package-lock.json" for f in files),
         "installer": any(_is_installer(f) for f in files),
-        "mcp_catalog": any(_is_mcp_catalog(f) for f in files),
         "ci_review": any(_is_ci_review(f) for f in files),
     }
     if not files or any(f.startswith(".github/") for f in files):
@@ -150,7 +140,6 @@ def classify(files: list[str]) -> dict[str, bool]:
         ret["installer"] = True
         ret["ci_review"] = True
 
-        # explicitly skip mcp catalog here. it's not needed unless those files are modified.
     return ret
 
 

@@ -12,8 +12,7 @@ name: Supply Chain Audit
 # Path-gating is handled centrally by the ``ci.yml`` orchestrator's
 # ``detect`` job. The orchestrator passes ``scan`` / ``deps`` booleans as
 # inputs; this workflow's jobs gate on those inputs instead of re-computing
-# the diff. MCP catalog review was previously here but has moved to
-# ``review-labels.yml`` so it can be rerun independently.
+# the diff.
 #
 # Outputs:
 #   review_status      — JSON array of status objects consumed by the review
