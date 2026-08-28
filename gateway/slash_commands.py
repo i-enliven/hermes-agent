@@ -1511,9 +1511,9 @@ class GatewaySlashCommandsMixin:
         manually control failed/paused gateway adapters.
 
         Examples:
-            ``/platform list``           — show connected + failed/paused platforms
-            ``/platform pause whatsapp`` — stop the reconnect watcher hammering whatsapp
-            ``/platform resume whatsapp`` — re-queue a paused platform for retry
+            ``/platform list``        — show connected + failed/paused platforms
+            ``/platform pause slack`` — stop the reconnect watcher hammering slack
+            ``/platform resume slack`` — re-queue a paused platform for retry
         """
         text = (getattr(event, "content", "") or "").strip()
         # Strip the leading "/platform" (or "/PLATFORM") token if present

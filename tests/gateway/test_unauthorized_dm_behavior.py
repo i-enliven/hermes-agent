@@ -13,7 +13,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "TELEGRAM_ALLOWED_USERS",
         "TELEGRAM_GROUP_ALLOWED_USERS",
         "DISCORD_ALLOWED_USERS",
-        "WHATSAPP_ALLOWED_USERS",
         "SLACK_ALLOWED_USERS",
         "SIGNAL_ALLOWED_USERS",
         "SIGNAL_GROUP_ALLOWED_USERS",
@@ -27,7 +26,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "GATEWAY_ALLOWED_USERS",
         "TELEGRAM_ALLOW_ALL_USERS",
         "DISCORD_ALLOW_ALL_USERS",
-        "WHATSAPP_ALLOW_ALL_USERS",
         "SLACK_ALLOW_ALL_USERS",
         "SIGNAL_ALLOW_ALL_USERS",
         "EMAIL_ALLOW_ALL_USERS",
@@ -79,42 +77,6 @@ def _make_runner(platform: Platform, config: GatewayConfig):
     runner.hooks = SimpleNamespace(dispatch=AsyncMock(return_value=None))
     runner._sessions = {}
     return runner, adapter
-
-
-def test_whatsapp_lid_user_matches_phone_allowlist_via_modern_session_mapping(
-    monkeypatch, tmp_path,
-):
-    """Modern ``platforms/`` installs store bridge mappings under
-    ``platforms/whatsapp/session`` — the LID→phone resolution (and therefore
-    the allowlist match) must work there too, not just the legacy layout.
-    Regression guard for the silently-dropped-LID-sender bug (#36664)."""
-    _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("WHATSAPP_ALLOWED_USERS", "15550000001")
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-    session_dir = tmp_path / "platforms" / "whatsapp" / "session"
-    session_dir.mkdir(parents=True)
-    (session_dir / "lid-mapping-15550000001.json").write_text(
-        '"900000000000001"', encoding="utf-8",
-    )
-    (session_dir / "lid-mapping-900000000000001_reverse.json").write_text(
-        '"15550000001"', encoding="utf-8",
-    )
-
-    runner, _adapter = _make_runner(
-        Platform.WHATSAPP,
-        GatewayConfig(platforms={Platform.WHATSAPP: PlatformConfig(enabled=True)}),
-    )
-
-    source = SessionSource(
-        platform=Platform.WHATSAPP,
-        user_id="900000000000001@lid",
-        chat_id="900000000000001@lid",
-        user_name="tester",
-        chat_type="dm",
-    )
-
-    assert runner._is_user_authorized(source) is True
 
 
 def test_simplex_allowlist_accepts_display_name(monkeypatch):
@@ -216,23 +178,23 @@ def test_telegram_group_users_mixed_sender_and_legacy_chat(monkeypatch):
 async def test_unauthorized_dm_pairs_by_default(monkeypatch):
     _clear_auth_env(monkeypatch)
     config = GatewayConfig(
-        platforms={Platform.WHATSAPP: PlatformConfig(enabled=True)},
+        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True)},
     )
-    runner, adapter = _make_runner(Platform.WHATSAPP, config)
+    runner, adapter = _make_runner(Platform.TELEGRAM, config)
     runner.pairing_store.generate_code.return_value = "ABC12DEF"
 
     result = await runner._handle_message(
         _make_event(
-            Platform.WHATSAPP,
-            "15551234567@s.whatsapp.net",
-            "15551234567@s.whatsapp.net",
+            Platform.TELEGRAM,
+            "123456789",
+            "123456789",
         )
     )
 
     assert result is None
     runner.pairing_store.generate_code.assert_called_once_with(
-        "whatsapp",
-        "15551234567@s.whatsapp.net",
+        "telegram",
+        "123456789",
         "tester",
     )
     adapter.send.assert_awaited_once()
@@ -240,23 +202,23 @@ async def test_unauthorized_dm_pairs_by_default(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_unauthorized_whatsapp_dm_can_be_ignored(monkeypatch):
+async def test_unauthorized_dm_can_be_ignored(monkeypatch):
     _clear_auth_env(monkeypatch)
     config = GatewayConfig(
         platforms={
-            Platform.WHATSAPP: PlatformConfig(
+            Platform.TELEGRAM: PlatformConfig(
                 enabled=True,
                 extra={"unauthorized_dm_behavior": "ignore"},
             ),
         },
     )
-    runner, adapter = _make_runner(Platform.WHATSAPP, config)
+    runner, adapter = _make_runner(Platform.TELEGRAM, config)
 
     result = await runner._handle_message(
         _make_event(
-            Platform.WHATSAPP,
-            "15551234567@s.whatsapp.net",
-            "15551234567@s.whatsapp.net",
+            Platform.TELEGRAM,
+            "123456789",
+            "123456789",
         )
     )
 

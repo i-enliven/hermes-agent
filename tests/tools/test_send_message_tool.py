@@ -683,40 +683,6 @@ class TestMatrixMediaLiveAdapterReuse:
 # ---------------------------------------------------------------------------
 
 
-class TestSendToPlatformWhatsapp:
-    def test_whatsapp_routes_via_local_bridge_sender(self):
-        """WhatsApp delivery routes through the plugin's registry
-        standalone_sender_fn (was tools.send_message_tool._send_whatsapp
-        before the #41112 plugin migration)."""
-        from hermes_cli.plugins import discover_plugins
-        from gateway.platform_registry import platform_registry
-        discover_plugins()
-        chat_id = "test-user@lid"
-        async_mock = AsyncMock(return_value={"success": True, "platform": "whatsapp", "chat_id": chat_id, "message_id": "abc123"})
-
-        wa_entry = platform_registry.get("whatsapp")
-        original_sender = wa_entry.standalone_sender_fn
-        wa_entry.standalone_sender_fn = async_mock
-        try:
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.WHATSAPP,
-                    SimpleNamespace(enabled=True, token=None, extra={"bridge_port": 3000}),
-                    chat_id,
-                    "hello from hermes",
-                )
-            )
-        finally:
-            wa_entry.standalone_sender_fn = original_sender
-
-        assert result["success"] is True
-        # _registry_standalone_send passes (pconfig, chat_id, message, thread_id=None)
-        async_mock.assert_awaited_once()
-        _call = async_mock.await_args
-        assert _call.args[1] == chat_id
-        assert _call.args[2] == "hello from hermes"
-
-
 class TestSendTelegramHtmlDetection:
     """Verify that messages containing HTML tags are sent with parse_mode=HTML
     and that plain / markdown messages use MarkdownV2."""
@@ -864,8 +830,8 @@ class TestParseTargetRef:
 
     The tables below cover every explicit target form each platform accepts,
     the forms that must fall through to directory resolution, and the
-    cross-platform scoping guards (a Slack ID is not a Discord target, a
-    WhatsApp JID is not a Signal target, ...).
+    cross-platform scoping guards (a Slack ID is not a Discord target,
+    etc.).
     """
 
     def test_explicit_targets_round_trip_chat_and_thread(self):
@@ -886,17 +852,7 @@ class TestParseTargetRef:
             ("signal", "  group:abc123  ", "group:abc123", None),
             ("signal", "15551234567", "15551234567", None),
             ("sms", "+15551234567", "+15551234567", None),
-            ("whatsapp", "+15551234567", "+15551234567", None),
             ("photon", "+15551234567", "+15551234567", None),
-            # WhatsApp native JIDs. Regression: group (@g.us) and linked-identity
-            # (@lid) JIDs matched no branch and silently fell through to the
-            # configured home DM instead of the requested group.
-            ("whatsapp", "120363408391911677@g.us", "120363408391911677@g.us", None),
-            ("whatsapp", "19255551234@s.whatsapp.net", "19255551234@s.whatsapp.net", None),
-            ("whatsapp", "149606612619433@lid", "149606612619433@lid", None),
-            ("whatsapp", "status@broadcast", "status@broadcast", None),
-            ("whatsapp", "120363000000000000@newsletter",
-             "120363000000000000@newsletter", None),
             # Slack: channel/group/DM ids, thread ts, and user targets that the
             # caller must open as a DM.
             ("slack", "C0B0QV5434G:171.000001", "C0B0QV5434G", "171.000001"),
@@ -927,7 +883,6 @@ class TestParseTargetRef:
             ("signal", "+1234567890123456"),     # E.164 too long
             ("signal", "+12abc4567890"),         # non-numeric
             ("signal", "+"),
-            ("whatsapp", "general"),             # friendly name, not a JID
             ("slack", "W123ABCDEF"),             # workspace id is not sendable
             ("slack", "c0b0qv5434g"),            # lowercase
             ("slack", "C123"),                   # too short

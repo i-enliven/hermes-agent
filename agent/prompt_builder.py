@@ -743,38 +743,6 @@ STEER_CHANNEL_NOTE += (
 DEVELOPER_ROLE_MODELS = ("gpt-5", "codex")
 
 PLATFORM_HINTS = {
-    "whatsapp": (
-        "You are on a text messaging communication platform, WhatsApp. "
-        "Standard markdown (**bold**, *italic*, ~~strike~~, # headers, "
-        "`code`, ```code blocks```, [links](url)) is auto-converted to "
-        "WhatsApp's native syntax (*bold*, _italic_, ~strike~, monospace) — "
-        "feel free to write in markdown, and use bullet lists ('- item') "
-        "freely. Tables are NOT supported — prefer bullet lists or labeled "
-        "key:value pairs. "
-        "You can send media files natively: to deliver a file to the user, "
-        "include MEDIA:/absolute/path/to/file in your response. The file "
-        "will be sent as a native WhatsApp attachment — images (.jpg, .png, "
-        ".webp) appear as photos, videos (.mp4, .mov) play inline, and other "
-        "files arrive as downloadable documents. You can also include image "
-        "URLs in markdown format ![alt](url) and they will be sent as photos."
-    ),
-    "whatsapp_cloud": (
-        "You are on a text messaging communication platform, WhatsApp "
-        "(via Meta's official Business Cloud API). Standard markdown "
-        "(**bold**, ~~strike~~, # headers, [links](url)) is auto-converted "
-        "to WhatsApp's native syntax (*bold*, ~strike~, etc.) — feel free "
-        "to write in markdown. Tables are NOT supported — prefer bullet "
-        "lists or labeled key:value pairs. "
-        "You can send media files natively: include MEDIA:/absolute/path/to/file "
-        "in your response. Images (.jpg, .png) become photo attachments, "
-        "videos (.mp4) play inline, audio (.mp3, .ogg) sends as voice/audio "
-        "messages, other files arrive as documents. Image URLs in markdown "
-        "format ![alt](url) also work. "
-        "IMPORTANT: this platform has a 24-hour conversation window — if the "
-        "user hasn't messaged in 24h, free-form replies are refused by Meta "
-        "(error 131047). This rarely matters for live chat, but is worth "
-        "knowing if you're scheduling a delayed message."
-    ),
     "telegram": (
         "You are on a text messaging communication platform, Telegram. "
         "Standard Markdown is automatically converted to Telegram formatting. "

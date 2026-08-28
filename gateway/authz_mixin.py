@@ -18,14 +18,9 @@ import time -> no import cycle. The lazy import preserves the exact logger name
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from gateway.config import Platform
 from gateway.session import SessionSource
-from gateway.whatsapp_identity import (
-    expand_whatsapp_aliases as _expand_whatsapp_auth_aliases,
-    normalize_whatsapp_identifier as _normalize_whatsapp_identifier,
-)
 
 
 def _auth_env(name: str, default: str = "") -> str:
@@ -513,8 +508,6 @@ class GatewayAuthorizationMixin:
         platform_env_map = {
             Platform.TELEGRAM: "TELEGRAM_ALLOWED_USERS",
             Platform.DISCORD: "DISCORD_ALLOWED_USERS",
-            Platform.WHATSAPP: "WHATSAPP_ALLOWED_USERS",
-            Platform.WHATSAPP_CLOUD: "WHATSAPP_CLOUD_ALLOWED_USERS",
             Platform.SLACK: "SLACK_ALLOWED_USERS",
             Platform.SIGNAL: "SIGNAL_ALLOWED_USERS",
             Platform.EMAIL: "EMAIL_ALLOWED_USERS",
@@ -540,8 +533,6 @@ class GatewayAuthorizationMixin:
         platform_allow_all_map = {
             Platform.TELEGRAM: "TELEGRAM_ALLOW_ALL_USERS",
             Platform.DISCORD: "DISCORD_ALLOW_ALL_USERS",
-            Platform.WHATSAPP: "WHATSAPP_ALLOW_ALL_USERS",
-            Platform.WHATSAPP_CLOUD: "WHATSAPP_CLOUD_ALLOW_ALL_USERS",
             Platform.SLACK: "SLACK_ALLOW_ALL_USERS",
             Platform.SIGNAL: "SIGNAL_ALLOW_ALL_USERS",
             Platform.EMAIL: "EMAIL_ALLOW_ALL_USERS",
@@ -761,20 +752,6 @@ class GatewayAuthorizationMixin:
         if "@" in user_id:
             check_ids.add(user_id.split("@")[0])
 
-        # WhatsApp (Baileys + Cloud): resolve phone↔LID / JID aliases so
-        # device-suffix and bare-phone allowlist entries match the same principal.
-        if source.platform in {Platform.WHATSAPP, Platform.WHATSAPP_CLOUD}:
-            normalized_allowed_ids = set()
-            for allowed_id in allowed_ids:
-                normalized_allowed_ids.update(_expand_whatsapp_auth_aliases(allowed_id))
-            if normalized_allowed_ids:
-                allowed_ids = normalized_allowed_ids
-
-            check_ids.update(_expand_whatsapp_auth_aliases(user_id))
-            normalized_user_id = _normalize_whatsapp_identifier(user_id)
-            if normalized_user_id:
-                check_ids.add(normalized_user_id)
-
         # SimpleX: SIMPLEX_ALLOWED_USERS accepts either the numeric contactId
         # or the contact's display name. The adapter sets user_id=contactId for
         # stability across renames, but the SimpleX UI never surfaces the
@@ -863,8 +840,6 @@ class GatewayAuthorizationMixin:
             platform_env_map = {
                 Platform.TELEGRAM: "TELEGRAM_ALLOWED_USERS",
                 Platform.DISCORD:  "DISCORD_ALLOWED_USERS",
-                Platform.WHATSAPP: "WHATSAPP_ALLOWED_USERS",
-                Platform.WHATSAPP_CLOUD: "WHATSAPP_CLOUD_ALLOWED_USERS",
                 Platform.SLACK:    "SLACK_ALLOWED_USERS",
                 Platform.SIGNAL:   "SIGNAL_ALLOWED_USERS",
                 Platform.EMAIL:    "EMAIL_ALLOWED_USERS",

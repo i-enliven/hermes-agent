@@ -110,25 +110,6 @@ class TestBlueBubblesParity:
         assert got == expected
 
 
-class TestWhatsAppCloudParity:
-    """Historical _ext_for_mime: overrides → mimetypes → None."""
-
-    CASES = {
-        # Pinned overrides (Meta-sent types the STT pipeline needs pinned).
-        "audio/ogg": ".ogg",         # NOT mimetypes' .oga
-        "audio/x-opus+ogg": ".ogg",
-        "audio/opus": ".ogg",
-        "audio/mp4": ".m4a",
-        "audio/x-m4a": ".m4a",
-        "image/jpeg": ".jpg",        # NOT the legacy .jpe
-    }
-
-    @pytest.mark.parametrize("mime,expected", sorted(CASES.items()))
-    def test_pinned_overrides(self, mime, expected):
-        from gateway.platforms.whatsapp_cloud import _ext_for_mime
-        assert _ext_for_mime(mime) == expected
-
-
 class TestSignalParity:
     """Historical _EXT_TO_MIME table from signal.py, verbatim."""
 

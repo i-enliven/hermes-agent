@@ -363,7 +363,7 @@ def _live_agent(idle_seconds: float = 1.0) -> MagicMock:
 async def test_request_restart_skips_wait_when_only_wedged_turns(monkeypatch):
     """A turn idle past agent.gateway_timeout must not defer the restart.
 
-    Regression: a WhatsApp turn wedged for 30+ min pinned `hermes update`
+    Regression: a gateway turn wedged for 30+ min pinned `hermes update`
     in "draining" for the full restart_after_turn_timeout cap — the
     after-turn wait counted the wedged agent as active work even though
     the inactivity watchdog had already declared it dead (Aug 2026).
@@ -373,7 +373,7 @@ async def test_request_restart_skips_wait_when_only_wedged_turns(monkeypatch):
     runner.stop = AsyncMock()
     # A cap long enough that the test would hang without the wedge bypass.
     runner._restart_after_turn_timeout = 300.0
-    runner._running_agents["agent:main:whatsapp:dm:1"] = _wedged_agent()
+    runner._running_agents["agent:main:discord:dm:1"] = _wedged_agent()
 
     assert runner.request_restart(detached=False, via_service=True) is True
     await asyncio.wait_for(runner._restart_task, timeout=5.0)
@@ -394,7 +394,7 @@ async def test_request_restart_still_waits_for_live_turn_alongside_wedged(monkey
     runner._launch_detached_restart_command = AsyncMock()
     runner._restart_after_turn_timeout = 300.0
     live_key = "agent:main:telegram:dm:2"
-    runner._running_agents["agent:main:whatsapp:dm:1"] = _wedged_agent()
+    runner._running_agents["agent:main:discord:dm:1"] = _wedged_agent()
     runner._running_agents[live_key] = _live_agent()
 
     assert runner.request_restart(detached=False, via_service=True) is True

@@ -373,13 +373,13 @@ class TestChannelAliases:
     def test_alias_injects_undiscovered_group(self, tmp_path):
         """A group named in the alias file but not yet seen in any session is
         still addressable by name (pre-naming before first traffic)."""
-        cache_file = _write_directory(tmp_path, {"whatsapp": []})
+        cache_file = _write_directory(tmp_path, {"telegram": []})
         with patch("gateway.channel_directory.DIRECTORY_PATH", cache_file), \
-             self._setup_aliases(tmp_path, {"whatsapp": {"999@g.us": "marketing"}}):
-            assert resolve_channel_name("whatsapp", "marketing") == "999@g.us"
-            entries = load_directory()["platforms"]["whatsapp"]
-            injected = [e for e in entries if e["id"] == "999@g.us"]
-            assert injected and injected[0]["type"] == "group"
+             self._setup_aliases(tmp_path, {"telegram": {"-100999": "marketing"}}):
+            assert resolve_channel_name("telegram", "marketing") == "-100999"
+            entries = load_directory()["platforms"]["telegram"]
+            injected = [e for e in entries if e["id"] == "-100999"]
+            assert injected and injected[0]["type"] == "dm"
 
 
     def test_alias_persists_through_rebuild(self, tmp_path, monkeypatch):
@@ -387,14 +387,14 @@ class TestChannelAliases:
         they survive the periodic regeneration, not just live reads."""
         cache_file = tmp_path / "channel_directory.json"
         monkeypatch.setattr("gateway.channel_directory._build_from_sessions",
-                            lambda plat: [{"id": "120363@g.us", "name": "120363",
+                            lambda plat: [{"id": "-100120363", "name": "120363",
                                            "type": "group", "thread_id": None}]
-                            if plat == "whatsapp" else [])
+                            if plat == "telegram" else [])
         with patch("gateway.channel_directory.DIRECTORY_PATH", cache_file), \
-             self._setup_aliases(tmp_path, {"whatsapp": {"120363@g.us": "general"}}):
+             self._setup_aliases(tmp_path, {"telegram": {"-100120363": "general"}}):
             asyncio.run(build_channel_directory({}))
             on_disk = json.loads(cache_file.read_text())
-        names = [e["name"] for e in on_disk["platforms"]["whatsapp"]
-                 if e["id"] == "120363@g.us"]
+        names = [e["name"] for e in on_disk["platforms"]["telegram"]
+                 if e["id"] == "-100120363"]
         assert names == ["general"]
 

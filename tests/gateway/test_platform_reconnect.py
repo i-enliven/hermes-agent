@@ -412,7 +412,7 @@ class TestPlatformSlashCommand:
     async def test_list_shows_connected_and_paused(self):
         runner = _make_runner()
         runner.adapters[Platform.DISCORD] = StubAdapter(platform=Platform.DISCORD)
-        runner._failed_platforms[Platform.WHATSAPP] = {
+        runner._failed_platforms[Platform.TELEGRAM] = {
             "config": PlatformConfig(enabled=True, token="t"),
             "attempts": 10,
             "next_retry": float("inf"),
@@ -421,23 +421,23 @@ class TestPlatformSlashCommand:
         }
         out = await runner._handle_platform_command(self._make_event("/platform list"))
         assert "discord" in out
-        assert "whatsapp" in out
+        assert "telegram" in out
         assert "PAUSED" in out
         assert "not paired" in out
 
     @pytest.mark.asyncio
     async def test_pause_command_pauses_queued_platform(self):
         runner = _make_runner()
-        runner._failed_platforms[Platform.WHATSAPP] = {
+        runner._failed_platforms[Platform.TELEGRAM] = {
             "config": PlatformConfig(enabled=True, token="t"),
             "attempts": 2,
             "next_retry": time.monotonic() + 30,
         }
         out = await runner._handle_platform_command(
-            self._make_event("/platform pause whatsapp")
+            self._make_event("/platform pause telegram")
         )
         assert "paused" in out.lower()
-        assert runner._failed_platforms[Platform.WHATSAPP]["paused"] is True
+        assert runner._failed_platforms[Platform.TELEGRAM]["paused"] is True
 
 
 # --- Supervised task wrapper (_spawn_supervised) ---

@@ -22,13 +22,13 @@ def test_does_not_resurrect_disconnected_platforms_from_session_history(tmp_path
 
     with patch("gateway.channel_directory._build_from_sessions", side_effect=fake_build_from_sessions), \
          patch("gateway.channel_directory.DIRECTORY_PATH", cache_file):
-        # Only telegram is connected; no discord/slack/whatsapp adapters.
+        # Only telegram is connected; no discord/slack adapters.
         directory = asyncio.run(build_channel_directory({Platform.TELEGRAM: object()}))
 
     plats = directory["platforms"]
     assert "telegram" in plats
     # Disconnected platforms must not appear via session discovery.
-    for stale in ("whatsapp", "signal", "matrix"):
+    for stale in ("signal", "matrix"):
         assert stale not in plats, f"{stale} resurrected from session history"
     assert set(calls) <= {"telegram"}
 

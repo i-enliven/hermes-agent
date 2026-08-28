@@ -96,7 +96,7 @@ class TestYAMLNormalisation:
         config = {
             "display": {
                 "platforms": {
-                    "whatsapp": {
+                    "telegram": {
                         "thinking_progress": "generic",
                         "interim_assistant_messages": "generic",
                         "long_running_notifications": "generic",
@@ -104,15 +104,15 @@ class TestYAMLNormalisation:
                 }
             }
         }
-        assert resolve_display_setting(config, "whatsapp", "thinking_progress") is False
-        assert resolve_display_setting(config, "whatsapp", "interim_assistant_messages") is False
-        assert resolve_display_setting(config, "whatsapp", "long_running_notifications") == "generic"
+        assert resolve_display_setting(config, "telegram", "thinking_progress") is False
+        assert resolve_display_setting(config, "telegram", "interim_assistant_messages") is False
+        assert resolve_display_setting(config, "telegram", "long_running_notifications") == "generic"
 
     def test_thinking_progress_string_false_normalised_to_false(self):
         from gateway.display_config import resolve_display_setting
 
-        config = {"display": {"platforms": {"whatsapp": {"thinking_progress": "false"}}}}
-        assert resolve_display_setting(config, "whatsapp", "thinking_progress") is False
+        config = {"display": {"platforms": {"telegram": {"thinking_progress": "false"}}}}
+        assert resolve_display_setting(config, "telegram", "thinking_progress") is False
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ class TestPlatformDefaults:
         """Signal, BlueBubbles, etc. default to 'off' tool progress."""
         from gateway.display_config import resolve_display_setting
 
-        for plat in ("signal", "bluebubbles", "weixin", "wecom", "dingtalk", "whatsapp_cloud"):
+        for plat in ("signal", "bluebubbles", "weixin", "wecom", "dingtalk"):
             assert resolve_display_setting({}, plat, "tool_progress") == "off", plat
 
 

@@ -1763,10 +1763,6 @@ class TestSlackAudioExtResolution:
         assert ext in {".mp4", ".m4a"}
         assert ext in _slack_mod._SLACK_STT_SUPPORTED_EXTS
 
-    def test_whatsapp_ogg_preserved(self):
-        f = {"name": "voice.ogg", "mimetype": "audio/ogg"}
-        assert _slack_mod._resolve_slack_audio_ext(f, f["mimetype"]) == ".ogg"
-
 
 class TestSlackVoiceClipDetection:
     """Unit coverage for the video/mp4-mislabeled voice-clip detector."""

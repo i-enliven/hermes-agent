@@ -246,8 +246,8 @@ class TestReadmeSentinel:
 
     def test_save_writes_readme_sentinel_first(self, tmp_path):
         store = _make_store(tmp_path)
-        store._entries["agent:main:whatsapp:dm:99"] = _entry(
-            "agent:main:whatsapp:dm:99", age_days=1
+        store._entries["agent:main:telegram:dm:99"] = _entry(
+            "agent:main:telegram:dm:99", age_days=1
         )
         store._save()
 

@@ -997,7 +997,7 @@ def redact_sensitive_text(
     if "&" in text and "=" in text:
         text = _redact_form_body(text)
 
-    # E.164 phone numbers (Signal, WhatsApp)
+    # E.164 phone numbers (Signal)
     if "+" in text:
         def _redact_phone(m):
             phone = m.group(1)

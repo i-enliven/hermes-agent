@@ -2551,13 +2551,6 @@ from gateway.restart import (
 )
 
 
-from gateway.whatsapp_identity import (
-    canonical_whatsapp_identifier as _canonical_whatsapp_identifier,  # noqa: F401
-    expand_whatsapp_aliases as _expand_whatsapp_auth_aliases,
-    normalize_whatsapp_identifier as _normalize_whatsapp_identifier,
-)
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -2566,7 +2559,6 @@ _OWN_POLICY_OPEN_ENV = {
     Platform.WEIXIN: ("WEIXIN_DM_POLICY", "WEIXIN_GROUP_POLICY", "WEIXIN_ALLOW_ALL_USERS"),
     Platform.YUANBAO: ("YUANBAO_DM_POLICY", "YUANBAO_GROUP_POLICY", "YUANBAO_ALLOW_ALL_USERS"),
     Platform.QQBOT: (None, None, "QQ_ALLOW_ALL_USERS"),
-    Platform.WHATSAPP: ("WHATSAPP_DM_POLICY", "WHATSAPP_GROUP_POLICY", "WHATSAPP_ALLOW_ALL_USERS"),
 }
 
 
@@ -11816,7 +11808,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         # Warn if no user allowlists are configured and open access is not opted in
         _builtin_allowed_vars = (
             "TELEGRAM_ALLOWED_USERS", "DISCORD_ALLOWED_USERS",
-            "WHATSAPP_ALLOWED_USERS", "WHATSAPP_CLOUD_ALLOWED_USERS",
             "SLACK_ALLOWED_USERS",
             "SIGNAL_ALLOWED_USERS", "SIGNAL_GROUP_ALLOWED_USERS",
             "TELEGRAM_GROUP_ALLOWED_USERS",
@@ -11835,7 +11826,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         )
         _builtin_allow_all_vars = (
             "TELEGRAM_ALLOW_ALL_USERS", "DISCORD_ALLOW_ALL_USERS",
-            "WHATSAPP_ALLOW_ALL_USERS", "WHATSAPP_CLOUD_ALLOW_ALL_USERS",
             "SLACK_ALLOW_ALL_USERS",
             "SIGNAL_ALLOW_ALL_USERS", "EMAIL_ALLOW_ALL_USERS",
             "SMS_ALLOW_ALL_USERS", "MATTERMOST_ALLOW_ALL_USERS",
@@ -15060,19 +15050,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             logger.debug("Platform registry lookup for '%s' failed: %s", platform.value, e)
         # Fall through to built-in adapters below
 
-        if platform == Platform.WHATSAPP_CLOUD:
-            from gateway.platforms.whatsapp_cloud import (
-                WhatsAppCloudAdapter,
-                check_whatsapp_cloud_requirements,
-            )
-            if not check_whatsapp_cloud_requirements():
-                logger.warning(
-                    "WhatsApp Cloud: aiohttp/httpx missing — reinstall hermes-agent"
-                )
-                return None
-            return WhatsAppCloudAdapter(config)
-        
-        elif platform == Platform.SIGNAL:
+        if platform == Platform.SIGNAL:
             from gateway.platforms.signal import (
                 SignalAdapter,
                 check_signal_requirements,
@@ -22745,7 +22723,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
     # ``allow_update_command=True`` on their ``PlatformEntry`` and are
     # honored via the registry fallback at ``_handle_update_command`` below.
     _UPDATE_ALLOWED_PLATFORMS = frozenset({
-        Platform.TELEGRAM, Platform.SLACK, Platform.WHATSAPP,
+        Platform.TELEGRAM, Platform.SLACK,
         Platform.SIGNAL, Platform.MATRIX,
         Platform.EMAIL, Platform.SMS, Platform.DINGTALK,
         Platform.FEISHU, Platform.WECOM, Platform.WECOM_CALLBACK, Platform.WEIXIN, Platform.BLUEBUBBLES, Platform.QQBOT, Platform.LOCAL,

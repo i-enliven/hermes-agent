@@ -2104,14 +2104,6 @@ DEFAULT_CONFIG = {
         },
     },
 
-    # WhatsApp platform settings (gateway mode)
-    "whatsapp": {
-        # Reply prefix prepended to every outgoing WhatsApp message.
-        # Default (None) uses the built-in "⚕ *Hermes Agent*" header.
-        # Set to "" (empty string) to disable the header entirely.
-        # Supports \n for newlines, e.g. "🤖 *My Bot*\n──────\n"
-    },
-
     # Telegram platform settings (gateway mode)
     "telegram": {
         "reactions": False,            # Add 👀/✅/❌ reactions to messages during processing
@@ -2218,7 +2210,7 @@ DEFAULT_CONFIG = {
 
     # Per-platform system-prompt hint overrides. Lets an admin append to or
     # replace Hermes' built-in platform hint for a single messaging platform
-    # (WhatsApp, Slack, Telegram, ...) without affecting other platforms.
+    # (Slack, Telegram, Teams, ...) without affecting other platforms.
     # Useful for enterprise/managed profiles that ship platform-aware skills.
     # Each key is a platform name; the value is either:
     #   { "append": "extra text" }   — keep the default hint, append text
@@ -2226,7 +2218,7 @@ DEFAULT_CONFIG = {
     #   "extra text"                 — shorthand for { "append": ... }
     # `replace` wins over `append` if both are given. Example:
     #   platform_hints:
-    #     whatsapp:
+    #     slack:
     #       append: >
     #         When tabular output would be useful, invoke the
     #         table_formatting skill instead of emitting a Markdown table.
@@ -2355,7 +2347,7 @@ DEFAULT_CONFIG = {
         #     into it, and that thread's session is seeded so the user's reply
         #     in-thread continues with full context. Each continuable job gets
         #     its own scrollback, isolated from the parent channel.
-        #   - DM-only platforms (WhatsApp / Signal / SMS): no threads exist, so
+        #   - DM-only platforms (Signal / SMS): no threads exist, so
         #     the brief is mirrored into the origin DM session instead — the
         #     DM itself is the continuation surface.
         # Both paths ride the shipped gateway.mirror.mirror_to_session and are

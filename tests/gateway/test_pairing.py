@@ -353,34 +353,6 @@ class TestApprovalFlow:
             assert code != next_code
 
 
-    def test_whatsapp_legacy_raw_jid_approval_survives_alias_flip(self, tmp_path, monkeypatch):
-        mapping_dir = tmp_path / "whatsapp" / "session"
-        mapping_dir.mkdir(parents=True, exist_ok=True)
-        (mapping_dir / "lid-mapping-999999999999999.json").write_text(
-            json.dumps("15551234567@s.whatsapp.net"),
-            encoding="utf-8",
-        )
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        approved_path = tmp_path / "whatsapp-approved.json"
-        approved_path.write_text(
-            json.dumps(
-                {
-                    "15551234567@s.whatsapp.net": {
-                        "user_name": "Legacy Alice",
-                        "approved_at": time.time(),
-                    }
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-
-        with patch("gateway.pairing.PAIRING_DIR", tmp_path):
-            store = PairingStore()
-            assert store.is_approved("whatsapp", "999999999999999@lid") is True
-
-
 # ---------------------------------------------------------------------------
 # Lockout after failed attempts
 # ---------------------------------------------------------------------------

@@ -152,13 +152,6 @@ _PLATFORM_DEFAULTS: dict[str, dict[str, Any]] = {
 
     # Tier 3 — no edit support, progress messages are permanent
     "signal":          _TIER_LOW,
-    "whatsapp":        _TIER_MEDIUM,  # Baileys bridge supports /edit
-    # WhatsApp Cloud API: Meta added message editing in 2023 but the
-    # Hermes Cloud adapter doesn't implement edit_message yet, so we
-    # stay on TIER_LOW (tool_progress off) to avoid spamming each
-    # status update as a separate message. Promote to TIER_MEDIUM once
-    # Cloud's edit_message lands.
-    "whatsapp_cloud":  _TIER_LOW,
     # Photon (managed iMessage over the gRPC sidecar) and BlueBubbles are both
     # permanent-message iMessage inboxes with no message-edit support, so both
     # stay TIER_LOW. This keeps tool progress, interim scratch commentary,

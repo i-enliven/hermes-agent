@@ -41,18 +41,10 @@ _NUMERIC_TOPIC_RE = _TELEGRAM_TOPIC_TARGET_RE
 # below and falls through to channel-name resolution, which has no way to
 # resolve a raw phone number. Keeping the '+' preserves the E.164 form that
 # downstream adapters (signal, etc.) expect.
-_PHONE_PLATFORMS = frozenset({"photon", "signal", "sms", "whatsapp"})
+_PHONE_PLATFORMS = frozenset({"photon", "signal", "sms"})
 _E164_TARGET_RE = re.compile(r"^\s*\+(\d{7,15})\s*$")
 # Photon DM chat GUID (mirrors _DM_CHAT_GUID_RE in the photon adapter).
 _PHOTON_DM_GUID_RE = re.compile(r"^any;-;\+\d{6,}$")
-# WhatsApp JIDs: group chats (<digits>@g.us), individual users
-# (<phone>@s.whatsapp.net), linked identities (<id>@lid), and broadcast /
-# newsletter chats. These are explicit native targets the bridge accepts
-# verbatim — they must NOT fall through to home-channel resolution.
-_WHATSAPP_JID_RE = re.compile(
-    r"^\s*[\w-]+@(?:g\.us|s\.whatsapp\.net|lid|broadcast|newsletter)\s*$",
-    re.IGNORECASE,
-)
 # Email addresses — a valid email like "user@domain.com" should be treated as
 # an explicit target for the email platform, not fall through to channel-name
 # resolution which has no way to resolve a raw address.
@@ -588,12 +580,6 @@ def _parse_target_ref(platform_name: str, target_ref: str):
         match = _EMAIL_TARGET_RE.fullmatch(target_ref)
         if match:
             return target_ref.strip(), None, True
-    if platform_name == "whatsapp":
-        # Native WhatsApp JIDs (group @g.us, user @s.whatsapp.net, @lid, etc.)
-        # are explicit targets — pass through verbatim. E.164 '+' numbers fall
-        # through to the _PHONE_PLATFORMS handler below.
-        if _WHATSAPP_JID_RE.fullmatch(target_ref):
-            return target_ref.strip(), None, True
     stripped_target = target_ref.strip()
     if platform_name == "signal" and stripped_target.startswith("group:"):
         group_id = stripped_target[len("group:"):].strip()
@@ -603,7 +589,7 @@ def _parse_target_ref(platform_name: str, target_ref: str):
     if platform_name in _PHONE_PLATFORMS:
         match = _E164_TARGET_RE.fullmatch(target_ref)
         if match:
-            # Preserve the leading '+' — signal-cli and sms/whatsapp adapters
+            # Preserve the leading '+' — signal-cli and sms adapters
             # expect E.164 format for direct recipients.
             return target_ref.strip(), None, True
     if platform_name == "photon":
@@ -1171,56 +1157,6 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
             last_result = result
         return last_result
 
-    # --- WhatsApp: native media attachment support via the registry's
-    # standalone_sender_fn (plugins/platforms/whatsapp/adapter.py::_standalone_send).
-    # The plugin uploads each file through the local Baileys bridge /send-media
-    # endpoint so images/videos/audio arrive as native bubbles, not documents. #41112
-    if platform == Platform.WHATSAPP and media_files:
-        from gateway.platform_registry import platform_registry as _pr_wa
-        from hermes_cli.plugins import discover_plugins as _dp_wa
-        _dp_wa()
-        _wa_entry = _pr_wa.get("whatsapp")
-        if _wa_entry is None or _wa_entry.standalone_sender_fn is None:
-            return {"error": "WhatsApp plugin not registered or missing standalone_sender_fn"}
-        # MEDIA:<path> caption: a single captionable file + short text rides
-        # as the media's native caption instead of a separate message before
-        # the bubble (single enforced decision in _media_caption_split). Cap on
-        # the platform's own message limit so the caption is always deliverable.
-        _wa_caption, _ = _media_caption_split(
-            message, media_files,
-            max_caption_len=(max_len or _DEFAULT_CAPTION_LIMIT),
-        )
-        last_result = None
-        if _wa_caption is not None:
-            # Single-file captioned send: no separate text chunk, caption on
-            # the media itself.
-            result = await _wa_entry.standalone_sender_fn(
-                pconfig,
-                chat_id,
-                "",
-                media_files=media_files,
-                thread_id=thread_id,
-                force_document=force_document,
-                caption=_wa_caption,
-            )
-            if isinstance(result, dict) and result.get("error"):
-                return result
-            return result
-        for i, chunk in enumerate(chunks):
-            is_last = (i == len(chunks) - 1)
-            result = await _wa_entry.standalone_sender_fn(
-                pconfig,
-                chat_id,
-                chunk,
-                media_files=media_files if is_last else None,
-                thread_id=thread_id,
-                force_document=force_document,
-            )
-            if isinstance(result, dict) and result.get("error"):
-                return result
-            last_result = result
-        return last_result
-
     # --- Slack: prefer the live gateway adapter, then the plugin's
     # standalone sender.  The live adapter is multi-workspace aware (it maps
     # channels to the workspace client that owns them) and honors adapter-side
@@ -1251,7 +1187,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     if media_files and not message.strip():
         return {
             "error": (
-                f"send_message MEDIA delivery is currently only supported for telegram, discord, matrix, weixin, signal, yuanbao, feishu, whatsapp and slack; "
+                f"send_message MEDIA delivery is currently only supported for telegram, discord, matrix, weixin, signal, yuanbao, feishu and slack; "
                 f"target {platform.value} had only media attachments"
             )
         }
@@ -1259,14 +1195,12 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     if media_files:
         warning = (
             f"MEDIA attachments were omitted for {platform.value}; "
-            "native send_message media delivery is currently only supported for telegram, discord, matrix, weixin, signal, yuanbao, feishu, whatsapp and slack"
+            "native send_message media delivery is currently only supported for telegram, discord, matrix, weixin, signal, yuanbao, feishu and slack"
         )
 
     last_result = None
     for chunk in chunks:
-        if platform == Platform.WHATSAPP:
-            result = await _registry_standalone_send("whatsapp", pconfig, chat_id, chunk, thread_id)
-        elif platform == Platform.SIGNAL:
+        if platform == Platform.SIGNAL:
             result = await _send_signal(pconfig.extra, chat_id, chunk)
         elif platform == Platform.EMAIL:
             result = await _registry_standalone_send("email", pconfig, chat_id, chunk, thread_id)

@@ -2164,8 +2164,6 @@ def _get_enabled_platforms() -> List[str]:
         enabled.append("discord")
     if get_env_value("SLACK_BOT_TOKEN"):
         enabled.append("slack")
-    if get_env_value("WHATSAPP_ENABLED"):
-        enabled.append("whatsapp")
     if get_env_value("QQ_APP_ID"):
         enabled.append("qqbot")
     return enabled

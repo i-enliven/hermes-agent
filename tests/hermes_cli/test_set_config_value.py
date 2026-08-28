@@ -74,7 +74,6 @@ class TestCatchAllPatterns:
         "ELEVENLABS_API_KEY",
         "SOME_FUTURE_SERVICE_API_KEY",
         "MY_CUSTOM_TOKEN",
-        "WHATSAPP_BOT_TOKEN",
         "CLIENT_SECRET",
     ])
     def test_api_key_suffix_routes_to_env(self, key, _isolated_hermes_home):

@@ -1,6 +1,6 @@
 """Tests for config-driven platform access policies at the gateway layer.
 
-Background (#34515): WeCom, Weixin, Yuanbao, QQBot, and WhatsApp expose a
+Background (#34515): WeCom, Weixin, Yuanbao, and QQBot expose a
 documented config-driven access surface (``dm_policy`` / ``group_policy`` /
 ``allow_from`` / ``group_allow_from`` in ``PlatformConfig.extra``) and enforce
 it at intake —
@@ -40,7 +40,6 @@ _OWN_POLICY_PLATFORMS = [
     Platform.WEIXIN,
     Platform.YUANBAO,
     Platform.QQBOT,
-    Platform.WHATSAPP,
 ]
 
 
@@ -51,7 +50,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "YUANBAO_ALLOWED_USERS",
         "QQ_ALLOWED_USERS",
         "QQ_GROUP_ALLOWED_USERS",
-        "WHATSAPP_ALLOWED_USERS",
         "TELEGRAM_ALLOWED_USERS",
         "GATEWAY_ALLOWED_USERS",
         "GATEWAY_ALLOW_ALL_USERS",
@@ -59,7 +57,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "WEIXIN_ALLOW_ALL_USERS",
         "YUANBAO_ALLOW_ALL_USERS",
         "QQ_ALLOW_ALL_USERS",
-        "WHATSAPP_ALLOW_ALL_USERS",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -112,7 +109,6 @@ def test_base_adapter_defaults_to_not_owning_access_policy():
         ("gateway.platforms.weixin", "WeixinAdapter"),
         ("gateway.platforms.yuanbao", "YuanbaoAdapter"),
         ("gateway.platforms.qqbot.adapter", "QQAdapter"),
-        ("plugins.platforms.whatsapp.adapter", "WhatsAppAdapter"),
     ],
 )
 def test_own_policy_adapters_declare_the_flag(module_path, class_name):
@@ -242,7 +238,6 @@ def test_own_policy_open_group_not_authorized_without_allowlist(monkeypatch, pla
 @pytest.mark.parametrize(
     "module_path, class_name, dm_helper",
     [
-        ("plugins.platforms.whatsapp.adapter", "WhatsAppAdapter", "_is_dm_allowed"),
         ("plugins.platforms.wecom.adapter", "WeComAdapter", "_is_dm_allowed"),
         ("gateway.platforms.weixin", "WeixinAdapter", "_is_dm_allowed"),
         ("gateway.platforms.qqbot.adapter", "QQAdapter", "_is_dm_allowed"),

@@ -325,8 +325,6 @@ class Platform(Enum):
     LOCAL = "local"
     TELEGRAM = "telegram"
     DISCORD = "discord"
-    WHATSAPP = "whatsapp"
-    WHATSAPP_CLOUD = "whatsapp_cloud"
     SLACK = "slack"
     SIGNAL = "signal"
     MATTERMOST = "mattermost"
@@ -434,7 +432,6 @@ PORT_BINDING_PLATFORM_VALUES = frozenset({
     "wecom_callback",
     "bluebubbles",
     "sms",
-    "whatsapp_cloud",
     "line",
 })
 
@@ -883,9 +880,6 @@ def _has_usable_api_server_key(key: object) -> bool:
 _PLATFORM_CONNECTED_CHECKERS: dict[Platform, Callable[[PlatformConfig], bool]] = {
     Platform.WEIXIN: lambda cfg: bool(
         cfg.extra.get("account_id") and (cfg.token or cfg.extra.get("token"))
-    ),
-    Platform.WHATSAPP_CLOUD: lambda cfg: bool(
-        cfg.extra.get("phone_number_id") and cfg.extra.get("access_token")
     ),
     Platform.SIGNAL: lambda cfg: bool(cfg.extra.get("http_url")),
     Platform.API_SERVER: lambda cfg: _has_usable_api_server_key(
@@ -1778,10 +1772,6 @@ def load_gateway_config() -> GatewayConfig:
             # plugin's apply_yaml_config_fn hook
             # (plugins/platforms/telegram/adapter.py). #41112 / #3823.
 
-            # WhatsApp settings → env vars: migrated to the whatsapp plugin's
-            # apply_yaml_config_fn hook (plugins/platforms/whatsapp/adapter.py).
-            # #41112 / #3823.
-
             # Signal settings → env vars (env vars take precedence)
             signal_cfg = yaml_cfg.get("signal", {})
             if isinstance(signal_cfg, dict):
@@ -1957,83 +1947,6 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
         if Platform.DISCORD not in config.platforms:
             config.platforms[Platform.DISCORD] = PlatformConfig()
         config.platforms[Platform.DISCORD].reply_to_mode = discord_reply_mode
-    
-    # WhatsApp (typically uses different auth mechanism)
-    whatsapp_enabled = is_truthy_value(getenv("WHATSAPP_ENABLED", ""))
-    whatsapp_disabled_explicitly = getenv("WHATSAPP_ENABLED", "").lower() in {"false", "0", "no"}
-    if Platform.WHATSAPP in config.platforms:
-        # YAML config exists — respect explicit disable
-        wa_cfg = config.platforms[Platform.WHATSAPP]
-        if whatsapp_disabled_explicitly:
-            wa_cfg.enabled = False
-        elif whatsapp_enabled:
-            wa_cfg.enabled = True
-        # else: keep whatever the YAML set
-    elif whatsapp_enabled:
-        config.platforms[Platform.WHATSAPP] = PlatformConfig(enabled=True)
-    whatsapp_home = getenv("WHATSAPP_HOME_CHANNEL")
-    if whatsapp_home and Platform.WHATSAPP in config.platforms:
-        config.platforms[Platform.WHATSAPP].home_channel = HomeChannel(
-            platform=Platform.WHATSAPP,
-            chat_id=whatsapp_home,
-            name=getenv("WHATSAPP_HOME_CHANNEL_NAME", "Home"),
-            thread_id=getenv("WHATSAPP_HOME_CHANNEL_THREAD_ID") or None,
-        )
-
-    # WhatsApp Cloud API (official Business Platform via Meta).
-    # Distinct from the Baileys bridge: pure HTTP graph.facebook.com calls
-    # outbound, public webhook inbound. Both adapters can run in parallel
-    # against different phone numbers.
-    whatsapp_cloud_phone_id = getenv("WHATSAPP_CLOUD_PHONE_NUMBER_ID")
-    whatsapp_cloud_token = getenv("WHATSAPP_CLOUD_ACCESS_TOKEN")
-    if whatsapp_cloud_phone_id and whatsapp_cloud_token:
-        if Platform.WHATSAPP_CLOUD not in config.platforms:
-            config.platforms[Platform.WHATSAPP_CLOUD] = PlatformConfig()
-        config.platforms[Platform.WHATSAPP_CLOUD].enabled = True
-        config.platforms[Platform.WHATSAPP_CLOUD].extra.update({
-            "phone_number_id": whatsapp_cloud_phone_id,
-            "access_token": whatsapp_cloud_token,
-        })
-        # Optional: app_id / app_secret (signature verification)
-        wa_cloud_app_id = getenv("WHATSAPP_CLOUD_APP_ID")
-        if wa_cloud_app_id:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["app_id"] = wa_cloud_app_id
-        wa_cloud_app_secret = getenv("WHATSAPP_CLOUD_APP_SECRET")
-        if wa_cloud_app_secret:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["app_secret"] = wa_cloud_app_secret
-        # Optional: WABA id (analytics, future use)
-        wa_cloud_waba_id = getenv("WHATSAPP_CLOUD_WABA_ID")
-        if wa_cloud_waba_id:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["waba_id"] = wa_cloud_waba_id
-        # Webhook verify token — Meta hub.verify_token shared secret
-        wa_cloud_verify_token = getenv("WHATSAPP_CLOUD_VERIFY_TOKEN")
-        if wa_cloud_verify_token:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["verify_token"] = wa_cloud_verify_token
-        # Webhook server bind config (defaults baked into the adapter)
-        wa_cloud_host = getenv("WHATSAPP_CLOUD_WEBHOOK_HOST")
-        if wa_cloud_host:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["webhook_host"] = wa_cloud_host
-        wa_cloud_port = getenv("WHATSAPP_CLOUD_WEBHOOK_PORT")
-        if wa_cloud_port:
-            try:
-                config.platforms[Platform.WHATSAPP_CLOUD].extra["webhook_port"] = int(wa_cloud_port)
-            except ValueError:
-                pass
-        wa_cloud_path = getenv("WHATSAPP_CLOUD_WEBHOOK_PATH")
-        if wa_cloud_path:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["webhook_path"] = wa_cloud_path
-        # Graph API version override (rarely needed)
-        wa_cloud_api_version = getenv("WHATSAPP_CLOUD_API_VERSION")
-        if wa_cloud_api_version:
-            config.platforms[Platform.WHATSAPP_CLOUD].extra["api_version"] = wa_cloud_api_version
-    whatsapp_cloud_home = getenv("WHATSAPP_CLOUD_HOME_CHANNEL")
-    if whatsapp_cloud_home and Platform.WHATSAPP_CLOUD in config.platforms:
-        config.platforms[Platform.WHATSAPP_CLOUD].home_channel = HomeChannel(
-            platform=Platform.WHATSAPP_CLOUD,
-            chat_id=whatsapp_cloud_home,
-            name=getenv("WHATSAPP_CLOUD_HOME_CHANNEL_NAME", "Home"),
-            thread_id=getenv("WHATSAPP_CLOUD_HOME_CHANNEL_THREAD_ID") or None,
-        )
 
     # Slack
     slack_token = getenv("SLACK_BOT_TOKEN")

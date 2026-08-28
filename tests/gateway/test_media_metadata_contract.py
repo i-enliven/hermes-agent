@@ -33,7 +33,6 @@ def _accepts_metadata(method) -> bool:
 @pytest.mark.parametrize(
     "module_name, class_name",
     [
-        ("plugins.platforms.whatsapp.adapter", "WhatsAppAdapter"),
         ("plugins.platforms.email.adapter", "EmailAdapter"),
     ],
 )
@@ -61,7 +60,6 @@ _ALL_ADAPTERS = [
     ("plugins.platforms.telegram.adapter", "TelegramAdapter"),
     ("plugins.platforms.wecom.adapter", "WeComAdapter"),
     ("gateway.platforms.weixin", "WeixinAdapter"),
-    ("plugins.platforms.whatsapp.adapter", "WhatsAppAdapter"),
     ("gateway.platforms.yuanbao", "YuanbaoAdapter"),
 ]
 

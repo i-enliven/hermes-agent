@@ -1188,8 +1188,6 @@ class HermesConsoleEngine:
             "setup",
             "uninstall",
             "update",
-            "whatsapp",
-            "whatsapp-cloud",
         }
         if first in blocked_top:
             return f"`hermes {first}` is not available in Hermes Console."

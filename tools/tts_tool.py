@@ -788,7 +788,6 @@ OPUS_VOICE_PLATFORMS = frozenset({
     "telegram",
     "matrix",
     "feishu",
-    "whatsapp",
     "signal",
 })
 

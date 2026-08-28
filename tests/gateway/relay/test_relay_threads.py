@@ -204,7 +204,7 @@ def test_event_from_wire_reply_to_absent_and_partial():
         {
             "text": "re",
             "message_type": "text",
-            "source": {"platform": "whatsapp", "chat_id": "1", "chat_type": "dm"},
+            "source": {"platform": "telegram", "chat_id": "1", "chat_type": "dm"},
             "reply_to_message_id": "wamid.x",
             "reply_to": {"author": "Alice"},  # text leg missed the cache
         }

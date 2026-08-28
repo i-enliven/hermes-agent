@@ -110,7 +110,7 @@ emitted by each built-in hook site.
 ``on_session_start`` (emitted from ``agent/conversation_loop.py``)::
 
     model           – model name (e.g. "claude-sonnet-4-20250514")
-    platform        – platform identifier (e.g. "cli", "whatsapp")
+    platform        – platform identifier (e.g. "cli", "slack")
 
 ``on_session_end`` (emitted from ``agent/turn_finalizer.py``)::
 
