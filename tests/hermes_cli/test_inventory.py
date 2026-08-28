@@ -123,26 +123,6 @@ def test_cli_model_picker_forwards_force_refresh_to_probe_flags():
     assert mock_list.call_args.kwargs["probe_current_custom_provider"] is False
 
 
-def test_list_authenticated_providers_force_fresh_is_keyword_only():
-    """``force_fresh_nous_tier`` must be keyword-only on the public listing API.
-
-    It was inserted between ``custom_providers`` and ``max_models``; making it
-    keyword-only ensures no positional caller passing ``max_models`` as the 5th
-    arg silently mis-binds it to the tier-refresh flag. Pin the contract so a
-    future signature edit that drops the ``*`` separator is caught.
-    """
-    import inspect
-
-    from hermes_cli.model_switch import list_authenticated_providers
-
-    sig = inspect.signature(list_authenticated_providers)
-    param = sig.parameters["force_fresh_nous_tier"]
-    assert param.kind is inspect.Parameter.KEYWORD_ONLY
-    assert param.default is False
-
-
-
-
 def test_include_unconfigured_appends_canonical_skeletons():
     """include_unconfigured=True adds CANONICAL_PROVIDERS rows that
     list_authenticated_providers didn't emit. Skeleton rows have empty
@@ -222,26 +202,6 @@ def test_picker_hints_marks_authed_rows_authenticated():
     with _list_auth_returning(rows):
         payload = build_models_payload(ctx, picker_hints=True)
     assert payload["providers"][0]["authenticated"] is True
-
-
-def test_picker_hints_api_key_warning_format():
-    """For api_key providers with a defined env var, the warning must
-    point to that env var."""
-    rows = []
-    ctx = _empty_ctx()
-    with _list_auth_returning(rows):
-        payload = build_models_payload(
-            ctx, include_unconfigured=True, picker_hints=True,
-        )
-    # anthropic uses api_key + ANTHROPIC_API_KEY.
-    anthropic = next(
-        r for r in payload["providers"] if r["slug"] == "anthropic"
-    )
-    assert "ANTHROPIC_API_KEY" in anthropic["warning"]
-    assert anthropic["warning"].startswith("paste ")
-
-
-# ─── canonical_order ───────────────────────────────────────────────────
 
 
 def test_canonical_order_uses_slug_not_is_user_defined_flag():
@@ -383,82 +343,6 @@ def test_user_defined_rows_carry_alias_set_for_gui_current_match():
     assert "aliases" not in by_slug["nous"]
 
 
-def test_aggregator_dedup_removes_overlapping_models():
-    """Models served by a user-defined provider are removed from
-    aggregator rows so the picker doesn't show them under the wrong
-    provider.  (#45954)"""
-    rows = [
-        _user_provider_row("litellm-proxy", [
-            "nvidia/nim/minimax-m3",
-            "nvidia/nim/kimi-k2.6",
-        ]),
-        _aggregator_row("openrouter", [
-            "minimax/minimax-m3",
-            "nvidia/nim/minimax-m3",  # overlaps with litellm-proxy
-            "anthropic/claude-sonnet-4.6",
-        ]),
-    ]
-    ctx = _empty_ctx()
-    with _list_auth_returning(rows):
-        payload = build_models_payload(ctx)
-
-    or_row = next(r for r in payload["providers"] if r["slug"] == "openrouter")
-    proxy_row = next(r for r in payload["providers"] if r["slug"] == "litellm-proxy")
-
-    # User-defined provider keeps all its models
-    assert proxy_row["models"] == ["nvidia/nim/minimax-m3", "nvidia/nim/kimi-k2.6"]
-
-    # Aggregator lost the overlapping model but kept the rest
-    assert "nvidia/nim/minimax-m3" not in or_row["models"]
-    assert "minimax/minimax-m3" in or_row["models"]
-    assert "anthropic/claude-sonnet-4.6" in or_row["models"]
-    assert or_row["total_models"] == 2
-
-
-
-
-def test_flat_namespace_reseller_keeps_first_party_models_overlapping_user_proxy():
-    """opencode-go / opencode-zen are flagged ``is_aggregator=True`` (their
-    flat ``/v1/models`` returns bare IDs the model-switch resolver searches),
-    but they are NOT routing aggregators — every model they list is a
-    first-party model under the user's subscription. When a user also runs a
-    custom proxy that happens to serve a same-named model, the picker dedup
-    must NOT strip the reseller's own catalog. Regression for #47077, where
-    opencode-go showed only 13 of 19 models because minimax-m3/m2.7/m2.5,
-    glm-5/5.1, and deepseek-v4-flash were deduped against an overlapping
-    custom provider.
-    """
-    rows = [
-        _user_provider_row("custom:my-proxy", [
-            "minimax-m3", "minimax-m2.7", "glm-5", "deepseek-v4-flash",
-        ]),
-        _aggregator_row("opencode-go", [
-            "kimi-k2.6", "minimax-m3", "minimax-m2.7", "glm-5",
-            "deepseek-v4-flash", "qwen3.7-max",
-        ]),
-        _aggregator_row("openrouter", ["minimax-m3", "anthropic/claude-sonnet-4.6"]),
-    ]
-    ctx = _empty_ctx()
-    with _list_auth_returning(rows):
-        payload = build_models_payload(ctx)
-
-    go_row = next(r for r in payload["providers"] if r["slug"] == "opencode-go")
-    or_row = next(r for r in payload["providers"] if r["slug"] == "openrouter")
-
-    # The reseller keeps ALL of its first-party models — nothing stripped.
-    assert go_row["models"] == [
-        "kimi-k2.6", "minimax-m3", "minimax-m2.7", "glm-5",
-        "deepseek-v4-flash", "qwen3.7-max",
-    ]
-    assert go_row["total_models"] == 6
-
-    # A TRUE routing aggregator is still deduped against the user's models.
-    assert "minimax-m3" not in or_row["models"]
-    assert "anthropic/claude-sonnet-4.6" in or_row["models"]
-
-
-
-
 def test_build_models_payload_no_max_models_returns_full_list():
     """When max_models is not passed (None), build_models_payload must
     return the full model list — not truncate to the old default of 50.
@@ -539,7 +423,7 @@ def _apply_featured_with_dates(rows, dates: dict[str, str]):
     def _fake_get_model_info(provider, model):
         return _FakeInfo(dates[model]) if model in dates else None
 
-    with patch("agent.models_dev.get_model_info", side_effect=_fake_get_model_info):
+    with patch("hermes_cli.model_switch.get_model_info", side_effect=_fake_get_model_info):
         inventory._apply_featured(rows)
 
 

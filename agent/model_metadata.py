@@ -23,7 +23,6 @@ if TYPE_CHECKING:  # pragma: no cover — runtime import is lazy (see below)
 
 from utils import atomic_json_write, atomic_yaml_write, base_url_host_matches, base_url_hostname
 
-from hermes_constants import OPENROUTER_MODELS_URL
 from agent.message_metadata import PERSISTENCE_ONLY_MESSAGE_FIELDS
 
 logger = logging.getLogger(__name__)
@@ -142,8 +141,6 @@ def _strip_provider_prefix(model: str) -> str:
         return suffix
     return model
 
-_model_metadata_cache: Dict[str, Dict[str, Any]] = {}
-_model_metadata_cache_time: float = 0
 _novita_metadata_cache: Dict[str, Dict[str, Any]] = {}
 _novita_metadata_cache_time: float = 0
 _MODEL_CACHE_TTL = 3600
@@ -312,55 +309,6 @@ def _local_probe_disk_put(kind: str, key: str, value: Any) -> None:
         logger.debug("Failed to save local probe disk cache: %s", e)
 
 
-def _get_model_metadata_cache_path() -> Path:
-    """Return path to the OpenRouter model metadata disk cache."""
-    from hermes_constants import get_hermes_home
-    return get_hermes_home() / "cache" / "openrouter_model_metadata.json"
-
-
-def _model_metadata_disk_cache_age_seconds() -> Optional[float]:
-    """Return disk-cache age in seconds, or None if freshness is unknown."""
-    try:
-        cache_path = _get_model_metadata_cache_path()
-        if not cache_path.exists():
-            return None
-        age = time.time() - cache_path.stat().st_mtime
-        if age < 0:
-            return None
-        return age
-    except Exception:
-        return None
-
-
-def _load_model_metadata_disk_cache() -> Dict[str, Dict[str, Any]]:
-    """Load processed OpenRouter metadata cache from disk."""
-    try:
-        cache_path = _get_model_metadata_cache_path()
-        with cache_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {}
-        return {
-            str(key): value
-            for key, value in data.items()
-            if isinstance(value, dict)
-        }
-    except Exception as e:
-        logger.debug("Failed to load OpenRouter model metadata disk cache: %s", e)
-        return {}
-
-
-def _save_model_metadata_disk_cache(data: Dict[str, Dict[str, Any]]) -> None:
-    """Save processed OpenRouter metadata cache to disk atomically."""
-    try:
-        atomic_json_write(
-            _get_model_metadata_cache_path(),
-            data,
-            indent=0,
-            separators=(",", ":"),
-        )
-    except Exception as e:
-        logger.debug("Failed to save OpenRouter model metadata disk cache: %s", e)
 
 # Descending tiers for context length probing when the model is unknown.
 # We start at 256K (covers GPT-5.x, many current large-context models) and
@@ -1172,67 +1120,6 @@ def _add_model_aliases(cache: Dict[str, Dict[str, Any]], model_id: str, entry: D
     if "/" in model_id:
         bare_model = model_id.split("/", 1)[1]
         cache.setdefault(bare_model, entry)
-
-
-def fetch_model_metadata(force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
-    """Fetch model metadata from OpenRouter (cached for 1 hour)."""
-    global _model_metadata_cache, _model_metadata_cache_time
-
-    if not force_refresh and _model_metadata_cache and (time.time() - _model_metadata_cache_time) < _MODEL_CACHE_TTL:
-        return _model_metadata_cache
-
-    if not force_refresh:
-        disk_age = _model_metadata_disk_cache_age_seconds()
-        if disk_age is not None and disk_age < _MODEL_CACHE_TTL:
-            disk_cache = _load_model_metadata_disk_cache()
-            if disk_cache:
-                _model_metadata_cache = disk_cache
-                _model_metadata_cache_time = time.time() - disk_age
-                return _model_metadata_cache
-
-    try:
-        _ensure_requests()
-        # Tuple (connect, read) — flat timeout=10 means urllib3 can block 10s per
-        # retry stage through proxies that 403 CONNECT, ballooning to minutes
-        # (#46620). 5s connect / 10s read fails fast on unreachable hosts.
-        response = requests.get(OPENROUTER_MODELS_URL, timeout=(5, 10), verify=_resolve_requests_verify())
-        response.raise_for_status()
-        data = response.json()
-
-        cache = {}
-        for model in data.get("data", []):
-            model_id = model.get("id", "")
-            entry = {
-                "context_length": model.get("context_length", 128000),
-                "max_completion_tokens": model.get("top_provider", {}).get("max_completion_tokens", 4096),
-                "name": model.get("name", model_id),
-                "pricing": model.get("pricing", {}),
-            }
-            _add_model_aliases(cache, model_id, entry)
-            canonical = model.get("canonical_slug", "")
-            if canonical and canonical != model_id:
-                _add_model_aliases(cache, canonical, entry)
-
-        _model_metadata_cache = cache
-        _model_metadata_cache_time = time.time()
-        _save_model_metadata_disk_cache(cache)
-        logger.debug("Fetched metadata for %s models from OpenRouter", len(cache))
-        return cache
-
-    except Exception as e:
-        logger.warning("Failed to fetch model metadata from OpenRouter: %s", e)
-        if _model_metadata_cache:
-            return _model_metadata_cache
-        disk_cache = _load_model_metadata_disk_cache()
-        if disk_cache:
-            _model_metadata_cache = disk_cache
-            disk_age = _model_metadata_disk_cache_age_seconds()
-            if disk_age is not None:
-                _model_metadata_cache_time = time.time() - min(disk_age, _MODEL_CACHE_TTL)
-            else:
-                _model_metadata_cache_time = time.time() - _MODEL_CACHE_TTL + 1
-            return _model_metadata_cache
-        return {}
 
 
 def fetch_endpoint_model_metadata(
@@ -2649,22 +2536,6 @@ def get_model_context_length(
             logger.debug("MoA aggregator context-length resolution failed", exc_info=True)
         # Fall through to the generic default if aggregator resolution failed.
 
-    # 0b. model_overrides config — EXPLICIT per-provider+model context_window
-    # override only (fill-gap _default entries are applied later, inside
-    # lookup_models_dev_context at step 5f, once the catalog has actually
-    # missed — so a _default can never preempt custom_providers or live
-    # probes). This is the supported self-unblock path for models with
-    # wrong context in models.dev (#84482) and for custom/local models
-    # (#8731). Config-read only; never blocks on the network.
-    if provider and model:
-        try:
-            from agent.models_dev import _override_context_window
-            mo_ctx = _override_context_window(provider, model)
-            if mo_ctx is not None and mo_ctx > 0:
-                return mo_ctx
-        except Exception:
-            pass  # fall through to other resolution paths
-
     # 0c. custom_providers per-model override — check before any probe.
     # This closes the gap where /model switch and display paths used to fall
     # back to 128K despite the user having a per-model context_length set.
@@ -2990,64 +2861,6 @@ def get_model_context_length(
                 if not _skip_persistent_context_cache(base_url, provider):
                     save_context_length(model, base_url, ctx)
                 return ctx
-    # 5f. OpenRouter live /models metadata — authoritative for OpenRouter-routed
-    # models. OpenRouter's catalog carries per-model context_length (e.g.
-    # anthropic/claude-fable-5 -> 1M) and refreshes as new slugs ship, so it
-    # must win over both models.dev (step 5g) and the hardcoded family catch-all
-    # (step 8). Before this branch, an OpenRouter selection set
-    # effective_provider="openrouter", which (a) made the models.dev lookup miss
-    # brand-new slugs and (b) skipped the step-6 OR fallback (gated on `not
-    # effective_provider`), so a fresh slug like claude-fable-5 fell through to
-    # the generic "claude": 200K entry and under-reported a 1M window. Mirrors
-    # the dedicated Nous/Copilot/GMI branches above.
-    if effective_provider == "openrouter":
-        metadata = fetch_model_metadata()
-        entry = metadata.get(model)
-        if entry:
-            or_ctx = entry.get("context_length")
-            # Guard against the known OpenRouter Kimi-family 32k underreport
-            # (same class the hardcoded overrides exist to mitigate).
-            if isinstance(or_ctx, int) and or_ctx > 0 and not (
-                or_ctx == 32768 and _model_name_suggests_kimi(model)
-            ):
-                return or_ctx
-
-    if effective_provider:
-        from agent.models_dev import lookup_models_dev_context
-        ctx = lookup_models_dev_context(effective_provider, model)
-        if ctx:
-            # MiniMax M3: models.dev reports 512K but actual context is 1M.
-            # Prefer hardcoded catalog over stale probe value.
-            if _model_name_suggests_minimax_m3(model):
-                catalog = DEFAULT_CONTEXT_LENGTHS.get("minimax-m3")
-                if catalog and ctx < catalog:
-                    logger.info(
-                        "Rejecting models.dev context=%s for %r "
-                        "(MiniMax-M3 underreport); using hardcoded default %s",
-                        ctx, model, f"{catalog:,}",
-                    )
-                    ctx = catalog
-            return ctx
-
-    # 6. OpenRouter live API metadata — provider-unaware fallback.
-    # Only consulted when the provider is unknown (no effective_provider),
-    # because OpenRouter data is community-maintained and can be incorrect
-    # for models that belong to known providers with curated defaults.
-    if not effective_provider:
-        metadata = fetch_model_metadata()
-        if model in metadata:
-            or_ctx = metadata[model].get("context_length", DEFAULT_FALLBACK_CONTEXT)
-            # Guard against stale OpenRouter metadata for model families
-            # known to be underreported as 32K.
-            if or_ctx == 32768 and _model_name_suggests_stale_32k_underreport(model):
-                logger.info(
-                    "Rejecting OpenRouter metadata context=%s for %r "
-                    "(known 32K underreport); falling through to hardcoded defaults",
-                    or_ctx, model,
-                )
-            else:
-                return or_ctx
-
     # 7. Query local server before hardcoded defaults — model names like
     # ``Hermes-3-Llama-3.1-70B`` substring-match ``llama`` (131072) even when
     # vLLM is running at a lower ``--max-model-len`` (e.g. 32768 on limited VRAM).

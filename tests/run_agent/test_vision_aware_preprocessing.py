@@ -152,15 +152,15 @@ class TestModelSupportsVision:
         agent = _make_agent()
         fake_caps = MagicMock()
         fake_caps.supports_vision = True
-        with patch("agent.models_dev.get_model_capabilities", return_value=fake_caps):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=fake_caps):
             assert agent._model_supports_vision() is True
         fake_caps.supports_vision = False
-        with patch("agent.models_dev.get_model_capabilities", return_value=fake_caps):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=fake_caps):
             assert agent._model_supports_vision() is False
 
     def test_none_caps_returns_false(self):
         agent = _make_agent()
-        with patch("agent.models_dev.get_model_capabilities", return_value=None):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=None):
             assert agent._model_supports_vision() is False
 
 
@@ -169,7 +169,7 @@ class TestModelSupportsVision:
         agent.provider = "custom"
         agent.model = "my-llava"
         with patch("hermes_cli.config.load_config", return_value={"model": {"supports_vision": True}}), \
-             patch("agent.models_dev.get_model_capabilities", return_value=None):
+             patch("hermes_cli.model_switch.get_model_capabilities", return_value=None):
             assert agent._model_supports_vision() is True
 
 
@@ -185,6 +185,6 @@ class TestModelSupportsVision:
             "providers": {"my-vllm": {"models": {"my-llava": {"supports_vision": True}}}},
         }
         with patch("hermes_cli.config.load_config", return_value=cfg), \
-             patch("agent.models_dev.get_model_capabilities", return_value=None):
+             patch("hermes_cli.model_switch.get_model_capabilities", return_value=None):
             assert agent._model_supports_vision() is True
 

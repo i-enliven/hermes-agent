@@ -82,7 +82,6 @@ def _fake_switch_result():
 
 
 def _stub_picker_dependencies(monkeypatch):
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(
         "hermes_cli.model_switch.list_picker_providers",
         lambda **kw: [{"slug": "openrouter", "name": "OpenRouter", "models": ["gpt-5.5"]}],

@@ -36,7 +36,6 @@ from agent.memory_manager import StreamingContextScrubber
 from agent.session_activity import ActivityProvenance
 from agent.model_metadata import (
     MINIMUM_CONTEXT_LENGTH,
-    fetch_model_metadata,
     is_local_endpoint,
     query_ollama_num_ctx,
 )
@@ -587,9 +586,6 @@ def init_agent(
         providers_ignored (List[str]): OpenRouter providers to ignore (optional)
         providers_order (List[str]): OpenRouter providers to try in order (optional)
         provider_sort (str): Sort providers by price/throughput/latency (optional)
-        openrouter_min_coding_score (float): Coding-score floor (0.0-1.0) for the
-            openrouter/pareto-code router. Only applied when model == "openrouter/pareto-code".
-            None or empty = let OpenRouter pick the strongest available coder.
         session_id (str): Pre-generated session ID for logging (optional, auto-generated if not provided)
         tool_progress_callback (callable): Callback function(tool_name, args_preview) for progress notifications
         clarify_callback (callable): Callback function(question, choices) -> str for interactive user questions.
@@ -743,13 +739,9 @@ def init_agent(
         pass  # Non-fatal — transport may not exist for all modes yet
 
     try:
-        from hermes_cli.model_normalize import (
-            _AGGREGATOR_PROVIDERS,
-            normalize_model_for_provider,
-        )
+        from hermes_cli.model_normalize import normalize_model_for_provider
 
-        if agent.provider not in _AGGREGATOR_PROVIDERS:
-            agent.model = normalize_model_for_provider(agent.model, agent.provider)
+        agent.model = normalize_model_for_provider(agent.model, agent.provider)
     except Exception:
         pass
 
@@ -785,22 +777,6 @@ def init_agent(
         # from chat_completions to codex_responses after the warm at __init__.
         if hasattr(agent, "_transport_cache"):
             agent._transport_cache.clear()
-
-    # Pre-warm OpenRouter model metadata cache in a background thread.
-    # fetch_model_metadata() is cached for 1 hour; this avoids a blocking
-    # HTTP request on the first API response when pricing is estimated.
-    # Use a process-level Event so this thread is only spawned once — a new
-    # AIAgent is created for every gateway request, so without the guard
-    # each message leaks one OS thread and the process eventually exhausts
-    # the system thread limit (RuntimeError: can't start new thread).
-    if (agent.provider == "openrouter" or agent._is_openrouter_url()) and \
-            not _ra()._openrouter_prewarm_done.is_set():
-        _ra()._openrouter_prewarm_done.set()
-        threading.Thread(
-            target=fetch_model_metadata,
-            daemon=True,
-            name="openrouter-prewarm",
-        ).start()
 
     agent.tool_progress_callback = tool_progress_callback
     agent.tool_start_callback = tool_start_callback
@@ -887,8 +863,6 @@ def init_agent(
     agent.provider_sort = provider_sort
     agent.provider_require_parameters = provider_require_parameters
     agent.provider_data_collection = provider_data_collection
-    agent.openrouter_min_coding_score = openrouter_min_coding_score
-
     # Store toolset filtering options
     agent.enabled_toolsets = enabled_toolsets
     agent.disabled_toolsets = disabled_toolsets
@@ -1231,10 +1205,7 @@ def init_agent(
                 client_kwargs["command"] = agent.acp_command
                 client_kwargs["args"] = agent.acp_args
             effective_base = base_url
-            if base_url_host_matches(effective_base, "openrouter.ai"):
-                from agent.auxiliary_client import build_or_headers
-                client_kwargs["default_headers"] = build_or_headers()
-            elif base_url_host_matches(effective_base, "integrate.api.nvidia.com"):
+            if base_url_host_matches(effective_base, "integrate.api.nvidia.com"):
                 from agent.auxiliary_client import build_nvidia_nim_headers
                 client_kwargs["default_headers"] = build_nvidia_nim_headers(effective_base)
             elif base_url_host_matches(effective_base, "api.routermint.com"):
@@ -1295,7 +1266,7 @@ def init_agent(
                 # but no credentials were found, fail fast with a clear
                 # message instead of silently routing through OpenRouter.
                 _explicit = (agent.provider or "").strip().lower()
-                if _explicit and _explicit not in {"auto", "openrouter", "custom"}:
+                if _explicit and _explicit not in {"auto", "custom"}:
                     # Look up the actual env var name from the provider
                     # config — some providers use non-standard names
                     # (e.g. alibaba → DASHSCOPE_API_KEY, not ALIBABA_API_KEY).

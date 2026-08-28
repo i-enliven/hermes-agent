@@ -127,7 +127,7 @@ def _lookup_supports_vision(
             )
             return None
     try:
-        from agent.models_dev import get_model_capabilities
+        from hermes_cli.model_switch import get_model_capabilities
         caps = get_model_capabilities(provider, model)
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug(

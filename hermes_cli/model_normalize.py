@@ -65,70 +65,27 @@ _VENDOR_PREFIXES: dict[str, str] = {
     "trinity": "arcee-ai",
 }
 
-# Providers whose APIs consume vendor/model slugs.
-_AGGREGATOR_PROVIDERS: frozenset[str] = frozenset({
-    "openrouter",
-    "ai-gateway",
-    "kilocode",
-})
-
 # Providers that want bare names with dots replaced by hyphens.
-_DOT_TO_HYPHEN_PROVIDERS: frozenset[str] = frozenset({
-    "anthropic",
-})
+_DOT_TO_HYPHEN_PROVIDERS: frozenset[str] = frozenset()
 
 # Providers that want bare names with dots preserved.
 _STRIP_VENDOR_ONLY_PROVIDERS: frozenset[str] = frozenset({
     "copilot",
     "copilot-acp",
-    "openai-codex",
 })
 
 # Providers whose native naming is authoritative -- pass through unchanged.
-_AUTHORITATIVE_NATIVE_PROVIDERS: frozenset[str] = frozenset({
-    "huggingface",
-})
+_AUTHORITATIVE_NATIVE_PROVIDERS: frozenset[str] = frozenset()
 
 # Direct providers that accept bare native names but should repair a matching
 # provider/ prefix when users copy the aggregator form into config.yaml.
 _MATCHING_PREFIX_STRIP_PROVIDERS: frozenset[str] = frozenset({
-    "zai",
-    "kimi-coding",
-    "kimi-coding-cn",
-    "minimax",
-    "minimax-oauth",
-    "minimax-cn",
-    "alibaba",
-    "qwen-oauth",
-    "xiaomi",
-    "arcee",
-    "ollama-cloud",
     "custom",
-    "gemini",
-    "xai",
 })
 
-# Providers whose API serves ``vendor/model`` ids but whose endpoint can also
-# front arbitrary self-hosted models, so a bare name cannot be prefixed
-# blindly. A bare id is repaired only when the curated catalogue for that
-# provider holds exactly one entry ending in ``/<name>`` — a lookup, not a
-# guess. NVIDIA NIM is the case in hand: build.nvidia.com serves
-# ``nvidia/nemotron-…`` (and third-party ``z-ai/glm-…``), while the same
-# provider id also points at local NIM containers with their own naming.
-# Without this repair a bare ``nemotron-3-ultra-550b-a55b`` reaches the API
-# and returns a bare ``404 page not found`` that never names the model (#78796).
-_CATALOGUE_PREFIX_REPAIR_PROVIDERS: frozenset[str] = frozenset({
-    "nvidia",
-})
+_CATALOGUE_PREFIX_REPAIR_PROVIDERS: frozenset[str] = frozenset()
 
-# Providers whose APIs require lowercase model IDs.  Xiaomi's
-# ``api.xiaomimimo.com`` rejects mixed-case names like ``MiMo-V2.5-Pro``
-# that users might copy from marketing docs — it only accepts
-# ``mimo-v2.5-pro``.  After stripping a matching provider prefix, these
-# providers also get ``.lower()`` applied.
-_LOWERCASE_MODEL_PROVIDERS: frozenset[str] = frozenset({
-    "xiaomi",
-})
+_LOWERCASE_MODEL_PROVIDERS: frozenset[str] = frozenset()
 
 # ---------------------------------------------------------------------------
 # DeepSeek special handling
@@ -491,39 +448,10 @@ def normalize_model_for_provider(model_input: str, target_provider: str) -> str:
 
     provider = _normalize_provider_alias(target_provider)
 
-    # --- Aggregators: need vendor/model format ---
-    if provider in _AGGREGATOR_PROVIDERS:
-        return _prepend_vendor(name)
-
-    # --- OpenCode Zen / OpenCode Go: flat-namespace resellers.
-    #     Their /v1/models API returns bare IDs only (no vendor prefix), and
-    #     the inference endpoint rejects vendor-prefixed names with HTTP 401
-    #     "Model not supported".  Strip ANY leading ``vendor/`` so config
-    #     entries like ``minimax/minimax-m2.7`` or ``deepseek/deepseek-v4-flash``
-    #     — commonly copied from aggregator slugs into fallback_model lists —
-    #     resolve to bare ``minimax-m2.7`` / ``deepseek-v4-flash`` the API
-    #     actually serves.  See PR reviewing opencode-go fallback 401s. ---
-    if provider in {"opencode-zen", "opencode-go"}:
-        if "/" in name:
-            _, bare_after_slash = name.split("/", 1)
-            name = bare_after_slash.strip() or name
-        if provider == "opencode-zen" and name.lower().startswith("claude-"):
-            return _dots_to_hyphens(name)
-        return name
-
-    # --- Anthropic: strip matching provider prefix, dots -> hyphens ---
-    if provider in _DOT_TO_HYPHEN_PROVIDERS:
-        bare = _strip_matching_provider_prefix(name, provider)
-        if "/" in bare:
-            return bare
-        return _dots_to_hyphens(bare)
-
     # --- Copilot / Copilot ACP: delegate to the Copilot-specific
     #     normalizer.  It knows about the alias table (vendor-prefix
     #     stripping for Anthropic/OpenAI, dash-to-dot repair for Claude)
-    #     and live-catalog lookups.  Without this, vendor-prefixed or
-    #     dash-notation Claude IDs survive to the Copilot API and hit
-    #     HTTP 400 "model_not_supported".  See issue #6879.
+    #     and live-catalog lookups.
     if provider in {"copilot", "copilot-acp"}:
         try:
             from hermes_cli.models import normalize_copilot_model_id
@@ -532,44 +460,12 @@ def normalize_model_for_provider(model_input: str, target_provider: str) -> str:
             if normalized:
                 return normalized
         except Exception:
-            # Fall through to the generic strip-vendor behaviour below
-            # if the Copilot-specific path is unavailable for any reason.
             pass
 
-    # --- Copilot / Copilot ACP / openai-codex fallback:
+    # --- Copilot / Copilot ACP fallback:
     #     strip matching provider prefix, keep dots ---
     if provider in _STRIP_VENDOR_ONLY_PROVIDERS:
-        stripped = _strip_matching_provider_prefix(name, provider)
-        if stripped == name and name.startswith("openai/"):
-            # openai-codex maps openai/gpt-5.4 -> gpt-5.4
-            return name.split("/", 1)[1]
-        return stripped
-
-    # --- DeepSeek: map to one of two canonical names ---
-    if provider == "deepseek":
-        bare = _strip_matching_provider_prefix(name, provider)
-        if "/" in bare:
-            return bare
-        return _normalize_for_deepseek(bare)
-
-    # --- Direct providers: repair matching provider prefixes only ---
-    if provider in _MATCHING_PREFIX_STRIP_PROVIDERS:
-        result = _strip_matching_provider_prefix(name, provider)
-        # Some providers require lowercase model IDs (e.g. Xiaomi's API
-        # rejects "MiMo-V2.5-Pro" but accepts "mimo-v2.5-pro").
-        if provider in _LOWERCASE_MODEL_PROVIDERS:
-            result = result.lower()
-        return result
-
-    # --- Catalogue-backed prefix repair: restore a dropped ``vendor/`` on a
-    #     bare id that matches exactly one curated entry.  Unknown names (a
-    #     local NIM container, a proxied model) pass through untouched. ---
-    if provider in _CATALOGUE_PREFIX_REPAIR_PROVIDERS:
-        return _repair_prefix_from_catalogue(name, provider)
-
-    # --- Authoritative native providers: preserve user-facing slugs as-is ---
-    if provider in _AUTHORITATIVE_NATIVE_PROVIDERS:
-        return name
+        return _strip_matching_provider_prefix(name, provider)
 
     # --- Custom & all others: pass through as-is ---
     return name

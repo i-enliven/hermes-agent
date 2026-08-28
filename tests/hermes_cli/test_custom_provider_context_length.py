@@ -133,7 +133,6 @@ class TestGetModelContextLengthHonorsOverride:
         return [
             patch.object(_mm, "get_cached_context_length", return_value=None),
             patch.object(_mm, "fetch_endpoint_model_metadata", return_value={}),
-            patch.object(_mm, "fetch_model_metadata", return_value={}),
             patch.object(_mm, "is_local_endpoint", return_value=False),
             patch.object(_mm, "_is_known_provider_base_url", return_value=False),
         ]

@@ -35,6 +35,37 @@ PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+import types
+if "agent.models_dev" not in sys.modules:
+    _mdev = types.ModuleType("agent.models_dev")
+    _mdev.fetch_models_dev = lambda *a, **k: {}
+    _mdev.get_model_info = lambda *a, **k: None
+    _mdev.get_model_capabilities = lambda *a, **k: None
+    _mdev.get_provider_info = lambda *a, **k: None
+    _mdev.list_agentic_models = lambda *a, **k: []
+    _mdev.list_provider_models = lambda *a, **k: []
+    _mdev.lookup_models_dev_context = lambda *a, **k: None
+    _mdev.PROVIDER_TO_MODELS_DEV = {}
+    from dataclasses import dataclass
+
+    @dataclass
+    class _DummyModelInfo:
+        id: str = ""
+        name: str = ""
+        family: str = ""
+        provider_id: str = ""
+        cost_input: float = 0.0
+        cost_output: float = 0.0
+        def has_cost_data(self) -> bool:
+            return bool(self.cost_input or self.cost_output)
+
+    _mdev.ModelInfo = _DummyModelInfo
+    _mdev.ModelCapabilities = None
+    _mdev.ProviderInfo = None
+    sys.modules["agent.models_dev"] = _mdev
+    import agent
+    agent.models_dev = _mdev
+
 
 # ── Sandbox HERMES_HOME before ANY test module is imported ──────────────────
 # `hermes_cli/main.py` calls `setup_logging()` at MODULE level, which resolves

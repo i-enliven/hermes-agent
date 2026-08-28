@@ -16,7 +16,6 @@ from hermes_cli.model_switch import (
 
 
 def _providers(monkeypatch, user_providers):
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(providers_mod, "HERMES_OVERLAYS", {})
     monkeypatch.setattr("hermes_cli.models.fetch_api_models", lambda *a, **k: [])
     return list_authenticated_providers(
@@ -78,11 +77,5 @@ def test_different_extra_headers_keep_distinct_rows(monkeypatch):
         },
     }))
     assert len(rows) == 2
-
-
-class TestFormatModelForDisplay:
-    def test_palantir_rid_stripped_to_trailing_slug(self):
-        rid = "ri.language-model-service..language-model.anthropic-claude-4-7-opus"
-        assert format_model_for_display(rid) == "anthropic-claude-4-7-opus"
 
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Any, Optional
 
-from agent.models_dev import ModelInfo, PROVIDER_TO_MODELS_DEV
+ModelInfo = Any
 
 
 INPUT_COST_WARNING_THRESHOLD = Decimal("20")
@@ -54,23 +54,14 @@ def _pricing_from_model_info(
     )
 
 
-def _known_models_dev_provider(provider: Optional[str]) -> Optional[str]:
-    normalized = (provider or "").strip().lower()
-    if not normalized:
-        return None
-    return PROVIDER_TO_MODELS_DEV.get(normalized)
-
-
 def _can_trust_model_info_pricing(
     provider: Optional[str],
     model_info: Optional[ModelInfo],
 ) -> bool:
-    expected_provider = _known_models_dev_provider(provider)
-    if not expected_provider or model_info is None:
+    if model_info is None:
         return False
-
-    actual_provider = str(getattr(model_info, "provider_id", "") or "").strip().lower()
-    return not actual_provider or actual_provider == expected_provider
+    prov = (provider or "").strip().lower()
+    return bool(prov and not prov.startswith("custom") and prov != "routerai")
 
 
 def _can_trust_pricing_lookup(
@@ -112,13 +103,9 @@ def expensive_model_warning(
     if _can_trust_model_info_pricing(provider, model_info):
         input_cost, output_cost, source = _pricing_from_model_info(model_info)
 
-    if (
-        input_cost is None
-        and output_cost is None
-        and _known_models_dev_provider(provider)
-    ):
+    if input_cost is None and output_cost is None:
         try:
-            from agent.models_dev import get_model_info
+            from hermes_cli.model_switch import get_model_info
 
             input_cost, output_cost, source = _pricing_from_model_info(
                 get_model_info(provider, model)

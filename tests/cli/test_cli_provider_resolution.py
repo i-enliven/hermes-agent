@@ -346,11 +346,6 @@ def test_codex_provider_uses_config_model(monkeypatch):
 
     monkeypatch.setattr("hermes_cli.runtime_provider.resolve_runtime_provider", _runtime_resolve)
     monkeypatch.setattr("hermes_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))
-    # Prevent live API call from overriding the config model
-    monkeypatch.setattr(
-        "hermes_cli.codex_models.get_codex_model_ids",
-        lambda access_token=None: ["gpt-5.2-codex"],
-    )
 
     shell = cli.HermesCLI(compact=True, max_turns=1)
 

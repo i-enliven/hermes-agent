@@ -87,7 +87,7 @@ class CLIAgentSetupMixin:
 
         api_key = runtime.get("api_key")
         base_url = runtime.get("base_url")
-        resolved_provider = runtime.get("provider", "openrouter")
+        resolved_provider = runtime.get("provider", "copilot")
         resolved_api_mode = runtime.get("api_mode", self.api_mode)
         resolved_acp_command = runtime.get("command")
         resolved_acp_args = list(runtime.get("args") or [])

@@ -33,38 +33,13 @@ load_hermes_dotenv(hermes_home=_env_path.parent, project_env=PROJECT_ROOT / ".en
 from hermes_cli.colors import Colors, color
 from hermes_cli.models import _HERMES_USER_AGENT
 from hermes_cli.vercel_auth import describe_vercel_auth
-from hermes_constants import OPENROUTER_MODELS_URL
 from utils import base_url_host_matches
 
 
 _PROVIDER_ENV_HINTS = (
-    "DEEPINFRA_API_KEY",
-    "OPENROUTER_API_KEY",
     "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_TOKEN",
     "OPENAI_BASE_URL",
-    "GLM_API_KEY",
-    "ZAI_API_KEY",
-    "Z_AI_API_KEY",
-    "KIMI_API_KEY",
-    "KIMI_CN_API_KEY",
-    "GMI_API_KEY",
-    "FIREWORKS_API_KEY",
-    "ACTUAL_API_KEY",
-    "ACTUAL_BASE_URL",
-    "MINIMAX_API_KEY",
-    "MINIMAX_CN_API_KEY",
-    "KILOCODE_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "DASHSCOPE_API_KEY",
-    "HF_TOKEN",
-    "AI_GATEWAY_API_KEY",
-    "OPENCODE_ZEN_API_KEY",
-    "OPENCODE_GO_API_KEY",
-    "COMMANDCODE_API_KEY",
-    "XIAOMI_API_KEY",
-    "TOKENHUB_API_KEY",
+    "GITHUB_TOKEN",
 )
 
 
@@ -319,19 +294,6 @@ def _has_healthy_oauth_fallback_for_apikey_provider(provider_label: str) -> bool
     still show a failed API-key connectivity row, but it should not promote
     that direct-key problem into the final blocking summary.
     """
-    normalized = (provider_label or "").strip().lower()
-    if normalized == "minimax":
-        try:
-            from hermes_cli.auth import get_minimax_oauth_auth_status
-            return bool((get_minimax_oauth_auth_status() or {}).get("logged_in"))
-        except Exception:
-            return False
-    if normalized == "xai":
-        try:
-            from hermes_cli.auth import get_xai_oauth_auth_status
-            return bool((get_xai_oauth_auth_status() or {}).get("logged_in"))
-        except Exception:
-            return False
     return False
 
 
@@ -816,49 +778,10 @@ def _build_apikey_providers_list() -> list:
     Base list augmented with any ProviderProfile with auth_type="api_key" not
     already present — adding plugins/model-providers/<name>/ is sufficient to get into doctor.
     """
-    _static = [
-        ("Z.AI / GLM",      ("GLM_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY"), "https://api.z.ai/api/paas/v4/models", "GLM_BASE_URL", True),
-        ("Kimi / Moonshot",  ("KIMI_API_KEY",),                              "https://api.moonshot.ai/v1/models",   "KIMI_BASE_URL", True),
-        ("StepFun Step Plan", ("STEPFUN_API_KEY",),                          "https://api.stepfun.ai/step_plan/v1/models", "STEPFUN_BASE_URL", True),
-        ("Kimi / Moonshot (China)", ("KIMI_CN_API_KEY",),                    "https://api.moonshot.cn/v1/models",   None, True),
-        ("Arcee AI",         ("ARCEEAI_API_KEY",),                           "https://api.arcee.ai/api/v1/models",  "ARCEE_BASE_URL", True),
-        ("GMI Cloud",        ("GMI_API_KEY",),                               "https://api.gmi-serving.com/v1/models", "GMI_BASE_URL", True),
-        ("DeepSeek",         ("DEEPSEEK_API_KEY",),                          "https://api.deepseek.com/v1/models",  "DEEPSEEK_BASE_URL", True),
-        ("Hugging Face",     ("HF_TOKEN",),                                  "https://router.huggingface.co/v1/models", "HF_BASE_URL", True),
-        ("NVIDIA NIM",       ("NVIDIA_API_KEY",),                            "https://integrate.api.nvidia.com/v1/models", "NVIDIA_BASE_URL", True),
-        ("Alibaba/DashScope", ("DASHSCOPE_API_KEY",),                        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models", "DASHSCOPE_BASE_URL", True),
-        # MiniMax global: /v1 endpoint supports /models.
-        ("MiniMax",          ("MINIMAX_API_KEY",),                           "https://api.minimax.io/v1/models",    "MINIMAX_BASE_URL", True),
-        # MiniMax CN: /v1 endpoint does NOT support /models (returns 404).
-        ("MiniMax (China)",  ("MINIMAX_CN_API_KEY",),                        "https://api.minimaxi.com/v1/models",  "MINIMAX_CN_BASE_URL", False),
-        ("Vercel AI Gateway", ("AI_GATEWAY_API_KEY",),                       "https://ai-gateway.vercel.sh/v1/models", "AI_GATEWAY_BASE_URL", True),
-        ("Kilo Code",        ("KILOCODE_API_KEY",),                          "https://api.kilo.ai/api/gateway/models", "KILOCODE_BASE_URL", True),
-        ("OpenCode Zen",     ("OPENCODE_ZEN_API_KEY",),                      "https://opencode.ai/zen/v1/models",  "OPENCODE_ZEN_BASE_URL", True),
-        # OpenCode Go has no shared /models endpoint; skip the health check.
-        ("OpenCode Go",      ("OPENCODE_GO_API_KEY",),                       None,                                  "OPENCODE_GO_BASE_URL", False),
-    ]
-    _known_names = {t[0] for t in _static}
-    # Also index by profile canonical name so profiles without display_name
-    # don't create duplicate entries for providers already in the static list.
+    _static: list[tuple] = []
+    _known_names: set[str] = set()
     _known_canonical: set[str] = set()
-    _name_to_canonical = {
-        "Z.AI / GLM": "zai", "Kimi / Moonshot": "kimi-coding",
-        "StepFun Step Plan": "stepfun", "Kimi / Moonshot (China)": "kimi-coding-cn",
-        "Arcee AI": "arcee", "GMI Cloud": "gmi", "DeepSeek": "deepseek",
-        "Hugging Face": "huggingface", "NVIDIA NIM": "nvidia",
-        "Alibaba/DashScope": "alibaba", "MiniMax": "minimax",
-        "MiniMax (China)": "minimax-cn", "Vercel AI Gateway": "ai-gateway",
-        "Kilo Code": "kilocode", "OpenCode Zen": "opencode-zen",
-        "OpenCode Go": "opencode-go",
-    }
-    for _label, _canonical in _name_to_canonical.items():
-        _known_canonical.add(_canonical)
-    # Providers that already have a dedicated health check above the generic
-    # API-key loop (with custom headers/auth). Skip their pluggable profiles
-    # here so the generic Bearer-auth loop doesn't run a duplicate, broken
-    # check (e.g. Anthropic native API requires x-api-key, not Bearer).
-    _dedicated_canonical = {"anthropic", "openrouter", "bedrock"}
-    _known_canonical.update(_dedicated_canonical)
+    _dedicated_canonical: set[str] = set()
     try:
         from providers import list_providers
         from providers.base import ProviderProfile as _PP
@@ -1198,7 +1121,7 @@ def run_doctor(args):
                     PROVIDER_REGISTRY,
                     resolve_provider as _resolve_auth_provider,
                 )
-                known_providers = set(PROVIDER_REGISTRY.keys()) | {"openrouter", "custom", "auto", "moa"}
+                known_providers = set(PROVIDER_REGISTRY.keys()) | {"custom", "auto", "moa"}
             except Exception:
                 _resolve_auth_provider = None
                 pass
@@ -1292,26 +1215,11 @@ def run_doctor(args):
             # Warn if model is set to a provider-prefixed name on a provider that doesn't use them.
             # Vendor/model slugs are valid on aggregator-style providers and on any custom
             # provider — bare "custom" or a named "custom:<name>" that fronts an OpenAI-compatible
-            # aggregator (e.g. custom:hpc-ai serving deepseek/deepseek-v4-flash) requires the prefix.
+            # aggregator (e.g. custom:my-endpoint serving org/model-name) requires the prefix.
             provider_for_policy = runtime_provider or catalog_provider
             provider_policy_id = str(provider_for_policy or "").strip().lower()
             providers_accepting_vendor_slugs = {
-                "openrouter",
                 "auto",
-                "ai-gateway",
-                "kilocode",
-                "opencode-zen",
-                "huggingface",
-                "lmstudio",
-                "nvidia",
-                # Fireworks' native model IDs are slash-form
-                # (accounts/fireworks/models/... and .../routers/...), so a "/"
-                # is expected, not an aggregator vendor prefix.
-                "fireworks",
-                # DeepInfra is an aggregator-style gateway: its catalog
-                # is exclusively ``vendor/model`` slugs (Qwen/Qwen3.5-…,
-                # meta-llama/Llama-3-…, anthropic/claude-opus-4-7, …).
-                "deepinfra",
             }
             provider_accepts_vendor_slug = (
                 provider_policy_id in providers_accepting_vendor_slugs
@@ -1326,40 +1234,32 @@ def run_doctor(args):
             ):
                 check_warn(
                     f"model.default '{default_model}' uses a vendor/model slug but provider is '{provider_raw}'",
-                    "(vendor-prefixed slugs belong to aggregators like openrouter)",
+                    "(vendor-prefixed slugs belong to aggregators)",
                 )
                 issues.append(
                     f"model.default '{default_model}' is vendor-prefixed but model.provider is '{provider_raw}'. "
-                    "Either set model.provider to 'openrouter', or drop the vendor prefix."
+                    "Either set model.provider to an aggregator, or drop the vendor prefix."
                 )
 
             # Check credentials for the configured provider.
             # Limit to API-key providers in PROVIDER_REGISTRY — other provider
-            # types (OAuth, SDK, anthropic/custom/auto) have their own env-var
+            # types (OAuth, SDK, custom/auto) have their own env-var
             # checks elsewhere in doctor, and get_auth_status() returns a bare
             # {logged_in: False} for anything it doesn't explicitly dispatch,
             # which would produce false positives.
             if runtime_provider and runtime_provider not in ("auto", "custom"):
                 try:
-                    if runtime_provider == "openrouter":
-                        from hermes_cli.config import get_env_value
+                    from hermes_cli.auth import PROVIDER_REGISTRY, get_auth_status
 
+                    pconfig = PROVIDER_REGISTRY.get(runtime_provider)
+                    configured = True
+                    if pconfig and getattr(pconfig, "auth_type", "") == "api_key":
+                        status = get_auth_status(runtime_provider) or {}
                         configured = bool(
-                            str(get_env_value("OPENROUTER_API_KEY") or "").strip()
-                            or str(get_env_value("OPENAI_API_KEY") or "").strip()
+                            status.get("configured")
+                            or status.get("logged_in")
+                            or status.get("api_key")
                         )
-                    else:
-                        from hermes_cli.auth import PROVIDER_REGISTRY, get_auth_status
-
-                        pconfig = PROVIDER_REGISTRY.get(runtime_provider)
-                        configured = True
-                        if pconfig and getattr(pconfig, "auth_type", "") == "api_key":
-                            status = get_auth_status(runtime_provider) or {}
-                            configured = bool(
-                                status.get("configured")
-                                or status.get("logged_in")
-                                or status.get("api_key")
-                            )
                     if not configured:
                         _fail_and_issue(
                             f"model.provider '{runtime_provider}' is set but no API key is configured",
@@ -1565,38 +1465,10 @@ def run_doctor(args):
         except Exception:
             pass
 
-    _section("xAI Model Retirement (May 15, 2026)")
-
-    try:
-        from hermes_cli.config import load_config
-        from hermes_cli.xai_retirement import (
-            MIGRATION_GUIDE_URL,
-            find_retired_xai_refs,
-            format_issue,
-        )
-
-        _xai_cfg = load_config()
-        retired_refs = find_retired_xai_refs(_xai_cfg)
-        if not retired_refs:
-            check_ok("No retired xAI models in config")
-        else:
-            for ref in retired_refs:
-                check_warn(format_issue(ref))
-            check_info(f"Migration guide: {MIGRATION_GUIDE_URL}")
-            manual_issues.append(
-                f"Update {len(retired_refs)} retired xAI model reference(s) "
-                f"in config.yaml — see {MIGRATION_GUIDE_URL}"
-            )
-    except Exception as _xai_check_err:
-        check_warn("xAI retirement check skipped", f"({_xai_check_err})")
-
     _section("Auth Providers")
 
     try:
-        from hermes_cli.auth import (
-            get_codex_auth_status,
-            get_minimax_oauth_auth_status,
-        )
+        from hermes_cli.auth import get_codex_auth_status
 
         # Read-only display: refresh-free snapshot — doctor must never
         # trigger an OAuth refresh as a side effect of a health check.
@@ -1618,29 +1490,8 @@ def run_doctor(args):
                     "(optional — only required to import tokens "
                     "from an existing Codex CLI login)"
                 )
-
-        minimax_status = get_minimax_oauth_auth_status()
-        if minimax_status.get("logged_in"):
-            region = minimax_status.get("region", "global")
-            check_ok("MiniMax OAuth", f"(logged in, region={region})")
-        else:
-            check_warn("MiniMax OAuth", "(not logged in)")
     except Exception as e:
         check_warn("Auth provider status", f"(could not check: {e})")
-
-    # xAI OAuth — separate try/except so an import failure here cannot
-    # disrupt the already-printed Nous/Codex/Gemini/MiniMax rows above.
-    try:
-        from hermes_cli.auth import get_xai_oauth_auth_status
-        xai_oauth_status = get_xai_oauth_auth_status() or {}
-        if xai_oauth_status.get("logged_in"):
-            check_ok("xAI OAuth", "(logged in)")
-        else:
-            check_warn("xAI OAuth", "(not logged in)")
-            if xai_oauth_status.get("error"):
-                check_info(xai_oauth_status["error"])
-    except Exception:
-        pass
 
     _section("Directory Structure")
     hermes_home = HERMES_HOME
@@ -2360,136 +2211,6 @@ def run_doctor(args):
     )
     _probes: list = []  # list of (label, callable) submitted in display order
 
-    def _probe_openrouter() -> _ConnectivityResult:
-        key = os.getenv("OPENROUTER_API_KEY")
-        if not key:
-            return _ConnectivityResult(
-                "OpenRouter API",
-                [(color("⚠", Colors.YELLOW), "OpenRouter API",
-                  color("(not configured)", Colors.DIM))],
-                [],
-            )
-        try:
-            import httpx
-            r = httpx.get(
-                OPENROUTER_MODELS_URL,
-                headers={"Authorization": f"Bearer {key}"},
-                timeout=10,
-            )
-            if r.status_code == 200:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✓", Colors.GREEN), "OpenRouter API", "")],
-                    [],
-                )
-            if r.status_code == 401:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✗", Colors.RED), "OpenRouter API",
-                      color("(invalid API key)", Colors.DIM))],
-                    ["Check OPENROUTER_API_KEY in .env"],
-                )
-            if r.status_code == 402:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✗", Colors.RED), "OpenRouter API",
-                      color("(out of credits — payment required)", Colors.DIM))],
-                    ["OpenRouter account has insufficient credits. "
-                     "Fix: run 'hermes config set model.provider <provider>' "
-                     "to switch providers, or fund your OpenRouter account "
-                     "at https://openrouter.ai/settings/credits"],
-                )
-            if r.status_code == 429:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✗", Colors.RED), "OpenRouter API",
-                      color("(rate limited)", Colors.DIM))],
-                    ["OpenRouter rate limit hit — consider switching to "
-                     "a different provider or waiting"],
-                )
-            return _ConnectivityResult(
-                "OpenRouter API",
-                [(color("✗", Colors.RED), "OpenRouter API",
-                  color(f"(HTTP {r.status_code})", Colors.DIM))],
-                [],
-            )
-        except Exception as e:
-            return _ConnectivityResult(
-                "OpenRouter API",
-                [(color("✗", Colors.RED), "OpenRouter API",
-                  color(f"({e})", Colors.DIM))],
-                ["Check network connectivity"],
-            )
-
-    def _probe_anthropic() -> _ConnectivityResult:
-        from hermes_cli.auth import get_anthropic_key
-        key = get_anthropic_key()
-        if not key:
-            return _ConnectivityResult("Anthropic API", [], [])
-        try:
-            import httpx
-            from agent.anthropic_adapter import (
-                _is_oauth_token,
-                _COMMON_BETAS,
-                _OAUTH_ONLY_BETAS,
-                _CONTEXT_1M_BETA,
-            )
-            headers = {"anthropic-version": "2023-06-01"}
-            is_oauth = _is_oauth_token(key)
-            if is_oauth:
-                headers["Authorization"] = f"Bearer {key}"
-                headers["anthropic-beta"] = ",".join(_COMMON_BETAS + _OAUTH_ONLY_BETAS)
-            else:
-                headers["x-api-key"] = key
-            r = httpx.get(
-                "https://api.anthropic.com/v1/models",
-                headers=headers, timeout=10,
-            )
-            # Reactive recovery: OAuth subscriptions without 1M context reject the
-            # request with 400 "long context beta is not yet available for this
-            # subscription". Retry once with that beta stripped so the doctor
-            # check doesn't falsely report Anthropic as unreachable.
-            if (
-                is_oauth
-                and r.status_code == 400
-                and "long context beta" in r.text.lower()
-                and "not yet available" in r.text.lower()
-            ):
-                headers["anthropic-beta"] = ",".join(
-                    [b for b in _COMMON_BETAS if b != _CONTEXT_1M_BETA]
-                    + list(_OAUTH_ONLY_BETAS)
-                )
-                r = httpx.get(
-                    "https://api.anthropic.com/v1/models",
-                    headers=headers, timeout=10,
-                )
-            if r.status_code == 200:
-                return _ConnectivityResult(
-                    "Anthropic API",
-                    [(color("✓", Colors.GREEN), "Anthropic API", "")],
-                    [],
-                )
-            if r.status_code == 401:
-                return _ConnectivityResult(
-                    "Anthropic API",
-                    [(color("✗", Colors.RED), "Anthropic API",
-                      color("(invalid API key)", Colors.DIM))],
-                    [],
-                )
-            return _ConnectivityResult(
-                "Anthropic API",
-                [(color("⚠", Colors.YELLOW), "Anthropic API",
-                  color("(couldn't verify)", Colors.DIM))],
-                [],
-            )
-        except Exception as e:
-            return _ConnectivityResult(
-                "Anthropic API",
-                [(color("⚠", Colors.YELLOW), "Anthropic API",
-                  color(f"({e})", Colors.DIM))],
-                [],
-            )
-
     def _probe_apikey_provider(pname, env_vars, default_url, base_env,
                                supports_health_check) -> _ConnectivityResult:
         key = ""
@@ -2510,44 +2231,12 @@ def run_doctor(args):
         try:
             import httpx
             base = os.getenv(base_env, "") if base_env else ""
-            # Auto-detect Kimi Code keys (sk-kimi-) → api.kimi.com/coding/v1
-            # (OpenAI-compat surface, which exposes /models for health check).
-            if not base and key.startswith("sk-kimi-"):
-                base = "https://api.kimi.com/coding/v1"
-            # Anthropic-compat endpoints (/anthropic, api.kimi.com/coding
-            # with no /v1) don't support /models. Rewrite to OpenAI-compat
-            # /v1 surface for health checks.
-            if base and base.rstrip("/").endswith("/anthropic"):
-                from agent.auxiliary_client import _to_openai_base_url
-                base = _to_openai_base_url(base)
-            if base_url_host_matches(base, "api.kimi.com") and base.rstrip("/").endswith("/coding"):
-                base = base.rstrip("/") + "/v1"
             url = (base.rstrip("/") + "/models") if base else default_url
             headers = {
                 "Authorization": f"Bearer {key}",
                 "User-Agent": _HERMES_USER_AGENT,
             }
-            if base_url_host_matches(base, "api.kimi.com"):
-                headers["User-Agent"] = "claude-code/0.1.0"
-            # Google's Generative Language API (generativelanguage.googleapis.com)
-            # rejects ``Authorization: Bearer <api-key>`` with 401
-            # ``ACCESS_TOKEN_TYPE_UNSUPPORTED`` — that header is reserved for
-            # OAuth 2 access tokens, not plain API keys. Plain keys use
-            # ``x-goog-api-key`` (or ``?key=``). Without this, a perfectly valid
-            # GOOGLE_API_KEY/GEMINI_API_KEY always shows red in ``hermes doctor``.
-            if url and base_url_host_matches(url, "generativelanguage.googleapis.com"):
-                headers.pop("Authorization", None)
-                headers["x-goog-api-key"] = key
             r = httpx.get(url, headers=headers, timeout=10)
-            if (
-                pname == "Alibaba/DashScope"
-                and not base
-                and r.status_code == 401
-            ):
-                r = httpx.get(
-                    "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
-                    headers=headers, timeout=10,
-                )
             if r.status_code == 200:
                 return _ConnectivityResult(
                     pname,
@@ -2575,141 +2264,7 @@ def run_doctor(args):
                 [],
             )
 
-    def _probe_bedrock() -> _ConnectivityResult:
-        try:
-            from agent.bedrock_adapter import (
-                has_aws_credentials,
-                resolve_aws_auth_env_var,
-                resolve_bedrock_region,
-            )
-        except ImportError:
-            return _ConnectivityResult("AWS Bedrock", [], [])
-        if not has_aws_credentials():
-            return _ConnectivityResult("AWS Bedrock", [], [])
-        auth_var = resolve_aws_auth_env_var()
-        region = resolve_bedrock_region()
-        label = "AWS Bedrock".ljust(20)
-        try:
-            import boto3
-            from botocore.config import Config as _BotoConfig
-            # Trim retries on the actual Bedrock API call so a transient
-            # failure doesn't pad the doctor run by 30+ seconds.
-            cfg = _BotoConfig(
-                connect_timeout=5,
-                read_timeout=10,
-                retries={"max_attempts": 1},
-            )
-            client = boto3.client("bedrock", region_name=region, config=cfg)
-            resp = client.list_foundation_models()
-            n = len(resp.get("modelSummaries", []))
-            return _ConnectivityResult(
-                "AWS Bedrock",
-                [(color("✓", Colors.GREEN), label,
-                  color(f"({auth_var}, {region}, {n} models)", Colors.DIM))],
-                [],
-            )
-        except ImportError:
-            return _ConnectivityResult(
-                "AWS Bedrock",
-                [(color("⚠", Colors.YELLOW), label,
-                  color(f"(boto3 not installed — {sys.executable} -m pip install boto3)",
-                        Colors.DIM))],
-                [f"Install boto3 for Bedrock: {sys.executable} -m pip install boto3"],
-            )
-        except Exception as e:
-            err_name = type(e).__name__
-            return _ConnectivityResult(
-                "AWS Bedrock",
-                [(color("⚠", Colors.YELLOW), label,
-                  color(f"({err_name}: {e})", Colors.DIM))],
-                [f"AWS Bedrock: {err_name} — check IAM permissions for "
-                 f"bedrock:ListFoundationModels"],
-            )
-
-    def _probe_azure_entra() -> _ConnectivityResult:
-        """Probe Azure Foundry Entra ID auth, parallel to ``_probe_bedrock``.
-
-        Skipped unless the active config has ``model.provider:
-        azure-foundry`` AND ``model.auth_mode: entra_id`` — we don't probe
-        the token-service / CLI chain for users on plain API-key Azure.
-
-        Bounded by a 10s timeout (via
-        :func:`agent.azure_identity_adapter.describe_active_credential`)
-        so a slow token service can't pad the doctor run.
-        """
-        label = "Azure Foundry (Entra ID)".ljust(28)
-        try:
-            from hermes_cli.config import load_config
-            cfg = load_config()
-            model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
-            if not isinstance(model_cfg, dict):
-                return _ConnectivityResult("Azure Foundry (Entra ID)", [], [])
-            cfg_provider = str(model_cfg.get("provider") or "").strip().lower()
-            auth_mode = str(model_cfg.get("auth_mode") or "").strip().lower()
-            if cfg_provider != "azure-foundry" or auth_mode != "entra_id":
-                return _ConnectivityResult("Azure Foundry (Entra ID)", [], [])
-        except Exception:
-            return _ConnectivityResult("Azure Foundry (Entra ID)", [], [])
-
-        try:
-            from agent.azure_identity_adapter import (
-                EntraIdentityConfig,
-                SCOPE_AI_AZURE_DEFAULT,
-                describe_active_credential,
-                has_azure_identity_installed,
-            )
-        except Exception as exc:
-            return _ConnectivityResult(
-                "Azure Foundry (Entra ID)",
-                [(color("⚠", Colors.YELLOW), label,
-                  color(f"(adapter import failed: {exc})", Colors.DIM))],
-                [f"Azure Foundry adapter import failed: {exc}"],
-            )
-
-        if not has_azure_identity_installed():
-            return _ConnectivityResult(
-                "Azure Foundry (Entra ID)",
-                [(color("⚠", Colors.YELLOW), label,
-                  color("(azure-identity not installed)", Colors.DIM))],
-                [f"Install azure-identity: {sys.executable} -m pip install azure-identity"],
-            )
-
-        entra_cfg = model_cfg.get("entra") or {}
-        if not isinstance(entra_cfg, dict):
-            entra_cfg = {}
-        scope = (
-            str(entra_cfg.get("scope") or "").strip()
-            or SCOPE_AI_AZURE_DEFAULT
-        )
-        config = EntraIdentityConfig(
-            scope=scope,
-        )
-        info = describe_active_credential(config=config, timeout_seconds=10.0)
-        if info.get("ok"):
-            env_sources = info.get("env_sources") or []
-            tag = ", ".join(env_sources) if env_sources else "default credential chain"
-            return _ConnectivityResult(
-                "Azure Foundry (Entra ID)",
-                [(color("✓", Colors.GREEN), label,
-                  color(f"({tag}, scope={scope})", Colors.DIM))],
-                [],
-            )
-        err = info.get("error") or "credential chain exhausted"
-        hint = info.get("hint") or (
-            "Run `az login`, set AZURE_TENANT_ID/AZURE_CLIENT_ID/"
-            "AZURE_CLIENT_SECRET, or attach a managed identity to this VM."
-        )
-        return _ConnectivityResult(
-            "Azure Foundry (Entra ID)",
-            [(color("⚠", Colors.YELLOW), label,
-              color(f"({err})", Colors.DIM))],
-            [f"Azure Foundry Entra: {err}. {hint}"],
-        )
-
     # Build the probe submission list in display order
-    _probes.append(("OpenRouter API", _probe_openrouter))
-    _probes.append(("Anthropic API", _probe_anthropic))
-
     global _APIKEY_PROVIDERS_CACHE
     if _APIKEY_PROVIDERS_CACHE is None:
         _APIKEY_PROVIDERS_CACHE = _build_apikey_providers_list()
@@ -2722,52 +2277,30 @@ def run_doctor(args):
                                        b=_base_env, s=_supports:
                                 _probe_apikey_provider(p, e, u, b, s)))
 
-    _probes.append(("AWS Bedrock", _probe_bedrock))
-    _probes.append(("Azure Foundry (Entra ID)", _probe_azure_entra))
+    if _probes:
+        # Print a single status line so users see something happening, then
+        # fan out. ``\r`` clears it once the first real result line lands.
+        print(f"  {color(f'Running {len(_probes)} connectivity checks in parallel…', Colors.DIM)}",
+              end="", flush=True)
 
-    # Print a single status line so users see something happening, then
-    # fan out. ``\r`` clears it once the first real result line lands.
-    print(f"  {color(f'Running {len(_probes)} connectivity checks in parallel…', Colors.DIM)}",
-          end="", flush=True)
-
-    # Disable boto3's EC2 instance-metadata-service probe for the duration
-    # of the parallel block. boto's default credential chain tries
-    # 169.254.169.254 with a multi-second timeout when we're not on EC2,
-    # which dominated the section's wall time before this fix
-    # (~2s on a developer laptop, even with the rest parallelized).
-    # Set on the parent thread before submitting work so the env-var
-    # mutation never races with another worker. has_aws_credentials() in
-    # the bedrock probe already gates on real env-var creds, so IMDS is
-    # never the legitimate source for `hermes doctor`.
-    _imds_prev = os.environ.get("AWS_EC2_METADATA_DISABLED")
-    os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
-    try:
-        # 8 workers is plenty — each probe is a single HTTP call plus a TLS
-        # handshake. More than that wastes thread-startup cost and risks
-        # noisy output if anything ever printed from inside a worker.
-        with _futures.ThreadPoolExecutor(max_workers=8,
+        with _futures.ThreadPoolExecutor(max_workers=min(8, len(_probes)),
                                          thread_name_prefix="doctor-probe") as _ex:
             _futures_in_order = [_ex.submit(_fn) for _, _fn in _probes]
             _results = [_f.result() for _f in _futures_in_order]
-    finally:
-        if _imds_prev is None:
-            os.environ.pop("AWS_EC2_METADATA_DISABLED", None)
-        else:
-            os.environ["AWS_EC2_METADATA_DISABLED"] = _imds_prev
 
-    # Clear the "Running …" line and print all results in submission order.
-    print("\r" + " " * 70 + "\r", end="")
-    for _r in _results:
-        for _glyph, _label, _detail in _r.lines:
-            if _detail:
-                print(f"  {_glyph} {_label} {_detail}")
-            else:
-                print(f"  {_glyph} {_label}")
-        _issues_to_add = list(_r.issues)
-        if _issues_to_add and _has_healthy_oauth_fallback_for_apikey_provider(_r.label):
-            _issues_to_add = []
-        for _issue in _issues_to_add:
-            issues.append(_issue)
+        # Clear the "Running …" line and print all results in submission order.
+        print("\r" + " " * 70 + "\r", end="")
+        for _r in _results:
+            for _glyph, _label, _detail in _r.lines:
+                if _detail:
+                    print(f"  {_glyph} {_label} {_detail}")
+                else:
+                    print(f"  {_glyph} {_label}")
+            _issues_to_add = list(_r.issues)
+            if _issues_to_add and _has_healthy_oauth_fallback_for_apikey_provider(_r.label):
+                _issues_to_add = []
+            for _issue in _issues_to_add:
+                issues.append(_issue)
 
     _section("Tool Availability")
     try:

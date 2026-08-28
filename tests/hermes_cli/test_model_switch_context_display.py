@@ -76,7 +76,6 @@ class TestResolveDisplayContextLength:
         from agent import model_metadata as _mm
         with _p.object(_mm, "get_cached_context_length", return_value=None), \
              _p.object(_mm, "fetch_endpoint_model_metadata", return_value={}), \
-             _p.object(_mm, "fetch_model_metadata", return_value={}), \
              _p.object(_mm, "is_local_endpoint", return_value=False), \
              _p.object(_mm, "_is_known_provider_base_url", return_value=False):
             ctx = resolve_display_context_length(

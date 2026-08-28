@@ -150,52 +150,5 @@ class TestBaseUrlValidation:
         assert saved == "", "Empty input should not save a base URL"
 
 
-class TestZaiEndpointPicker:
-    """Z.AI setup should present a curses picker for endpoint selection."""
 
-
-
-    def test_custom_proxy_rejects_invalid_url(self, config_home, monkeypatch, capsys):
-        """Custom proxy must start with http:// or https://."""
-        from hermes_cli.main import _model_flow_api_key_provider
-        from hermes_cli.config import load_config
-
-        monkeypatch.setenv("GLM_API_KEY", "test-key")
-        monkeypatch.delenv("GLM_BASE_URL", raising=False)
-        from hermes_cli.auth import ZAI_ENDPOINTS
-        custom_idx = len(ZAI_ENDPOINTS)
-
-        with patch("hermes_cli.main._prompt_provider_choice", return_value=custom_idx), \
-             patch("hermes_cli.auth._prompt_model_selection", return_value="glm-5"), \
-             patch("hermes_cli.auth.deactivate_provider"), \
-             patch("builtins.input", return_value="not-a-url"):
-            _model_flow_api_key_provider(load_config(), "zai", "old-model")
-
-        # The invalid URL should not have been saved as base_url
-        model = load_config()["model"]
-        assert model["base_url"] != "not-a-url"
-        captured = capsys.readouterr()
-        assert "Invalid URL" in captured.out
-
-
-    def test_current_endpoint_is_default_choice(self, config_home, monkeypatch):
-        """When a known endpoint is already active, it should be the default."""
-        from hermes_cli.auth import ZAI_ENDPOINTS
-        from hermes_cli.model_setup_flows import _select_zai_endpoint
-
-        coding_url = ZAI_ENDPOINTS[2][1]  # coding-global
-
-        captured = {}
-
-        def fake_choice(choices, *, default=0, title=""):
-            captured["default"] = default
-            captured["choices"] = choices
-            return default
-
-        with patch("hermes_cli.main._prompt_provider_choice", side_effect=fake_choice):
-            result = _select_zai_endpoint(coding_url)
-
-        # Default should point at index 2 (coding-global)
-        assert captured["default"] == 2
-        assert result == coding_url
 

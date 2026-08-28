@@ -36,7 +36,19 @@ class _ExhaustedPool:
 def test_generic_api_key_flow_passes_pool_key_to_existing_key_prompt(monkeypatch):
     from hermes_cli.model_setup_flows import _model_flow_api_key_provider
 
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    from hermes_cli.auth import ProviderConfig
+    monkeypatch.setitem(
+        PROVIDER_REGISTRY,
+        "dummy",
+        ProviderConfig(
+            id="dummy",
+            name="Dummy",
+            auth_type="api_key",
+            inference_base_url="https://api.dummy.com/v1",
+            api_key_env_vars=("DUMMY_API_KEY",),
+        ),
+    )
+    monkeypatch.delenv("DUMMY_API_KEY", raising=False)
     captured: dict[str, str] = {}
 
     def capture_prompt(_pconfig, existing_key, **_kwargs):
@@ -48,7 +60,7 @@ def test_generic_api_key_flow_passes_pool_key_to_existing_key_prompt(monkeypatch
         patch("agent.credential_pool.load_pool", return_value=_AvailablePool()),
         patch("hermes_cli.main._prompt_api_key", side_effect=capture_prompt),
     ):
-        _model_flow_api_key_provider({}, "deepseek")
+        _model_flow_api_key_provider({}, "dummy")
 
     assert captured["existing_key"] == "pool-secret"
 

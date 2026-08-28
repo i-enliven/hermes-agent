@@ -111,7 +111,7 @@ def test_cli_picker_hides_excluded_provider_by_alias(config_home):
         **{"excluded_providers": [target_alias]},
     )
     excluded_labels = _capture_provider_labels(config_home)
-    assert not any(target_label_fragment in lbl for lbl in excluded_labels), (
+    assert not any(lbl.split(" (")[0] == target_label_fragment for lbl in excluded_labels), (
         f"excluding alias {target_alias!r} should hide {target_slug}; "
         f"labels={excluded_labels}"
     )

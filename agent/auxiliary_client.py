@@ -2654,6 +2654,87 @@ def _describe_openrouter_unavailable() -> str:
 
 
 
+def _read_main_model() -> str:
+    """Read the user's configured main model from config.yaml."""
+    try:
+        from hermes_cli.config import load_config
+        cfg = load_config()
+        model_cfg = cfg.get("model", {})
+        if isinstance(model_cfg, dict):
+            model = model_cfg.get("default", "")
+            if isinstance(model, str) and model.strip():
+                return model.strip()
+        elif isinstance(model_cfg, str) and model_cfg.strip():
+            return model_cfg.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _read_main_provider() -> str:
+    """Read the user's configured main provider from config.yaml."""
+    try:
+        from hermes_cli.config import load_config
+        cfg = load_config()
+        model_cfg = cfg.get("model", {})
+        if isinstance(model_cfg, dict):
+            provider = model_cfg.get("provider", "")
+            if isinstance(provider, str) and provider.strip():
+                return provider.strip().lower()
+    except Exception:
+        pass
+    return ""
+
+
+def _read_main_base_url() -> str:
+    """Read the user's configured main base_url from config.yaml."""
+    try:
+        from hermes_cli.config import load_config
+        cfg = load_config()
+        model_cfg = cfg.get("model", {})
+        if isinstance(model_cfg, dict):
+            base_url = model_cfg.get("base_url", "")
+            if isinstance(base_url, str) and base_url.strip():
+                return base_url.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _read_main_api_key() -> str:
+    """Read the user's configured main api_key from config.yaml."""
+    try:
+        from hermes_cli.config import load_config
+        cfg = load_config()
+        model_cfg = cfg.get("model", {})
+        if isinstance(model_cfg, dict):
+            api_key = model_cfg.get("api_key", "")
+            if isinstance(api_key, str) and api_key.strip():
+                return api_key.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _resolve_moa_aggregator(preset_name: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """Resolve a MoA preset to its aggregator (provider, model) pair."""
+    try:
+        from hermes_cli.config import load_config
+        from hermes_cli.moa_config import resolve_moa_preset
+
+        preset = resolve_moa_preset(load_config().get("moa") or {}, preset_name or None)
+        agg = preset.get("aggregator") or {}
+        agg_provider = str(agg.get("provider") or "").strip()
+        agg_model = str(agg.get("model") or "").strip()
+        if agg_provider and agg_model and agg_provider.lower() != "moa":
+            return agg_provider, agg_model
+    except Exception:
+        logger.debug(
+            "MoA aggregator resolution failed for preset %r", preset_name, exc_info=True
+        )
+    return None, None
+
+
 def _read_main_model_for_aux() -> str:
     """Main model with MoA presets unwrapped to the aggregator's model.
 

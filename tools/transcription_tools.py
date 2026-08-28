@@ -2688,19 +2688,14 @@ def _transcribe_deepinfra(
     if not api_key:
         return {"success": False, "transcript": "", "error": "DEEPINFRA_API_KEY not set"}
 
-    from hermes_cli.models import deepinfra_base_url, deepinfra_model_ids
-
     stt_config = _load_stt_config()
-    # ``stt.deepinfra: null`` in YAML yields None, not {} — coalesce so the
-    # ``.get`` calls don't raise (no stt.deepinfra block in DEFAULT_CONFIG to
-    # deep-merge over the null).
     di_config = stt_config.get("deepinfra") if isinstance(stt_config, dict) else None
     if not isinstance(di_config, dict):
         di_config = {}
-    base_url = deepinfra_base_url(di_config)
+    base_url = (di_config.get("base_url") or "").strip() or os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai")
 
     if not model_name:
-        candidates = deepinfra_model_ids("stt")
+        candidates = ["openai/whisper-large-v3-turbo"]
         if not candidates:
             return {
                 "success": False,

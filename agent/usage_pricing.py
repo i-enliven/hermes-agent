@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, Literal, Optional
 
-from agent.model_metadata import fetch_endpoint_model_metadata, fetch_model_metadata
+from agent.model_metadata import fetch_endpoint_model_metadata
 from utils import base_url_host_matches, base_url_hostname
 
 logger = logging.getLogger(__name__)
@@ -1068,8 +1068,6 @@ def resolve_billing_route(
 
     if provider_name == "openai-codex":
         return BillingRoute(provider="openai-codex", model=model, base_url=base_url or "", billing_mode="subscription_included")
-    if provider_name == "openrouter" or base_url_host_matches(base_url or "", "openrouter.ai"):
-        return BillingRoute(provider="openrouter", model=model, base_url=base_url or "", billing_mode="official_models_api")
     if provider_name == "anthropic":
         return BillingRoute(provider="anthropic", model=model.split("/")[-1], base_url=base_url or "", billing_mode="official_docs_snapshot")
     # "openai-api" is the picker/registry slug for direct api.openai.com; it
@@ -1182,15 +1180,6 @@ def _lookup_official_docs_pricing(route: BillingRoute) -> Optional[PricingEntry]
     return None
 
 
-def _openrouter_pricing_entry(route: BillingRoute) -> Optional[PricingEntry]:
-    return _pricing_entry_from_metadata(
-        fetch_model_metadata(),
-        route.model,
-        source_url="https://openrouter.ai/docs/api/api-reference/models/get-models",
-        pricing_version="openrouter-models-api",
-    )
-
-
 def _pricing_entry_from_metadata(
     metadata: Dict[str, Dict[str, Any]],
     model_id: str,
@@ -1251,8 +1240,6 @@ def get_pricing_entry(
             source="none",
             pricing_version="included-route",
         )
-    if route.provider == "openrouter":
-        return _openrouter_pricing_entry(route)
     if route.base_url:
         entry = _pricing_entry_from_metadata(
             fetch_endpoint_model_metadata(route.base_url, api_key=api_key or ""),
@@ -1486,9 +1473,6 @@ def estimate_usage_cost(
         status = "included"
         label = "included"
         notes.append(_INCLUDED_NOTE)
-
-    if route.provider == "openrouter":
-        notes.append("OpenRouter cost is estimated from the models API until reconciled.")
 
     return CostResult(
         amount_usd=amount,

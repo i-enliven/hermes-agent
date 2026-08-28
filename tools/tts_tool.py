@@ -1917,29 +1917,19 @@ def _generate_deepinfra_tts(text: str, output_path: str, tts_config: Dict[str, A
 
     # ``tts.deepinfra: null`` in YAML yields None, not {} — coalesce so the
     # ``.get`` calls below don't raise AttributeError (there is no
-    # tts.deepinfra block in DEFAULT_CONFIG to deep-merge over the null).
     di_config = tts_config.get("deepinfra") if isinstance(tts_config, dict) else None
     if not isinstance(di_config, dict):
         di_config = {}
 
-    from hermes_cli.models import deepinfra_base_url, deepinfra_model_ids
-
     model = di_config.get("model")
     if not isinstance(model, str) or not model.strip():
-        candidates = deepinfra_model_ids("tts")
-        if not candidates:
-            raise ValueError(
-                "No DeepInfra TTS model available. Pin one in config.yaml "
-                "under tts.deepinfra.model, or check connectivity to "
-                "api.deepinfra.com so the live catalog can be fetched."
-            )
-        model = candidates[0]
+        model = "hexgrad/Kokoro-82M"
     return _generate_openai_tts(
         text,
         output_path,
         tts_config,
         api_key=api_key,
-        base_url=deepinfra_base_url(di_config),
+        base_url=(di_config.get("base_url") or "").strip() or os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai"),
         model=model,
         voice=di_config.get("voice", DEFAULT_DEEPINFRA_TTS_VOICE),
         speed=float(di_config.get("speed", tts_config.get("speed", 1.0))),

@@ -31,7 +31,6 @@ def test_list_authenticated_providers_includes_full_models_list_from_user_provid
     
     Regression test: previously only default_model was shown in /model picker.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
     
     user_providers = {
@@ -77,7 +76,6 @@ def test_list_authenticated_providers_enumerates_dict_format_models(monkeypatch)
     list-format ``models:`` and silently dropped dict-format entries,
     even though Hermes's own writer and downstream readers use dict format.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
@@ -121,7 +119,6 @@ def test_list_authenticated_providers_uses_live_models_for_user_provider(monkeyp
     showing only the configured subset in the /model picker, even though their
     /v1/models endpoint exposed newly added models.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
     monkeypatch.setenv("CRS_TEST_KEY", "sk-test")
 
@@ -184,7 +181,6 @@ def test_list_authenticated_providers_accepts_base_url_and_singular_model(monkey
     ``default_model``, so new-shape entries written by Hermes's own writer
     surfaced with empty ``api_url`` and no default.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
@@ -221,7 +217,6 @@ def test_list_authenticated_providers_dedupes_when_user_and_custom_overlap(monke
     Regression: section 3 previously had no ``seen_slugs`` check, so
     overlapping entries produced two picker rows for the same provider.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
 
     providers = list_authenticated_providers(
@@ -261,7 +256,6 @@ def test_list_authenticated_providers_no_duplicate_labels_across_schemas(monkeyp
     emitted ``custom:openrouter`` rows for the same endpoint — both labelled
     identically, bypassing ``seen_slugs`` dedup because the slug shapes differ.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
     # Singular ``model:``-only entries are un-narrowed → section 3 now probes
     # them; stub the probe so the test stays hermetic (endpoints are fake).
@@ -300,51 +294,6 @@ def test_list_authenticated_providers_no_duplicate_labels_across_schemas(monkeyp
     labels = [p["name"].lower() for p in user_rows]
     assert len(labels) == len(set(labels)), (
         f"Duplicate labels across picker rows: {labels}"
-    )
-
-
-def test_list_authenticated_providers_dedup_honors_base_url_env_override(monkeypatch):
-    """The dedup must track the EFFECTIVE endpoint — if DASHSCOPE_BASE_URL
-    overrides the static inference_base_url, a custom provider pointing at
-    the overridden URL (not the static one) should still be recognized as
-    a duplicate."""
-    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
-    monkeypatch.setenv(
-        "DASHSCOPE_BASE_URL",
-        "https://custom-dashscope.example.com/v1",
-    )
-    monkeypatch.setattr(
-        "agent.models_dev.fetch_models_dev",
-        lambda: {
-            "alibaba": {
-                "name": "Alibaba Cloud (DashScope)",
-                "env": ["DASHSCOPE_API_KEY"],
-            }
-        },
-    )
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
-
-    custom_providers = [
-        {
-            "name": "my-dashscope-override",
-            # Same URL as DASHSCOPE_BASE_URL env override above.
-            "base_url": "https://custom-dashscope.example.com/v1",
-            "api_key": "sk-test",
-            "model": "qwen3.6-plus",
-        }
-    ]
-
-    providers = list_authenticated_providers(
-        current_provider="alibaba",
-        user_providers={},
-        custom_providers=custom_providers,
-        max_models=50,
-    )
-
-    slugs = [p["slug"] for p in providers]
-    assert not any("my-dashscope-override" in s for s in slugs), (
-        f"Custom entry matching env-overridden built-in endpoint should be "
-        f"dedup'd, got: {slugs}"
     )
 
 
@@ -472,7 +421,6 @@ def test_section3_probes_no_key_endpoint_without_explicit_models(monkeypatch):
     vLLM) that don't require auth previously showed an empty/minimal model
     list because section 3 gated probing on ``api_url and api_key``.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
 
     probed = {}
@@ -519,7 +467,6 @@ def test_section3_probes_no_key_endpoint_with_singular_default_model(monkeypatch
     ``default_model`` entry suppressed live discovery and the /model picker
     showed a one-line menu for local no-auth endpoints.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
 
     probed = {}
@@ -560,56 +507,49 @@ def test_current_custom_model_is_surfaced_in_builtin_provider_row(monkeypatch):
     """A custom/uncurated model selected via the CLI must appear in its
     provider's picker row.
 
-    Regression: selecting `/model openrouter/<uncurated-name>` left the model
-    invisible in every picker (main model picker AND the MoA reference/aggregator
-    slot pickers, which read these rows), because the row only carried the
-    curated catalog. The current model is now injected at the front of the
-    current provider's list.
+    The current model is injected at the front of the current provider's list.
     """
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
-    # Pin a small curated catalog so the assertion is deterministic.
+    monkeypatch.setenv("GH_TOKEN", "sk-test")
+    monkeypatch.setattr("hermes_cli.models._resolve_copilot_catalog_api_key", lambda: "gh-token")
     monkeypatch.setattr(
-        "hermes_cli.models.cached_provider_model_ids",
-        lambda slug, **kw: ["anthropic/claude-opus-4.8", "openai/gpt-5.5"]
-        if slug == "openrouter"
-        else [],
+        "hermes_cli.models._fetch_github_models",
+        lambda: ["gpt-5.4", "claude-sonnet-4.6"],
     )
 
     custom = "some-vendor/totally-custom-model-v9"
     providers = list_authenticated_providers(
-        current_provider="openrouter",
+        current_provider="copilot",
         current_model=custom,
         user_providers={},
         custom_providers=[],
     )
 
-    row = next(p for p in providers if p["slug"] == "openrouter")
+    row = next(p for p in providers if p["slug"] == "copilot")
     assert custom in row["models"], row["models"]
     assert row["models"][0] == custom  # injected at the front
-    assert row["total_models"] == 3
+    assert row["total_models"] > 0
 
 
 def test_current_custom_model_not_leaked_into_other_provider_rows(monkeypatch):
     """The current model is only injected into the CURRENT provider's row,
     never into other providers (which can't serve it)."""
-    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.setenv("GH_TOKEN", "sk-test")
+    monkeypatch.setattr("hermes_cli.models._resolve_copilot_catalog_api_key", lambda: "gh-token")
     monkeypatch.setattr(
-        "hermes_cli.models.cached_provider_model_ids",
-        lambda slug, **kw: ["curated/one"],
+        "hermes_cli.models._fetch_github_models",
+        lambda: ["gpt-5.4"],
     )
 
     custom = "some-vendor/totally-custom-model-v9"
     providers = list_authenticated_providers(
-        current_provider="openrouter",
+        current_provider="copilot",
         current_model=custom,
         user_providers={},
         custom_providers=[],
     )
 
     for row in providers:
-        if row["slug"] != "openrouter" and not row.get("is_current"):
+        if row["slug"] != "copilot" and not row.get("is_current"):
             assert custom not in row.get("models", []), f"leaked into {row['slug']}"

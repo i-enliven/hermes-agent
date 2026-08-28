@@ -19,7 +19,7 @@ from hermes_cli.config import get_env_path, get_env_value, get_hermes_home, load
 from hermes_cli.models import provider_label
 from hermes_cli.runtime_provider import resolve_requested_provider
 from hermes_cli.vercel_auth import describe_vercel_auth
-from hermes_constants import OPENROUTER_MODELS_URL
+
 
 def check_mark(ok: bool) -> str:
     if ok:
@@ -84,12 +84,7 @@ def _effective_provider_label() -> str:
     except AuthError:
         effective = requested or "auto"
 
-    if effective == "openrouter":
-        # A custom endpoint may be configured either in config.yaml
-        # (model.base_url — the canonical location; the runtime treats
-        # config.yaml as the single source of truth) or via the legacy
-        # OPENAI_BASE_URL env var. Either way, labeling it "OpenRouter"
-        # is misleading (#3296).
+    if effective == "custom":
         config_base_url = ""
         try:
             model_cfg = load_config().get("model")
@@ -164,19 +159,7 @@ def show_status(args):
 
     # Values may be a single env var name (str) or a tuple of alternates (first found wins).
     keys: dict[str, str | tuple[str, ...]] = {
-        "OpenRouter": "OPENROUTER_API_KEY",
         "OpenAI": "OPENAI_API_KEY",
-        "Anthropic": ("ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"),
-        "Google / Gemini": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
-        "DeepSeek": "DEEPSEEK_API_KEY",
-        "xAI / Grok": "XAI_API_KEY",
-        "NVIDIA NIM": "NVIDIA_API_KEY",
-        "Z.AI / GLM": "GLM_API_KEY",
-        "Kimi": "KIMI_API_KEY",
-        "StepFun Step Plan": "STEPFUN_API_KEY",
-        "MiniMax": "MINIMAX_API_KEY",
-        "MiniMax-CN": "MINIMAX_CN_API_KEY",
-        "DeepInfra": "DEEPINFRA_API_KEY",
         "Firecrawl": "FIRECRAWL_API_KEY",
         "Tavily": "TAVILY_API_KEY",
         "Browser Use": "BROWSER_USE_API_KEY",  # Optional — local browser works without this
@@ -197,20 +180,10 @@ def show_status(args):
         return get_env_value(env_ref) or ""
 
     for name, env_ref in keys.items():
-        # Anthropic already has a dedicated lookup below; keep that as the
-        # single source of truth (it also resolves OAuth tokens), skip here
-        # so we don't print two "Anthropic" rows.
-        if name == "Anthropic":
-            continue
         value = _resolve_env(env_ref)
         has_key = bool(value)
         display = redact_key(value)
         print(f"  {name:<12}  {check_mark(has_key)} {display}")
-
-    from hermes_cli.auth import get_anthropic_key
-    anthropic_value = get_anthropic_key()
-    anthropic_display = redact_key(anthropic_value)
-    print(f"  {'Anthropic':<12}  {check_mark(bool(anthropic_value))} {anthropic_display}")
 
     # =========================================================================
     # Auth Providers (OAuth)
@@ -219,20 +192,12 @@ def show_status(args):
     print(color("◆ Auth Providers", Colors.CYAN, Colors.BOLD))
 
     try:
-        from hermes_cli.auth import (
-            get_codex_auth_status,
-            get_qwen_auth_status,
-            get_minimax_oauth_auth_status,
-        )
+        from hermes_cli.auth import get_codex_auth_status
         # Read-only display: use the refresh-free snapshot so `hermes status`
         # never performs an OAuth refresh or burns a single-use refresh token.
         codex_status = get_codex_auth_status()
-        qwen_status = get_qwen_auth_status()
-        minimax_status = get_minimax_oauth_auth_status()
     except Exception:
         codex_status = {}
-        qwen_status = {}
-        minimax_status = {}
 
     codex_logged_in = bool(codex_status.get("logged_in"))
     print(
@@ -247,80 +212,6 @@ def show_status(args):
         print(f"    Refreshed:  {codex_last_refresh}")
     if codex_status.get("error") and not codex_logged_in:
         print(f"    Error:      {codex_status.get('error')}")
-
-    qwen_logged_in = bool(qwen_status.get("logged_in"))
-    print(
-        f"  {'Qwen OAuth':<12}  {check_mark(qwen_logged_in)} "
-        f"{'logged in' if qwen_logged_in else 'not logged in (run: qwen auth qwen-oauth)'}"
-    )
-    qwen_auth_file = qwen_status.get("auth_file")
-    if qwen_auth_file:
-        print(f"    Auth file:  {qwen_auth_file}")
-    qwen_exp = qwen_status.get("expires_at_ms")
-    if qwen_exp:
-        from datetime import datetime, timezone
-        print(f"    Access exp: {datetime.fromtimestamp(int(qwen_exp) / 1000, tz=timezone.utc).isoformat()}")
-    if qwen_status.get("error") and not qwen_logged_in:
-        print(f"    Error:      {qwen_status.get('error')}")
-
-    minimax_logged_in = bool(minimax_status.get("logged_in"))
-    print(
-        f"  {'MiniMax OAuth':<12}  {check_mark(minimax_logged_in)} "
-        f"{'logged in' if minimax_logged_in else 'not logged in (run: hermes auth add minimax-oauth)'}"
-    )
-    minimax_region = minimax_status.get("region")
-    if minimax_logged_in and minimax_region:
-        print(f"    Region:     {minimax_region}")
-    minimax_exp = minimax_status.get("expires_at")
-    if minimax_exp:
-        print(f"    Access exp: {minimax_exp}")
-    if minimax_status.get("error") and not minimax_logged_in:
-        print(f"    Error:      {minimax_status.get('error')}")
-
-    # xAI OAuth — separate try/except so an import failure here cannot
-    # disrupt the already-printed Nous/Codex/Qwen/MiniMax rows above.
-    try:
-        from hermes_cli.auth import get_xai_oauth_auth_status
-        xai_oauth_status = get_xai_oauth_auth_status() or {}
-    except Exception:
-        xai_oauth_status = {}
-
-    xai_oauth_logged_in = bool(xai_oauth_status.get("logged_in"))
-    print(
-        f"  {'xAI OAuth':<12}  {check_mark(xai_oauth_logged_in)} "
-        f"{'logged in' if xai_oauth_logged_in else 'not logged in (run: hermes auth add xai-oauth)'}"
-    )
-    xai_auth_file = xai_oauth_status.get("auth_store")
-    if xai_auth_file:
-        print(f"    Auth file:  {xai_auth_file}")
-    if xai_oauth_status.get("last_refresh"):
-        print(f"    Refreshed:  {_format_iso_timestamp(xai_oauth_status.get('last_refresh'))}")
-    if xai_oauth_status.get("error") and not xai_oauth_logged_in:
-        print(f"    Error:      {xai_oauth_status.get('error')}")
-
-    # =========================================================================
-    # API-Key Providers
-    # =========================================================================
-    print()
-    print(color("◆ API-Key Providers", Colors.CYAN, Colors.BOLD))
-
-    apikey_providers = {
-        "Z.AI / GLM":       ("GLM_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY"),
-        "Kimi / Moonshot":  ("KIMI_API_KEY",),
-        "StepFun Step Plan": ("STEPFUN_API_KEY",),
-        "MiniMax":          ("MINIMAX_API_KEY",),
-        "MiniMax (China)":  ("MINIMAX_CN_API_KEY",),
-        "DeepInfra":        ("DEEPINFRA_API_KEY",),
-    }
-    for pname, env_vars in apikey_providers.items():
-        key_val = ""
-        for ev in env_vars:
-            key_val = get_env_value(ev) or ""
-            if key_val:
-                break
-        configured = bool(key_val)
-        label = "configured" if configured else "not configured (run: hermes model)"
-        print(f"  {pname:<16} {check_mark(configured)} {label}")
 
     # LM Studio reachability — only probe when it's the active provider so
     # users with foreign configs don't see noise. Auth rejection vs. silent
@@ -588,21 +479,6 @@ def show_status(args):
     if deep:
         print()
         print(color("◆ Deep Checks", Colors.CYAN, Colors.BOLD))
-        
-        # Check OpenRouter connectivity
-        openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-        if openrouter_key:
-            try:
-                import httpx
-                response = httpx.get(
-                    OPENROUTER_MODELS_URL,
-                    headers={"Authorization": f"Bearer {openrouter_key}"},
-                    timeout=10
-                )
-                ok = response.status_code == 200
-                print(f"  OpenRouter:   {check_mark(ok)} {'reachable' if ok else f'error ({response.status_code})'}")
-            except Exception as e:
-                print(f"  OpenRouter:   {check_mark(False)} error: {e}")
         
         # Check gateway port
         try:

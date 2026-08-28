@@ -431,7 +431,7 @@ def _lookup_supports_vision(
         return None
     caps = None
     try:
-        from agent.models_dev import get_model_capabilities
+        from hermes_cli.model_switch import get_model_capabilities
         # allow_network=True on purpose: vision-capability lookup runs when
         # an image actually needs routing (not per turn), and the #31179
         # text-only-main guard depends on catalog data — a cold cache

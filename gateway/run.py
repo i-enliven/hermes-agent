@@ -28311,12 +28311,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 # Aggregators (openrouter, etc.) keep the vendor/model slug, so
                 # they're left untouched.
                 try:
-                    from hermes_cli.model_normalize import (
-                        _AGGREGATOR_PROVIDERS,
-                        normalize_model_for_provider,
-                    )
+                    from hermes_cli.model_normalize import normalize_model_for_provider
                     _agent_provider = getattr(_agent, 'provider', '') or ''
-                    if _agent_provider and _agent_provider not in _AGGREGATOR_PROVIDERS:
+                    if _agent_provider:
                         _cfg_model = normalize_model_for_provider(_cfg_model, _agent_provider)
                 except Exception:
                     pass

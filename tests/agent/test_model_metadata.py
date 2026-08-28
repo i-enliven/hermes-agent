@@ -28,8 +28,6 @@ from agent.model_metadata import (
     get_cached_context_length,
     parse_context_limit_from_error,
     save_context_length,
-    fetch_model_metadata,
-    _MODEL_CACHE_TTL,
     estimate_request_tokens_rough,
 )
 
@@ -220,10 +218,8 @@ class TestDefaultContextLengths:
     def test_nvidia_deepseek_v4_pro_context_is_endpoint_scoped(self):
         """NVIDIA's 262K NIM window must not lower DeepSeek V4 globally."""
         with patch("agent.model_metadata.get_cached_context_length", return_value=None), \
-             patch("agent.model_metadata.fetch_model_metadata", return_value={}), \
              patch("agent.model_metadata.fetch_endpoint_model_metadata", return_value={}), \
-             patch("agent.model_metadata._query_ollama_api_show", return_value=None), \
-             patch("agent.models_dev.lookup_models_dev_context", return_value=None):
+             patch("agent.model_metadata._query_ollama_api_show", return_value=None):
             accepted_urls = (
                 "https://integrate.api.nvidia.com/v1",
                 "https://INTEGRATE.API.NVIDIA.COM/v1/",
@@ -264,10 +260,8 @@ class TestDefaultContextLengths:
         endpoint, stays endpoint-scoped.
         """
         with patch("agent.model_metadata.get_cached_context_length", return_value=None), \
-             patch("agent.model_metadata.fetch_model_metadata", return_value={}), \
              patch("agent.model_metadata.fetch_endpoint_model_metadata", return_value={}), \
-             patch("agent.model_metadata._query_ollama_api_show", return_value=None), \
-             patch("agent.models_dev.lookup_models_dev_context", return_value=None):
+             patch("agent.model_metadata._query_ollama_api_show", return_value=None):
             accepted_urls = (
                 "https://api.kimi.com/coding",
                 "https://API.KIMI.COM/coding/",
@@ -308,32 +302,6 @@ class TestDefaultContextLengths:
         assert get_model_context_length(None) == DEFAULT_FALLBACK_CONTEXT  # type: ignore[arg-type]
 
 
-    def test_xai_oauth_grok_build_uses_xai_models_dev_context(self):
-        """xAI OAuth should share the xAI provider metadata path.
-
-        The xAI /v1/models endpoint does not currently include context fields
-        for grok-build-0.1, so this guards against falling through to the
-        generic "grok" 131k fallback when using OAuth credentials.
-        """
-        registry = {
-            "xai": {
-                "models": {
-                    "grok-build-0.1": {
-                        "limit": {"context": 256000, "output": 64000},
-                    },
-                },
-            },
-        }
-        with patch("agent.model_metadata.get_cached_context_length", return_value=None), \
-             patch("agent.model_metadata._query_ollama_api_show", return_value=None), \
-             patch("agent.models_dev.fetch_models_dev", return_value=registry):
-            assert get_model_context_length(
-                "grok-build-0.1",
-                provider="xai-oauth",
-                base_url="https://api.x.ai/v1",
-                api_key="oauth-token",
-            ) == 256000
-
     def test_deepseek_v4_models_1m_context(self):
         from agent.model_metadata import get_model_context_length
         from unittest.mock import patch as mock_patch
@@ -354,8 +322,7 @@ class TestDefaultContextLengths:
         # ids (native DeepSeek) and the vendor-prefixed forms (OpenRouter
         # / Nous Portal) to 1M without probing down to the legacy 128K
         # ``deepseek`` substring fallback.
-        with mock_patch("agent.model_metadata.fetch_model_metadata", return_value={}), \
-             mock_patch("agent.model_metadata.fetch_endpoint_model_metadata", return_value={}), \
+        with mock_patch("agent.model_metadata.fetch_endpoint_model_metadata", return_value={}), \
              mock_patch("agent.model_metadata.get_cached_context_length", return_value=None):
             cases = [
                 ("deepseek-v4-pro", 1_000_000),
@@ -698,32 +665,8 @@ class TestFetchEndpointModelMetadata:
 # =========================================================================
 
 class TestGetModelContextLength:
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_known_model_from_api(self, mock_fetch):
-        mock_fetch.return_value = {
-            "test/model": {"context_length": 32000}
-        }
-        assert get_model_context_length("test/model") == 32000
-
-
-
-
-
-
-
-
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_api_missing_context_length_key(self, mock_fetch):
-        """Model in API but without context_length → defaults to the top
-        probe tier (currently 256K)."""
-        mock_fetch.return_value = {"test/model": {"name": "Test"}}
-        assert get_model_context_length("test/model") == CONTEXT_PROBE_TIERS[0]
-
-
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_no_base_url_skips_cache(self, mock_fetch, tmp_path):
+    def test_no_base_url_skips_cache(self, tmp_path):
         """Without base_url, cache lookup is skipped."""
-        mock_fetch.return_value = {}
         cache_file = tmp_path / "cache.yaml"
         with patch("agent.model_metadata._get_context_cache_path", return_value=cache_file):
             save_context_length("custom/model", "http://local", 32768)
@@ -731,11 +674,8 @@ class TestGetModelContextLength:
             result = get_model_context_length("custom/model")
             assert result == CONTEXT_PROBE_TIERS[0]
 
-    @patch("agent.model_metadata.fetch_model_metadata")
-    @patch("agent.models_dev.lookup_models_dev_context", return_value=None)
-    def test_stale_minimax_cache_32k_is_invalidated(self, mock_models_dev, mock_fetch, tmp_path):
+    def test_stale_minimax_cache_32k_is_invalidated(self, tmp_path):
         """Stale 32K cache entries for MiniMax must not keep tripping the 64K floor."""
-        mock_fetch.return_value = {}
         cache_file = tmp_path / "cache.yaml"
         base_url = "https://api.minimax.io/anthropic"
         with patch("agent.model_metadata._get_context_cache_path", return_value=cache_file):
@@ -748,21 +688,8 @@ class TestGetModelContextLength:
             assert result == 204800
             assert get_cached_context_length("MiniMax-M2.7", base_url) is None
 
-    @patch("agent.models_dev.lookup_models_dev_context", return_value=None)
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_openrouter_32k_underreport_for_minimax_falls_through_to_default(self, mock_fetch, mock_models_dev):
-        """Unknown-provider fallback must reject stale OpenRouter 32K for MiniMax."""
-        mock_fetch.return_value = {
-            "MiniMax-M2.7": {"context_length": 32768}
-        }
-        result = get_model_context_length("MiniMax-M2.7")
-        assert result == 204800
-
-    @patch("agent.model_metadata.fetch_model_metadata")
-    @patch("agent.models_dev.lookup_models_dev_context", return_value=None)
-    def test_non_minimax_32k_cache_is_still_respected(self, mock_models_dev, mock_fetch, tmp_path):
+    def test_non_minimax_32k_cache_is_still_respected(self, tmp_path):
         """The stale-32K invalidation must stay narrow and not touch unrelated models."""
-        mock_fetch.return_value = {}
         cache_file = tmp_path / "cache.yaml"
         base_url = "http://local"
         with patch("agent.model_metadata._get_context_cache_path", return_value=cache_file):
@@ -773,10 +700,8 @@ class TestGetModelContextLength:
             )
             assert result == 32768
 
-    @patch("agent.model_metadata.fetch_model_metadata")
     @patch("agent.model_metadata.fetch_endpoint_model_metadata")
-    def test_custom_endpoint_metadata_beats_fuzzy_default(self, mock_endpoint_fetch, mock_fetch):
-        mock_fetch.return_value = {}
+    def test_custom_endpoint_metadata_beats_fuzzy_default(self, mock_endpoint_fetch):
         mock_endpoint_fetch.return_value = {
             "zai-org/GLM-5-TEE": {"context_length": 65536}
         }
@@ -789,9 +714,8 @@ class TestGetModelContextLength:
 
         assert result == 65536
 
-    @patch("agent.model_metadata.fetch_model_metadata")
     @patch("agent.model_metadata.fetch_endpoint_model_metadata")
-    def test_custom_endpoint_without_metadata_falls_back_to_catalog(self, mock_endpoint_fetch, mock_fetch):
+    def test_custom_endpoint_without_metadata_falls_back_to_catalog(self, mock_endpoint_fetch):
         """Custom endpoint with no metadata should fall back to the hardcoded
         catalog (not 256K) when the model name matches a known entry.
 
@@ -799,7 +723,6 @@ class TestGetModelContextLength:
         custom-endpoint branch short-circuited before the catalog lookup.
         See #38865.
         """
-        mock_fetch.return_value = {}
         mock_endpoint_fetch.return_value = {}
 
         # GLM-5-TEE matches the "glm" entry in DEFAULT_CONTEXT_LENGTHS
@@ -815,8 +738,7 @@ class TestGetModelContextLength:
 
 
 
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_custom_endpoint_falls_back_to_hardcoded_catalog(self, mock_fetch):
+    def test_custom_endpoint_falls_back_to_hardcoded_catalog(self):
         """Custom/proxied endpoint that fails all probes should still resolve
         via DEFAULT_CONTEXT_LENGTHS instead of returning 256K.
 
@@ -825,7 +747,6 @@ class TestGetModelContextLength:
         the catalog lookup, capping context at 256K even for models like
         claude-opus-4-8 that are in the hardcoded catalog with 1M.
         """
-        mock_fetch.return_value = {}
 
         # Patch all the probe functions that the custom-endpoint branch calls
         # so they all fail (return None/empty), simulating a proxy that
@@ -876,7 +797,6 @@ class TestGetModelContextLength:
     # ── Local vs non-local Ollama context resolution (#63122) ──────────
 
     @patch("agent.model_metadata.get_cached_context_length", return_value=None)
-    @patch("agent.model_metadata.fetch_model_metadata", return_value={})
     @patch("agent.model_metadata._resolve_endpoint_context_length", return_value=None)
     @patch("agent.model_metadata._query_ollama_api_show", return_value=131072)
     @patch("agent.model_metadata._query_local_context_length", return_value=32768)
@@ -888,7 +808,7 @@ class TestGetModelContextLength:
         mock_maybe_cache, mock_save,
         mock_is_local, mock_local_ctx,
         mock_ollama_show, mock_resolve_ep,
-        mock_fetch, mock_cache,
+        mock_cache,
     ):
         """Local Ollama: _query_local_context_length (num_ctx-first) must
         win over _query_ollama_api_show (GGUF-first).  The configured
@@ -965,9 +885,8 @@ class TestBedrockContextResolution:
 class TestStripProviderPrefix:
     def test_known_provider_prefix_is_stripped(self):
         assert _strip_provider_prefix("local:my-model") == "my-model"
-        assert _strip_provider_prefix("openrouter:anthropic/claude-sonnet-4") == "anthropic/claude-sonnet-4"
-        assert _strip_provider_prefix("anthropic:claude-sonnet-4") == "claude-sonnet-4"
-        assert _strip_provider_prefix("stepfun:step-3.5-flash") == "step-3.5-flash"
+        assert _strip_provider_prefix("copilot:claude-sonnet-4") == "claude-sonnet-4"
+        assert _strip_provider_prefix("ollama:my-model") == "my-model"
 
 
     def test_http_urls_preserved(self):
@@ -989,11 +908,6 @@ class TestStripProviderPrefix:
         assert _strip_provider_prefix("fake-provider:org/model") == "org/model"
         assert _strip_provider_prefix("fake-alias:org/model") == "org/model"
 
-    def test_bundled_plugin_provider_prefix_is_stripped(self):
-        assert _strip_provider_prefix("fireworks:accounts/fireworks/models/foo") == (
-            "accounts/fireworks/models/foo"
-        )
-
     def test_unknown_provider_prefix_is_unchanged(self):
         assert _strip_provider_prefix("not-a-provider:org/model") == (
             "not-a-provider:org/model"
@@ -1002,14 +916,12 @@ class TestStripProviderPrefix:
     def test_ollama_model_tag_is_unchanged(self):
         assert _strip_provider_prefix("qwen3.5:27b") == "qwen3.5:27b"
 
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_ollama_model_tag_not_mangled_in_context_lookup(self, mock_fetch):
+    def test_ollama_model_tag_not_mangled_in_context_lookup(self):
         """Ensure 'qwen3.5:27b' is NOT reduced to '27b' during context length lookup.
 
         We mock a custom endpoint that knows 'qwen3.5:27b' — the full name
         must reach the endpoint metadata lookup intact.
         """
-        mock_fetch.return_value = {}
         with patch("agent.model_metadata.fetch_endpoint_model_metadata") as mock_ep, \
              patch("agent.model_metadata._is_custom_endpoint", return_value=True):
             mock_ep.return_value = {"qwen3.5:27b": {"context_length": 32768}}
@@ -1018,101 +930,6 @@ class TestStripProviderPrefix:
                 base_url="http://localhost:11434/v1",
             )
         assert result == 32768
-
-
-# =========================================================================
-# fetch_model_metadata — caching, TTL, slugs, failures
-# =========================================================================
-
-class TestFetchModelMetadata:
-    def _reset_cache(self):
-        import agent.model_metadata as mm
-        mm._model_metadata_cache = {}
-        mm._model_metadata_cache_time = 0
-
-    def _isolate_disk_cache(self, monkeypatch, tmp_path):
-        import agent.model_metadata as mm
-        cache_path = tmp_path / "openrouter_model_metadata.json"
-        monkeypatch.setattr(mm, "_get_model_metadata_cache_path", lambda: cache_path)
-        return cache_path
-
-
-
-    def test_network_success_writes_disk_cache(self, tmp_path, monkeypatch):
-        self._reset_cache()
-        cache_path = self._isolate_disk_cache(monkeypatch, tmp_path)
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"id": "live/model", "context_length": 67890, "name": "Live"}]
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("agent.model_metadata.requests.get", return_value=mock_response):
-            fetch_model_metadata(force_refresh=True)
-
-        assert cache_path.exists()
-        assert "live/model" in cache_path.read_text(encoding="utf-8")
-
-    def test_network_failure_falls_back_to_stale_disk_cache(self, tmp_path, monkeypatch):
-        self._reset_cache()
-        cache_path = self._isolate_disk_cache(monkeypatch, tmp_path)
-        cache_path.write_text(
-            '{"stale/model":{"context_length":50000,"name":"Stale","pricing":{}}}',
-            encoding="utf-8",
-        )
-        old = time.time() - _MODEL_CACHE_TTL - 60
-        import os
-        os.utime(cache_path, (old, old))
-
-        with patch("agent.model_metadata.requests.get", side_effect=Exception("Network error")):
-            result = fetch_model_metadata(force_refresh=True)
-
-        assert result["stale/model"]["context_length"] == 50000
-
-    @patch("agent.model_metadata.requests.get")
-    def test_caches_result(self, mock_get):
-        self._reset_cache()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"id": "test/model", "context_length": 99999, "name": "Test"}]
-        }
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
-
-        result1 = fetch_model_metadata(force_refresh=True)
-        assert "test/model" in result1
-        assert mock_get.call_count == 1
-
-        result2 = fetch_model_metadata()
-        assert "test/model" in result2
-        assert mock_get.call_count == 1  # cached
-
-
-
-    @patch("agent.model_metadata.requests.get")
-    def test_canonical_slug_aliasing(self, mock_get):
-        """Models with canonical_slug get indexed under both IDs."""
-        self._reset_cache()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{
-                "id": "anthropic/claude-3.5-sonnet:beta",
-                "canonical_slug": "anthropic/claude-3.5-sonnet",
-                "context_length": 200000,
-                "name": "Claude 3.5 Sonnet"
-            }]
-        }
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
-
-        result = fetch_model_metadata(force_refresh=True)
-        # Both the original ID and canonical slug should work
-        assert "anthropic/claude-3.5-sonnet:beta" in result
-        assert "anthropic/claude-3.5-sonnet" in result
-        assert result["anthropic/claude-3.5-sonnet"]["context_length"] == 200000
-
-
-
 
 
 # =========================================================================
@@ -1203,11 +1020,9 @@ class TestContextLengthCache:
             save_context_length("test/model", "http://x", -1)
             assert get_cached_context_length("test/model", "http://x") is None
 
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_non_positive_cached_entry_dropped_and_reresolved(self, mock_fetch, tmp_path):
+    def test_non_positive_cached_entry_dropped_and_reresolved(self, tmp_path):
         """A pre-existing 0 entry (corrupted cache / manual edit) must be
         invalidated at step 1 and re-resolved instead of returned."""
-        mock_fetch.return_value = {}
         cache_file = tmp_path / "cache.yaml"
         with patch("agent.model_metadata._get_context_cache_path", return_value=cache_file):
             # Write the poison entry directly — save_context_length now refuses it.
@@ -1245,9 +1060,7 @@ class TestContextLengthCache:
 
 
 
-    @patch("agent.model_metadata.fetch_model_metadata")
-    def test_cached_value_takes_priority(self, mock_fetch, tmp_path):
-        mock_fetch.return_value = {}
+    def test_cached_value_takes_priority(self, tmp_path):
         cache_file = tmp_path / "cache.yaml"
         with patch("agent.model_metadata._get_context_cache_path", return_value=cache_file):
             save_context_length("unknown/model", "http://local", 65536)
@@ -1529,13 +1342,11 @@ class TestFallbackWarning:
         stack = ExitStack()
         for target, value in [
             ("agent.model_metadata.get_cached_context_length", None),
-            ("agent.model_metadata.fetch_model_metadata", {}),
             ("agent.model_metadata.fetch_endpoint_model_metadata", {}),
             ("agent.model_metadata._query_ollama_api_show", None),
             ("agent.model_metadata._query_anthropic_context_length", None),
             ("agent.model_metadata._endpoint_scoped_context_length", None),
             ("agent.model_metadata._resolve_endpoint_context_length", None),
-            ("agent.models_dev.lookup_models_dev_context", None),
         ]:
             stack.enter_context(patch(target, return_value=value))
         return stack

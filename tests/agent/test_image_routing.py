@@ -140,13 +140,13 @@ class TestLookupSupportsVisionOverride:
 
     def test_no_override_falls_back_to_models_dev(self):
         fake_caps = type("Caps", (), {"supports_vision": True})()
-        with patch("agent.models_dev.get_model_capabilities", return_value=fake_caps):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=fake_caps):
             assert _lookup_supports_vision("anthropic", "claude-sonnet-4", {}) is True
 
 
     def test_ollama_probe_when_models_dev_missing(self):
         cfg = {"model": {"base_url": "http://localhost:11434/v1"}}
-        with patch("agent.models_dev.get_model_capabilities", return_value=None), \
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=None), \
              patch("agent.image_routing._should_probe_ollama_vision", return_value=True), \
              patch("agent.model_metadata.query_ollama_supports_vision", return_value=True):
             assert _lookup_supports_vision("ollama", "gemma4:e2b", cfg) is True
@@ -154,7 +154,7 @@ class TestLookupSupportsVisionOverride:
 
     def test_cfg_none_falls_back_to_models_dev(self):
         # Caller didn't pass cfg at all — old call sites must still work.
-        with patch("agent.models_dev.get_model_capabilities", return_value=None):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=None):
             assert _lookup_supports_vision("openrouter", "x", None) is None
 
 
@@ -166,12 +166,12 @@ class TestAutoModeRespectsOverride:
 
     def test_auto_text_for_custom_with_supports_vision_false(self):
         cfg = {"model": {"supports_vision": False}}
-        with patch("agent.models_dev.get_model_capabilities", return_value=None):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=None):
             assert decide_image_input_mode("custom", "some-text-only", cfg) == "text"
 
     def test_auto_text_for_custom_with_no_override(self):
         # Unchanged baseline: unknown custom model → text.
-        with patch("agent.models_dev.get_model_capabilities", return_value=None):
+        with patch("hermes_cli.model_switch.get_model_capabilities", return_value=None):
             assert decide_image_input_mode("custom", "unknown", {}) == "text"
 
 

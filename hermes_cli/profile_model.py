@@ -97,24 +97,9 @@ def _normalize_main_model_assignment(provider: str, model: str) -> tuple[str, st
         and not is_custom_provider_slug
         and "/" in model_in
     ):
-        # Vendor prefix posing as a provider (analytics fallback). Resolve
-        # against the user's current provider when it's an aggregator that
-        # serves vendor-prefixed slugs; otherwise default to openrouter.
-        try:
-            cur_cfg = cfg.get("model", {})
-            cur_provider = (
-                str(cur_cfg.get("provider", "") or "").strip().lower()
-                if isinstance(cur_cfg, dict) else ""
-            )
-        except Exception:
-            cur_provider = ""
-        from hermes_cli.models import _AGGREGATOR_PROVIDERS
-        if cur_provider and normalize_provider(cur_provider) in _AGGREGATOR_PROVIDERS:
-            canonical = normalize_provider(cur_provider)
-            prov_in = cur_provider
-        else:
-            canonical = "openrouter"
-            prov_in = "openrouter"
+        # Vendor prefix posing as a provider (analytics fallback). Default to copilot.
+        canonical = "copilot"
+        prov_in = "copilot"
 
     # Custom/user-config providers keep the model verbatim — the registry
     # normalizer doesn't know their namespaces.

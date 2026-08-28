@@ -209,12 +209,8 @@ def _model_flow_openrouter(config, current_model=""):
     if abort:
         return
 
-    from hermes_cli.models import model_ids, get_pricing_for_provider
-
-    openrouter_models = model_ids(force_refresh=True)
-
-    # Fetch live pricing (non-blocking — returns empty dict on failure)
-    pricing = get_pricing_for_provider("openrouter", force_refresh=True)
+    openrouter_models: list[str] = []
+    pricing: list[tuple[str, str]] = []
 
     selected = _prompt_model_selection(
         openrouter_models,
@@ -282,10 +278,8 @@ def _model_flow_ai_gateway(config, current_model=""):
     if abort:
         return
 
-    from hermes_cli.models import ai_gateway_model_ids, get_pricing_for_provider
-
-    models_list = ai_gateway_model_ids(force_refresh=True)
-    pricing = get_pricing_for_provider("ai-gateway", force_refresh=True)
+    models_list: list[str] = []
+    pricing: list[tuple[str, str]] = []
 
     selected = _prompt_model_selection(
         models_list, current_model=current_model, pricing=pricing
@@ -406,71 +400,10 @@ def _model_flow_openai_codex(config, current_model=""):
         PROVIDER_REGISTRY,
         DEFAULT_CODEX_BASE_URL,
     )
-    from hermes_cli.codex_models import get_codex_model_ids
-
-    status = get_codex_auth_status()
-    if status.get("logged_in"):
-        print("  OpenAI Codex credentials: ✓")
-        print()
-        choice = _prompt_auth_credentials_choice("OpenAI Codex credentials:")
-
-        if choice == "reauth":
-            print("Starting a fresh OpenAI Codex login...")
-            print()
-            try:
-                mock_args = argparse.Namespace()
-                _login_openai_codex(
-                    mock_args,
-                    PROVIDER_REGISTRY["openai-codex"],
-                    force_new_login=True,
-                )
-            except SystemExit:
-                print("Login cancelled or failed.")
-                return
-            except Exception as exc:
-                print(f"Login failed: {exc}")
-                return
-            status = get_codex_auth_status()
-            if not status.get("logged_in"):
-                print("Login failed.")
-                return
-        elif choice == "cancel":
-            return
-    else:
-        print("Not logged into OpenAI Codex. Starting login...")
-        print()
-        try:
-            mock_args = argparse.Namespace()
-            _login_openai_codex(mock_args, PROVIDER_REGISTRY["openai-codex"])
-        except SystemExit:
-            print("Login cancelled or failed.")
-            return
-        except Exception as exc:
-            print(f"Login failed: {exc}")
-            return
-
-    _codex_token = None
-    # Prefer credential pool (where `hermes auth` stores device_code tokens),
-    # fall back to legacy provider state.
-    try:
-        _codex_status = get_codex_auth_status()
-        if _codex_status.get("logged_in"):
-            _codex_token = _codex_status.get("api_key")
-    except Exception:
-        pass
-    if not _codex_token:
-        try:
-            from hermes_cli.auth import resolve_codex_runtime_credentials
-
-            _codex_creds = resolve_codex_runtime_credentials()
-            _codex_token = _codex_creds.get("api_key")
-        except Exception:
-            pass
-
-    codex_models = get_codex_model_ids(access_token=_codex_token)
+    _codex_token = ""
 
     selected = _prompt_model_selection(
-        codex_models,
+        [],
         current_model=current_model,
         confirm_provider="openai-codex",
         confirm_base_url=DEFAULT_CODEX_BASE_URL,
@@ -2503,8 +2436,6 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
     from hermes_cli.models import (
         _PROVIDER_MODELS,
         fetch_api_models,
-        opencode_model_api_mode,
-        normalize_opencode_model_id,
     )
 
     pconfig = PROVIDER_REGISTRY[provider_id]
@@ -2669,55 +2600,14 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
             model_list = live_models
             print(f"  Found {len(model_list)} model(s) from {pconfig.name} API")
         else:
-            mdev_models: list = []
-            try:
-                from agent.models_dev import list_agentic_models
-
-                mdev_models = list_agentic_models(provider_id)
-            except Exception:
-                pass
-            if mdev_models:
-                seen = {m.lower() for m in mdev_models}
-                model_list = list(mdev_models)
-                for m in curated:
-                    if m.lower() not in seen:
-                        model_list.append(m)
-                        seen.add(m.lower())
-                print(f"  Found {len(model_list)} model(s) from models.dev registry")
-            else:
-                model_list = curated
-                if model_list:
-                    print(
-                        f'  Showing {len(model_list)} curated models — use "Enter custom model name" for others.'
-                    )
+            model_list = curated
+            if model_list:
+                print(
+                    f'  Showing {len(model_list)} curated models — use "Enter custom model name" for others.'
+                )
     else:
         curated = _PROVIDER_MODELS.get(provider_id, [])
-
-        # Try models.dev first — returns tool-capable models, filtered for noise
-        mdev_models: list = []
-        try:
-            from agent.models_dev import list_agentic_models
-
-            mdev_models = list_agentic_models(provider_id)
-        except Exception:
-            pass
-
-        if mdev_models:
-            # Merge models.dev with curated list so newly added models
-            # (not yet in models.dev) still appear in the picker.
-            if curated:
-                seen = {m.lower() for m in mdev_models}
-                merged = list(mdev_models)
-                for m in curated:
-                    if m.lower() not in seen:
-                        merged.append(m)
-                        seen.add(m.lower())
-                model_list = merged
-            else:
-                model_list = mdev_models
-            print(f"  Found {len(model_list)} model(s) from models.dev registry")
-        elif curated and len(curated) >= 8:
-            # Curated list is substantial — use it directly, skip live probe
+        if curated:
             model_list = curated
             print(
                 f'  Showing {len(model_list)} curated models — use "Enter custom model name" for others.'
@@ -2738,19 +2628,7 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
                     )
             # else: no defaults either, will fall through to raw input
 
-    if provider_id in {"opencode-zen", "opencode-go"}:
-        model_list = [
-            normalize_opencode_model_id(provider_id, mid) for mid in model_list
-        ]
-        current_model = normalize_opencode_model_id(provider_id, current_model)
-        model_list = list(dict.fromkeys(mid for mid in model_list if mid))
-
     if model_list:
-        # Per-model pricing, when the provider supports it (fireworks via the
-        # models.dev disk cache, novita/deepinfra via their cached /models
-        # endpoints). get_pricing_for_provider() is memoized in-process and
-        # returns {} for providers without pricing — never a blocking fetch
-        # beyond the catalog lookup that already happened above.
         pricing: dict = {}
         try:
             from hermes_cli.models import get_pricing_for_provider
@@ -2773,9 +2651,6 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
             selected = None
 
     if selected:
-        if provider_id in {"opencode-zen", "opencode-go"}:
-            selected = normalize_opencode_model_id(provider_id, selected)
-
         _save_model_choice(selected)
 
         # Update config with provider, base URL, and provider-specific API mode
@@ -2787,10 +2662,7 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
         model["provider"] = provider_id
         model["base_url"] = effective_base
         clear_model_endpoint_credentials(model, clear_api_mode=False)
-        if provider_id in {"opencode-zen", "opencode-go"}:
-            model["api_mode"] = opencode_model_api_mode(provider_id, selected)
-        else:
-            model.pop("api_mode", None)
+        model.pop("api_mode", None)
         save_config(cfg)
         deactivate_provider()
 

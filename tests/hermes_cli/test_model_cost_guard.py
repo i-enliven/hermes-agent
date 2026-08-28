@@ -2,7 +2,19 @@ from decimal import Decimal
 
 import pytest
 
-from agent.models_dev import ModelInfo
+from dataclasses import dataclass
+
+@dataclass
+class ModelInfo:
+    id: str = ""
+    name: str = ""
+    family: str = ""
+    provider_id: str = ""
+    cost_input: float = 0.0
+    cost_output: float = 0.0
+    def has_cost_data(self) -> bool:
+        return bool(self.cost_input or self.cost_output)
+
 from agent.usage_pricing import PricingEntry
 from hermes_cli.model_cost_guard import expensive_model_warning
 
@@ -68,7 +80,6 @@ def test_skips_foreign_models_dev_pricing_for_custom_or_unknown_providers(provid
 
 
 def test_skips_untrusted_provider_pricing_lookup_for_custom_provider(monkeypatch):
-    monkeypatch.setattr("agent.models_dev.get_model_info", lambda *_args, **_kwargs: None)
     pricing_calls = []
 
     def fake_get_pricing_entry(*_args, **_kwargs):
@@ -105,7 +116,6 @@ def test_known_confusing_model_still_warns_on_custom_provider():
 
 
 def test_warns_when_pricing_entry_output_price_exceeds_threshold(monkeypatch):
-    monkeypatch.setattr("agent.models_dev.get_model_info", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         "agent.usage_pricing.get_pricing_entry",
         lambda *_args, **_kwargs: PricingEntry(
@@ -115,7 +125,7 @@ def test_warns_when_pricing_entry_output_price_exceeds_threshold(monkeypatch):
         ),
     )
 
-    warning = expensive_model_warning("provider/expensive-output", provider="openrouter")
+    warning = expensive_model_warning("provider/expensive-output", provider="anthropic")
 
     assert warning is not None
     assert warning.output_cost_per_million == Decimal("100.01")
@@ -123,7 +133,6 @@ def test_warns_when_pricing_entry_output_price_exceeds_threshold(monkeypatch):
 
 
 def test_openai_gpt55_pro_adds_suggestion(monkeypatch):
-    monkeypatch.setattr("agent.models_dev.get_model_info", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         "agent.usage_pricing.get_pricing_entry",
         lambda *_args, **_kwargs: PricingEntry(
@@ -140,7 +149,6 @@ def test_openai_gpt55_pro_adds_suggestion(monkeypatch):
 
 
 def test_openai_gpt55_pro_warns_even_without_pricing(monkeypatch):
-    monkeypatch.setattr("agent.models_dev.get_model_info", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("agent.usage_pricing.get_pricing_entry", lambda *_args, **_kwargs: None)
 
     warning = expensive_model_warning("openai/gpt-5.5-pro", provider="openai-codex")

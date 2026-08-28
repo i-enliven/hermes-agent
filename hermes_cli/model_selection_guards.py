@@ -21,9 +21,9 @@ only aggregates them.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
-from agent.models_dev import ModelInfo
+ModelInfo = Any
 
 
 @dataclass(frozen=True)

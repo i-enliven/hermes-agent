@@ -7194,21 +7194,17 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         changed = False
 
         try:
-            from hermes_cli.model_normalize import (
-                _AGGREGATOR_PROVIDERS,
-                normalize_model_for_provider,
-            )
+            from hermes_cli.model_normalize import normalize_model_for_provider
 
-            if resolved_provider not in _AGGREGATOR_PROVIDERS:
-                normalized_model = normalize_model_for_provider(current_model, resolved_provider)
-                if normalized_model and normalized_model != current_model:
-                    if not self._model_is_default:
-                        self._console_print(
-                            f"[yellow]⚠️  Normalized model '{current_model}' to '{normalized_model}' for {resolved_provider}.[/]"
-                        )
-                    self.model = normalized_model
-                    current_model = normalized_model
-                    changed = True
+            normalized_model = normalize_model_for_provider(current_model, resolved_provider)
+            if normalized_model and normalized_model != current_model:
+                if not self._model_is_default:
+                    self._console_print(
+                        f"[yellow]⚠️  Normalized model '{current_model}' to '{normalized_model}' for {resolved_provider}.[/]"
+                    )
+                self.model = normalized_model
+                current_model = normalized_model
+                changed = True
         except Exception:
             pass
 
@@ -7274,17 +7270,6 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         # 2. Replace untouched default with a Codex model
         if self._model_is_default:
             fallback_model = "gpt-5.3-codex"
-            try:
-                from hermes_cli.codex_models import get_codex_model_ids
-
-                available = get_codex_model_ids(
-                    access_token=self.api_key if self.api_key else None,
-                )
-                if available:
-                    fallback_model = available[0]
-            except Exception:
-                pass
-
             if current_model != fallback_model:
                 self.model = fallback_model
                 changed = True

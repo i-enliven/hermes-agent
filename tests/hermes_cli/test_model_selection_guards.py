@@ -87,15 +87,16 @@ def test_combined_message_joins_blocks():
 def test_cost_guard_still_fires_through_registry():
     # The registry must preserve the existing cost-guard behavior; feed it
     # explicit model_info so no network lookup is needed.
-    from agent.models_dev import ModelInfo
+    from types import SimpleNamespace
 
-    info = ModelInfo(
+    info = SimpleNamespace(
         id="pricey/model",
         name="pricey/model",
         family="",
         provider_id="anthropic",
         cost_input=50.0,
         cost_output=200.0,
+        has_cost_data=lambda: True,
     )
     warnings = selection_warnings(
         "pricey/model", provider="anthropic", model_info=info

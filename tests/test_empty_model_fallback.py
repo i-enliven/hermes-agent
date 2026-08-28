@@ -8,8 +8,8 @@ class TestGetDefaultModelForProvider:
 
     def test_known_provider_returns_first_model(self):
         from hermes_cli.models import get_default_model_for_provider
-        result = get_default_model_for_provider("openai-codex")
-        # Should return first model from _PROVIDER_MODELS["openai-codex"]
+        result = get_default_model_for_provider("copilot")
+        # Should return first model from _PROVIDER_MODELS["copilot"]
         assert result
         assert isinstance(result, str)
 
@@ -18,27 +18,27 @@ class TestGatewayEmptyModelFallback:
     """Test that _resolve_session_agent_runtime fills in empty model from provider catalog."""
 
     def test_empty_model_filled_from_provider(self):
-        """When config has no model but provider is openai-codex, use first codex model."""
+        """When config has no model but provider is copilot, use first copilot model."""
         from gateway.run import GatewayRunner
 
         runner = object.__new__(GatewayRunner)
         runner._session_model_overrides = {}
 
         # Mock _resolve_gateway_model to return empty string
-        # Mock _resolve_runtime_agent_kwargs to return openai-codex provider
+        # Mock _resolve_runtime_agent_kwargs to return copilot provider
         with patch("gateway.run._resolve_gateway_model", return_value=""), \
              patch("gateway.run._resolve_runtime_agent_kwargs", return_value={
-                 "provider": "openai-codex",
+                 "provider": "copilot",
                  "api_key": "test-key",
-                 "base_url": "https://chatgpt.com/backend-api/codex",
-                 "api_mode": "codex_responses",
+                 "base_url": "https://models.inference.ai.azure.com",
+                 "api_mode": "chat_completions",
              }):
             model, kwargs = runner._resolve_session_agent_runtime()
 
         # Model should have been filled in from provider catalog
         assert model, "Model should not be empty when provider is known"
         assert isinstance(model, str)
-        assert kwargs["provider"] == "openai-codex"
+        assert kwargs["provider"] == "copilot"
 
     def test_nonempty_model_not_overridden(self):
         """When config has a model set, don't override it."""
@@ -49,10 +49,10 @@ class TestGatewayEmptyModelFallback:
 
         with patch("gateway.run._resolve_gateway_model", return_value="gpt-5.4"), \
              patch("gateway.run._resolve_runtime_agent_kwargs", return_value={
-                 "provider": "openai-codex",
+                 "provider": "copilot",
                  "api_key": "test-key",
-                 "base_url": "https://chatgpt.com/backend-api/codex",
-                 "api_mode": "codex_responses",
+                 "base_url": "https://models.inference.ai.azure.com",
+                 "api_mode": "chat_completions",
              }):
             model, kwargs = runner._resolve_session_agent_runtime()
 

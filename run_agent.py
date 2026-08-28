@@ -1498,10 +1498,6 @@ class AIAgent:
             "See hermes-agent#21444 for symptom history."
         )
 
-    def _is_openrouter_url(self) -> bool:
-        """Return True when the base URL targets OpenRouter."""
-        return base_url_host_matches(self._base_url_lower, "openrouter.ai")
-
     def _is_copilot_url(self) -> bool:
         """Return True when the base URL targets GitHub Copilot or GitHub Models."""
         return (
@@ -7357,37 +7353,6 @@ class AIAgent:
         # has it; gemma3 / qwen3-coder don't. Cached per (model, base_url).
         if base_url_host_matches(self._base_url_lower, "ollama.com"):
             return self._ollama_supports_thinking_cached()
-        if not self._is_openrouter_url():
-            return False
-        if base_url_host_matches(self._base_url_lower, "api.mistral.ai"):
-            return False
-
-        model = (self.model or "").lower()
-        # Live-catalog metadata first (ported from
-        # PrimeIntellect-ai/prime-agent#1258): OpenRouter's /v1/models entries
-        # advertise reasoning support via supported_parameters + a reasoning
-        # object, which covers every routed vendor without a hand-maintained
-        # prefix list. The static prefix allowlist below repeatedly went
-        # stale one vendor at a time (nvidia/ missing → #75386; same class
-        # as tencent/, xiaomi/ additions before it) — metadata makes new
-        # vendors work without a code change. One catalog fetch per process,
-        # cached; unknown (catalog unreachable / unlisted model) falls back
-        # to the static list.
-        try:
-            from hermes_cli.models import (
-                openrouter_model_reasoning_capabilities,
-                warm_openrouter_reasoning_caps_async,
-            )
-            caps = openrouter_model_reasoning_capabilities(self.model)
-            if caps is None:
-                # Cache cold (no picker run this process) — warm it in the
-                # background so subsequent turns get metadata; never block
-                # this turn on HTTP.
-                warm_openrouter_reasoning_caps_async()
-        except Exception:
-            caps = None
-        if caps is not None:
-            return bool(caps.get("supports_reasoning"))
         reasoning_model_prefixes = (
             "deepseek/",
             "anthropic/",

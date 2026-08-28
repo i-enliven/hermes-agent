@@ -406,7 +406,7 @@ def _apply_capabilities(rows: list[dict]) -> None:
     from hermes_cli.models import model_supports_fast_mode
 
     try:
-        from agent.models_dev import get_model_capabilities
+        from hermes_cli.model_switch import get_model_capabilities
     except Exception:
         get_model_capabilities = None  # type: ignore[assignment]
 
@@ -458,7 +458,7 @@ def _apply_featured(rows: list[dict]) -> None:
     top-N behaviour; splitting one lab into a shortlist would just hide models.
     """
     try:
-        from agent.models_dev import get_model_info
+        from hermes_cli.model_switch import get_model_info
     except Exception:
         get_model_info = None  # type: ignore[assignment]
 
