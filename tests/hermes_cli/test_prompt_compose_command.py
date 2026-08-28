@@ -2,9 +2,9 @@
 
 `/prompt` opens `$VISUAL`/`$EDITOR` on a temp markdown file so the user can
 hand-edit a multi-line prompt, then queues the saved buffer as the next
-agent turn via the one-shot `_pending_agent_seed` (same path `/blueprint`
-uses). These drive a fake editor subprocess to verify read-back, header
-stripping, seeding, and the empty-buffer cancel path.
+agent turn via the one-shot `_pending_agent_seed`. These drive a fake editor
+subprocess to verify read-back, header stripping, seeding, and the empty-buffer
+cancel path.
 """
 
 import os

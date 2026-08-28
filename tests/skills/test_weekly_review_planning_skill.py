@@ -1,4 +1,4 @@
-"""Tests for the weekly-review-planning skill and blueprint->skill wiring."""
+"""Tests for the weekly-review-planning skill."""
 import re
 from pathlib import Path
 
@@ -75,45 +75,3 @@ def test_steps_have_completion_criteria():
         assert "Done when" in step, f"step missing completion criterion: {step[:60]!r}"
 
 
-def _skill_dir_exists(name: str) -> bool:
-    return bool(
-        list(REPO_ROOT.glob(f"skills/*/{name}/SKILL.md"))
-        + list(REPO_ROOT.glob(f"skills/*/*/{name}/SKILL.md"))
-    )
-
-
-def test_blueprint_loads_this_skill():
-    from cron.blueprint_catalog import CATALOG
-
-    bp = next(b for b in CATALOG if b.key == "weekly-review")
-    assert "weekly-review-planning" in bp.skills
-    assert "weekly-review-planning" in bp.prompt_template
-
-
-def test_every_blueprint_skill_resolves_in_repo():
-    """Invariant: any skill a blueprint loads must exist as a bundled skill."""
-    from cron.blueprint_catalog import CATALOG
-
-    for bp in CATALOG:
-        for skill_name in bp.skills:
-            assert _skill_dir_exists(skill_name), (
-                f"blueprint {bp.key!r} loads nonexistent skill {skill_name!r}"
-            )
-
-
-def test_task_skill_blueprints_are_wired():
-    """The recurring-task blueprints must load their procedure skills."""
-    from cron.blueprint_catalog import CATALOG
-
-    expected = {
-        "morning-brief": "google-workspace",
-        "important-mail": "email-inbox-triage",
-        "weekly-review": "weekly-review-planning",
-        "price-watch": "product-price-monitor",
-    }
-    by_key = {b.key: b for b in CATALOG}
-    for key, skill_name in expected.items():
-        assert key in by_key, f"blueprint {key!r} missing from catalog"
-        assert skill_name in by_key[key].skills, (
-            f"blueprint {key!r} must load skill {skill_name!r}"
-        )

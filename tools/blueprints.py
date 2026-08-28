@@ -44,7 +44,6 @@ __all__ = [
     "blueprint_spec_for_installed",
     "blueprint_to_job_spec",
     "create_blueprint_job",
-    "register_blueprint_suggestion",
     "export_blueprint",
     "BlueprintError",
 ]
@@ -177,9 +176,6 @@ def blueprint_to_job_spec(
     """Build the ``cron.jobs.create_job`` kwargs dict for a BlueprintSpec.
 
     This is the single source of truth for translating a blueprint into a job.
-    Both the direct ``create_blueprint_job`` path and the suggestion path
-    (``register_blueprint_suggestion``) build on it, so a blueprint scheduled now and
-    a blueprint accepted from a suggestion produce an identical job.
     """
     return {
         "prompt": spec.prompt,
@@ -213,34 +209,6 @@ def create_blueprint_job(
         job_spec["origin"] = origin
     return create_job_with_scheduler_registration(**job_spec)
 
-
-def register_blueprint_suggestion(spec: BlueprintSpec) -> Optional[Dict[str, Any]]:
-    """Turn an installed blueprint into a pending Suggested Cron Job.
-
-    Blueprints are source ``blueprint`` of the unified suggestion surface: installing
-    a skill that carries a ``blueprint:`` block does NOT auto-schedule it — it
-    registers a suggestion the user accepts (or dismisses) like any other.
-    Returns the suggestion record, or None if it was skipped (already
-    seen/dismissed, backlog full, etc.).
-    """
-    if not spec.skill_name:
-        return None
-    try:
-        from cron.suggestions import add_suggestion
-    except Exception:  # pragma: no cover - import guard
-        return None
-
-    return add_suggestion(
-        title=f"Schedule '{spec.skill_name}'",
-        description=(
-            f"The '{spec.skill_name}' blueprint runs on schedule {spec.schedule}"
-            + (f", delivering to {spec.deliver}" if spec.deliver and spec.deliver != "origin" else "")
-            + "."
-        ),
-        source="blueprint",
-        job_spec=blueprint_to_job_spec(spec),
-        dedup_key=f"blueprint:{spec.skill_name}:{spec.schedule}",
-    )
 
 
 def export_blueprint(job: Dict[str, Any], body: str, *, blueprint_name: Optional[str] = None) -> str:

@@ -1,4 +1,4 @@
-"""Tests for the competitor-news-monitor skill and competitor-watch blueprint."""
+"""Tests for the competitor-news-monitor skill."""
 import re
 from pathlib import Path
 
@@ -87,25 +87,3 @@ def test_no_machine_local_paths():
     content = SKILL_PATH.read_text(encoding="utf-8")
     assert "/home/" not in content
 
-
-def test_competitor_watch_blueprint_registered():
-    from cron.blueprint_catalog import CATALOG
-
-    bp = next((b for b in CATALOG if b.key == "competitor-watch"), None)
-    assert bp is not None, "competitor-watch blueprint missing from catalog"
-    assert "competitor-news-monitor" in bp.skills
-    slot_names = {s.name for s in bp.slots}
-    assert {"companies", "categories", "time", "recurrence", "deliver"} <= slot_names
-    assert "[SILENT]" in bp.prompt_template
-    assert "{companies}" in bp.prompt_template and "{categories}" in bp.prompt_template
-
-
-def test_every_blueprint_skill_resolves_in_repo():
-    from cron.blueprint_catalog import CATALOG
-
-    for bp in CATALOG:
-        for skill_name in bp.skills:
-            hits = list(REPO_ROOT.glob(f"skills/*/{skill_name}/SKILL.md")) + list(
-                REPO_ROOT.glob(f"skills/*/*/{skill_name}/SKILL.md")
-            )
-            assert hits, f"blueprint {bp.key!r} loads nonexistent skill {skill_name!r}"

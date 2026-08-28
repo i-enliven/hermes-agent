@@ -19,8 +19,8 @@ There is no engine and no model-tool footprint: the agent does the work with
 its existing toolset, so this works identically on local, Docker, and remote
 terminal backends. Every surface (CLI ``/init``, gateway ``/init``, TUI
 ``/init``) calls :func:`build_init_prompt` and feeds the result to the agent
-as a normal user turn — the same prompt-injection pattern as ``/learn`` and
-``/blueprint``, which preserves prompt-cache invariants (no system-prompt or
+as a normal user turn — the same prompt-injection pattern as ``/learn``,
+which preserves prompt-cache invariants (no system-prompt or
 history mutation).
 """
 

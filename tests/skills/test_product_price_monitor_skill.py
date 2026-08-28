@@ -1,4 +1,4 @@
-"""Tests for the product-price-monitor skill and its price-watch blueprint."""
+"""Tests for the product-price-monitor skill."""
 import re
 from pathlib import Path
 
@@ -92,26 +92,3 @@ def test_no_machine_local_paths():
     assert not re.search(r"/home/(?!.*price-watches)", content)
     assert "/home/bb" not in content
 
-
-def test_price_watch_blueprint_registered():
-    from cron.blueprint_catalog import CATALOG
-
-    bp = next((b for b in CATALOG if b.key == "price-watch"), None)
-    assert bp is not None, "price-watch blueprint missing from catalog"
-    assert "product-price-monitor" in bp.skills, "blueprint must load the skill"
-    slot_names = {s.name for s in bp.slots}
-    assert {"item", "condition", "interval_h", "deliver"} <= slot_names
-    assert "[SILENT]" in bp.prompt_template, "silent path must be explicit"
-    assert "{item}" in bp.prompt_template and "{condition}" in bp.prompt_template
-
-
-def test_price_watch_blueprint_schedule_resolves():
-    from cron.blueprint_catalog import CATALOG
-
-    bp = next(b for b in CATALOG if b.key == "price-watch")
-    interval_slot = next(s for s in bp.slots if s.name == "interval_h")
-    for opt in interval_slot.options:
-        expr = bp.schedule_template.format(interval_h=opt)
-        fields = expr.split()
-        assert len(fields) == 5, f"invalid cron expr: {expr}"
-        assert fields[1] == f"*/{opt}"
