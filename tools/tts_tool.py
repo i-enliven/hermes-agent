@@ -783,7 +783,6 @@ DEFAULT_COMMAND_TTS_MAX_TEXT_LENGTH = 5000
 OPUS_VOICE_PLATFORMS = frozenset({
     "matrix",
     "feishu",
-    "signal",
 })
 
 

@@ -183,7 +183,6 @@ def _configured_platforms() -> list[str]:
     checks = {
         "discord": "DISCORD_BOT_TOKEN",
         "slack": "SLACK_BOT_TOKEN",
-        "signal": "SIGNAL_HTTP_URL",
         "email": "EMAIL_ADDRESS",
         "sms": "TWILIO_ACCOUNT_SID",
         "matrix": "MATRIX_HOMESERVER_URL",

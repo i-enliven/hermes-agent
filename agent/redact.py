@@ -401,7 +401,7 @@ _JWT_RE = re.compile(
 
 # E.164 phone numbers: +<country><number>, 7-15 digits
 # Negative lookahead prevents matching hex strings or identifiers
-_SIGNAL_PHONE_RE = re.compile(r"(\+[1-9]\d{6,14})(?![A-Za-z0-9])")
+_E164_PHONE_RE = re.compile(r"(\+[1-9]\d{6,14})(?![A-Za-z0-9])")
 
 # URLs containing query strings — matches `scheme://...?...[# or end]`.
 # Used to scan text for URLs whose query params may contain secrets.
@@ -992,7 +992,7 @@ def redact_sensitive_text(
             if len(phone) <= 8:
                 return phone[:2] + "****" + phone[-2:]
             return phone[:4] + "****" + phone[-4:]
-        text = _SIGNAL_PHONE_RE.sub(_redact_phone, text)
+        text = _E164_PHONE_RE.sub(_redact_phone, text)
 
     return text
 

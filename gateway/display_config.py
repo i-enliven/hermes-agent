@@ -146,7 +146,6 @@ _PLATFORM_DEFAULTS: dict[str, dict[str, Any]] = {
     "feishu":          _TIER_MEDIUM,
 
     # Tier 3 — no edit support, progress messages are permanent
-    "signal":          _TIER_LOW,
     # Photon (managed iMessage over the gRPC sidecar) and BlueBubbles are both
     # permanent-message iMessage inboxes with no message-edit support, so both
     # stay TIER_LOW. This keeps tool progress, interim scratch commentary,

@@ -102,7 +102,7 @@ def _is_webhook_silence_response(content: Any) -> bool:
 _PROFILE_REJECTED = object()
 
 _BUILTIN_DELIVER_PLATFORMS = {
-    "discord", "slack", "signal", "sms",
+    "discord", "slack", "sms",
     "matrix", "mattermost", "homeassistant", "email", "dingtalk",
     "feishu", "wecom", "wecom_callback", "weixin", "bluebubbles",
     "qqbot", "yuanbao",

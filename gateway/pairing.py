@@ -64,7 +64,6 @@ PAIRING_DIR = get_hermes_dir("platforms/pairing", "pairing")
 _PLATFORM_ALLOWLIST_ENV = {
     "discord": "DISCORD_ALLOWED_USERS",
     "slack": "SLACK_ALLOWED_USERS",
-    "signal": "SIGNAL_ALLOWED_USERS",
     "email": "EMAIL_ALLOWED_USERS",
     "sms": "SMS_ALLOWED_USERS",
     "mattermost": "MATTERMOST_ALLOWED_USERS",

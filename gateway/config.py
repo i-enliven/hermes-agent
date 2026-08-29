@@ -325,7 +325,6 @@ class Platform(Enum):
     LOCAL = "local"
     DISCORD = "discord"
     SLACK = "slack"
-    SIGNAL = "signal"
     MATTERMOST = "mattermost"
     MATRIX = "matrix"
     HOMEASSISTANT = "homeassistant"
@@ -879,7 +878,6 @@ _PLATFORM_CONNECTED_CHECKERS: dict[Platform, Callable[[PlatformConfig], bool]] =
     Platform.WEIXIN: lambda cfg: bool(
         cfg.extra.get("account_id") and (cfg.token or cfg.extra.get("token"))
     ),
-    Platform.SIGNAL: lambda cfg: bool(cfg.extra.get("http_url")),
     Platform.API_SERVER: lambda cfg: _has_usable_api_server_key(
         cfg.extra.get("key") if cfg else None
     ),
@@ -1739,10 +1737,6 @@ def load_gateway_config() -> GatewayConfig:
             # ``apply_yaml_config_fn`` loop above. #41112 / #3823.
 
             # Signal settings → env vars (env vars take precedence)
-            signal_cfg = yaml_cfg.get("signal", {})
-            if isinstance(signal_cfg, dict):
-                if "require_mention" in signal_cfg and not os.getenv("SIGNAL_REQUIRE_MENTION"):
-                    os.environ["SIGNAL_REQUIRE_MENTION"] = str(signal_cfg["require_mention"]).lower()
 
             # DingTalk settings → env vars: migrated to the dingtalk plugin's
             # apply_yaml_config_fn hook (plugins/platforms/dingtalk/adapter.py).
@@ -1926,27 +1920,6 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
         )
     
     # Signal
-    signal_url = getenv("SIGNAL_HTTP_URL")
-    signal_account = getenv("SIGNAL_ACCOUNT")
-    if signal_url and signal_account:
-        signal_config = _enable_from_env(Platform.SIGNAL)
-        signal_config.extra.update({
-            "http_url": signal_url,
-            "account": signal_account,
-            "ignore_stories": is_truthy_value(getenv("SIGNAL_IGNORE_STORIES", "true")),
-        })
-    signal_home = getenv("SIGNAL_HOME_CHANNEL")
-    if signal_home and Platform.SIGNAL in config.platforms:
-        config.platforms[Platform.SIGNAL].home_channel = HomeChannel(
-            platform=Platform.SIGNAL,
-            chat_id=signal_home,
-            name=getenv("SIGNAL_HOME_CHANNEL_NAME", "Home"),
-            thread_id=getenv("SIGNAL_HOME_CHANNEL_THREAD_ID") or None,
-        )
-
-    # Mattermost
-    mattermost_token = getenv("MATTERMOST_TOKEN")
-    if mattermost_token:
         mattermost_url = getenv("MATTERMOST_URL", "")
         if not mattermost_url:
             logger.warning("MATTERMOST_TOKEN set but MATTERMOST_URL is missing")

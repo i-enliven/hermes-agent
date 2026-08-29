@@ -757,19 +757,6 @@ PLATFORM_HINTS = {
         "attachments, audio as file attachments. You can also include image URLs "
         "in markdown format ![alt](url) and they will be uploaded as attachments."
     ),
-    "signal": (
-        "You are on a text messaging communication platform, Signal. "
-        "Standard markdown (**bold**, *italic*, ~~strike~~, # headers, "
-        "`code`, ```code blocks```) is auto-converted to Signal's native "
-        "rich formatting — feel free to write in markdown, and use bullet "
-        "lists ('- item') freely (they render as • bullets). Tables are NOT "
-        "supported — prefer bullet lists or labeled key:value pairs. "
-        "You can send media files natively: to deliver a file to the user, "
-        "include MEDIA:/absolute/path/to/file in your response. Images "
-        "(.png, .jpg, .webp) appear as photos, audio as attachments, and other "
-        "files arrive as downloadable documents. You can also include image "
-        "URLs in markdown format ![alt](url) and they will be sent as photos."
-    ),
     "email": (
         "You are communicating via email. Write clear, well-structured responses "
         "suitable for email. Use plain text formatting (no markdown). "

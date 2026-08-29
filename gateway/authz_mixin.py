@@ -506,7 +506,6 @@ class GatewayAuthorizationMixin:
         platform_env_map = {
             Platform.DISCORD: "DISCORD_ALLOWED_USERS",
             Platform.SLACK: "SLACK_ALLOWED_USERS",
-            Platform.SIGNAL: "SIGNAL_ALLOWED_USERS",
             Platform.EMAIL: "EMAIL_ALLOWED_USERS",
             Platform.SMS: "SMS_ALLOWED_USERS",
             Platform.MATTERMOST: "MATTERMOST_ALLOWED_USERS",
@@ -526,7 +525,6 @@ class GatewayAuthorizationMixin:
         platform_allow_all_map = {
             Platform.DISCORD: "DISCORD_ALLOW_ALL_USERS",
             Platform.SLACK: "SLACK_ALLOW_ALL_USERS",
-            Platform.SIGNAL: "SIGNAL_ALLOW_ALL_USERS",
             Platform.EMAIL: "EMAIL_ALLOW_ALL_USERS",
             Platform.SMS: "SMS_ALLOW_ALL_USERS",
             Platform.MATTERMOST: "MATTERMOST_ALLOW_ALL_USERS",
@@ -697,7 +695,6 @@ class GatewayAuthorizationMixin:
             allowed_ids.update(uid.strip() for uid in global_allowlist.split(",") if uid.strip())
 
         # "*" in any allowlist means allow everyone (consistent with
-        # SIGNAL_GROUP_ALLOWED_USERS precedent)
         if "*" in allowed_ids:
             return True
 
@@ -793,7 +790,6 @@ class GatewayAuthorizationMixin:
             platform_env_map = {
                 Platform.DISCORD:  "DISCORD_ALLOWED_USERS",
                 Platform.SLACK:    "SLACK_ALLOWED_USERS",
-                Platform.SIGNAL:   "SIGNAL_ALLOWED_USERS",
                 Platform.EMAIL:    "EMAIL_ALLOWED_USERS",
                 Platform.SMS:      "SMS_ALLOWED_USERS",
                 Platform.MATTERMOST: "MATTERMOST_ALLOWED_USERS",
