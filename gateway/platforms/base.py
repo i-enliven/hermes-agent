@@ -57,11 +57,6 @@ _AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",
 }
 _AUDIO_EXTS = frozenset(_AUDIO_MIME_TYPES)
-# Telegram's Bot API sendAudio only accepts MP3 / M4A. Other audio
-# formats either need to go through sendVoice (Opus/OGG) or must be
-# delivered as a regular document.
-_TELEGRAM_AUDIO_ATTACHMENT_EXTS = frozenset({'.mp3', '.m4a'})
-_TELEGRAM_VOICE_EXTS = frozenset({'.ogg', '.opus'})
 _POST_DELIVERY_CALLBACK_TIMEOUT_SECONDS = 30.0
 # Delivery-time history is best-effort dedup metadata, not canonical state.
 # Keep this comfortably below the Discord heartbeat watchdog window and fail
@@ -114,14 +109,6 @@ def _thread_metadata_for_source(source, reply_to_message_id: str | None = None) 
             metadata["slack_team_id"] = str(scope_id)
     if not metadata:
         return None
-    if _platform_name(getattr(source, "platform", None)) == "telegram" and getattr(source, "chat_type", None) == "dm":
-        metadata["telegram_dm_topic_reply_fallback"] = True
-        tid = str(thread_id)
-        if tid and tid not in {"", "1"}:
-            metadata["direct_messages_topic_id"] = tid
-        anchor = reply_to_message_id or getattr(source, "message_id", None)
-        if anchor is not None:
-            metadata["telegram_reply_to_message_id"] = str(anchor)
     return metadata
 
 
@@ -156,12 +143,6 @@ def _reply_anchor_for_event(event) -> str | None:
         # SlackAdapter._resolve_thread_ts() treat it as a thread anchor and
         # reply in a (nonexistent) thread anyway.
         return None
-    if platform == "telegram" and thread_id and getattr(source, "chat_type", None) == "dm":
-        # Reply to the triggering user message. Replying to Telegram's earlier
-        # topic seed/anchor can render the bot response outside the active lane.
-        return getattr(event, "message_id", None) or getattr(event, "reply_to_message_id", None)
-    if platform == "telegram" and thread_id:
-        return None
     if platform == "feishu" and thread_id and getattr(event, "reply_to_message_id", None):
         return getattr(event, "reply_to_message_id", None)
     return getattr(event, "message_id", None)
@@ -183,10 +164,6 @@ def should_send_media_as_audio(platform, ext: str, is_voice: bool = False) -> bo
     normalized_ext = (ext or "").lower()
     if normalized_ext not in _AUDIO_EXTS:
         return False
-    if _platform_name(platform) == "telegram":
-        if normalized_ext in _TELEGRAM_VOICE_EXTS:
-            return is_voice
-        return normalized_ext in _TELEGRAM_AUDIO_ATTACHMENT_EXTS
     return True
 
 
@@ -3023,10 +3000,6 @@ class BasePlatformAdapter(ABC):
         self._platform_event_handler: Optional[
             Callable[[Dict[str, Any], Any], Awaitable[None]]
         ] = None
-        # Optional hook (e.g. Telegram DM topic recovery) that rewrites
-        # ``event.source.thread_id`` before session keying. Returns the
-        # corrected thread_id or None to leave the source untouched.
-        self._topic_recovery_fn: Optional[Callable[[Any], Optional[str]]] = None
         self._running = False
         self._fatal_error_code: Optional[str] = None
         self._fatal_error_message: Optional[str] = None
@@ -3641,40 +3614,6 @@ class BasePlatformAdapter(ABC):
         therefore fails closed instead of exposing pre-auth events.
         """
         self._platform_event_handler = handler
-
-    def set_topic_recovery_fn(
-        self,
-        fn: Optional[Callable[[Any], Optional[str]]],
-    ) -> None:
-        """Install a thread_id-recovery hook (Telegram DM topic mode).
-
-        The hook is called with ``event.source`` before session keying;
-        a non-None return value replaces ``source.thread_id``. Pass
-        ``None`` to clear the hook.
-        """
-        # Guard against subclasses that initialize via ``object.__new__`` in
-        # tests and never run ``BasePlatformAdapter.__init__``.
-        self._topic_recovery_fn = fn  # type: ignore[attr-defined]
-
-    def _apply_topic_recovery(self, event: MessageEvent) -> None:
-        """Rewrite ``event.source.thread_id`` in place if the hook returns one."""
-        recover = getattr(self, "_topic_recovery_fn", None)
-        if recover is None:
-            return
-        source = getattr(event, "source", None)
-        if source is None:
-            return
-        try:
-            recovered = recover(source)
-        except Exception:
-            logger.debug("topic recovery hook failed", exc_info=True)
-            return
-        if recovered is None or str(recovered) == str(source.thread_id or ""):
-            return
-        try:
-            event.source = dataclasses.replace(source, thread_id=str(recovered))
-        except Exception:
-            logger.debug("topic recovery rewrite failed", exc_info=True)
 
     def set_busy_session_handler(self, handler: Optional[Callable[[MessageEvent, str], Awaitable[bool]]]) -> None:
         """Set an optional handler for messages arriving during active sessions."""
@@ -5992,17 +5931,6 @@ class BasePlatformAdapter(ABC):
         if event.allow_gateway_control:
             coerce_plaintext_gateway_command(event)
 
-        # Telegram topic recovery only applies to private DM topic lanes. Do
-        # not submit a no-op check for group/forum/channel traffic to the
-        # shared default executor: a busy pool would delay message dispatch.
-        needs_topic_recovery = (
-            getattr(self, "_topic_recovery_fn", None) is not None
-            and event.source.platform == Platform.TELEGRAM
-            and event.source.chat_type == "dm"
-        )
-        if needs_topic_recovery:
-            await asyncio.to_thread(self._apply_topic_recovery, event)
-
         _sk_store = getattr(self, "_session_store", None)
         session_key = build_session_key(
             event.source,
@@ -6446,7 +6374,6 @@ class BasePlatformAdapter(ABC):
                         logger.warning("[%s] Auto-TTS failed: %s", self.name, tts_err)
 
                 # Play TTS audio before text (voice-first experience)
-                _tts_caption_delivered = False
                 _tts_cleanup_paths = {_tts_requested_path, *_tts_paths} - {None}
                 for _tts_index, _tts_path in enumerate(_tts_paths):
                     try:
@@ -6457,28 +6384,13 @@ class BasePlatformAdapter(ABC):
                         # form would suppress the full formatted reply the
                         # user is meant to receive as a separate message.
                         # Caption only on the first file.
-                        telegram_tts_caption = None
-                        if (
-                            _tts_index == 0
-                            and self.platform == Platform.TELEGRAM
-                            and text_content
-                            and text_content[:1024] == text_content
-                        ):
-                            telegram_tts_caption = text_content
                         tts_result = await self.play_tts(
                             chat_id=event.source.chat_id,
                             audio_path=_tts_path,
-                            caption=telegram_tts_caption,
+                            caption=None,
                             metadata=_final_thread_metadata,
                         )
                         _record_delivery(tts_result)
-                        _tts_caption_delivered = bool(
-                            _tts_caption_delivered
-                            or (
-                                telegram_tts_caption
-                                and getattr(tts_result, "success", False)
-                            )
-                        )
                     finally:
                         try:
                             os.remove(_tts_path)
@@ -6495,7 +6407,7 @@ class BasePlatformAdapter(ABC):
                 # adapter while its in-flight handler was still producing a
                 # final response; that response is a new message, so resolve
                 # the current transport before sending it.
-                if text_content and not _tts_caption_delivered:
+                if text_content:
                     delivery_adapter = self._final_delivery_adapter(event.source)
                     logger.info(
                         "[%s] Sending response (%d chars) to %s",
@@ -6728,7 +6640,7 @@ class BasePlatformAdapter(ABC):
                 # A3 (#29346): if a non-empty response produced nothing
                 # deliverable, fail loudly rather than dropping it in silence.
                 _anything_delivered = (
-                    delivery_attempted or _tts_caption_delivered
+                    delivery_attempted
                     or images or local_files or media_files
                 )
                 if not _anything_delivered and _response_pre_extract.strip():

@@ -347,7 +347,6 @@ class SessionContext:
 
 _PII_SAFE_PLATFORMS = frozenset({
     Platform.SIGNAL,
-    Platform.TELEGRAM,
     Platform.BLUEBUBBLES,
 })
 """Platforms where user IDs can be safely redacted (no in-message mention system

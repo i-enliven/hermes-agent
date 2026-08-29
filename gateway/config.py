@@ -323,7 +323,6 @@ class Platform(Enum):
     are cached in ``_value2member_map_`` for identity-stable comparisons.
     """
     LOCAL = "local"
-    TELEGRAM = "telegram"
     DISCORD = "discord"
     SLACK = "slack"
     SIGNAL = "signal"
@@ -623,7 +622,6 @@ class ChannelOverride:
 # other way (session files, port-bound webhooks, api_key-only) and must never
 # be skipped for a missing token.
 PLATFORM_TOKEN_ENV_NAMES: dict["Platform", str] = {
-    Platform.TELEGRAM: "TELEGRAM_BOT_TOKEN",
     Platform.DISCORD: "DISCORD_BOT_TOKEN",
     Platform.SLACK: "SLACK_BOT_TOKEN",
     Platform.MATTERMOST: "MATTERMOST_TOKEN",
@@ -1618,20 +1616,12 @@ def load_gateway_config() -> GatewayConfig:
                     bridged["require_mention"] = platform_cfg["require_mention"]
                 if "send_read_receipts" in platform_cfg:
                     bridged["send_read_receipts"] = platform_cfg["send_read_receipts"]
-                if plat == Platform.TELEGRAM and "allowed_chats" in platform_cfg:
-                    bridged["allowed_chats"] = platform_cfg["allowed_chats"]
-                if plat == Platform.TELEGRAM and "group_allowed_chats" in platform_cfg:
-                    bridged["group_allowed_chats"] = platform_cfg["group_allowed_chats"]
-                if plat == Platform.TELEGRAM and "allowed_topics" in platform_cfg:
-                    bridged["allowed_topics"] = platform_cfg["allowed_topics"]
                 if "free_response_channels" in platform_cfg:
                     bridged["free_response_channels"] = platform_cfg["free_response_channels"]
                 if "mention_patterns" in platform_cfg:
                     bridged["mention_patterns"] = platform_cfg["mention_patterns"]
                 if "exclusive_bot_mentions" in platform_cfg:
                     bridged["exclusive_bot_mentions"] = platform_cfg["exclusive_bot_mentions"]
-                if plat == Platform.TELEGRAM and "observe_unmentioned_group_messages" in platform_cfg:
-                    bridged["observe_unmentioned_group_messages"] = platform_cfg["observe_unmentioned_group_messages"]
                 if "dm_policy" in platform_cfg:
                     bridged["dm_policy"] = platform_cfg["dm_policy"]
                 if "allow_from" in platform_cfg:
@@ -1747,30 +1737,6 @@ def load_gateway_config() -> GatewayConfig:
             # ``apply_yaml_config_fn`` hook (see plugins/platforms/slack/
             # adapter.py::_apply_yaml_config), dispatched in the
             # ``apply_yaml_config_fn`` loop above. #41112 / #3823.
-
-            # Bridge top-level require_mention to Telegram when the telegram: section
-            # does not already provide one.  Users often write "require_mention: true"
-            # at the top level alongside group_sessions_per_user, expecting it to work
-            # the same way (#3979).
-            _tl_require_mention = yaml_cfg.get("require_mention")
-            if _tl_require_mention is not None:
-                _tg_section = yaml_cfg.get("telegram") or {}
-                if "require_mention" not in _tg_section:
-                    _tg_plat = platforms_data.setdefault(Platform.TELEGRAM.value, {})
-                    _tg_extra = _tg_plat.setdefault("extra", {})
-                    _tg_extra.setdefault("require_mention", _tl_require_mention)
-                    # Also bridge to the TELEGRAM_REQUIRE_MENTION env var that the
-                    # adapter reads at runtime.  This used to live in the telegram_cfg
-                    # block in core; it stays in core because it keys off the TOP-LEVEL
-                    # require_mention (not a telegram: block), so the telegram plugin's
-                    # apply_yaml_config_fn hook — which only runs when a telegram config
-                    # block exists — can't cover the no-telegram-block case (#3979).
-                    if not os.getenv("TELEGRAM_REQUIRE_MENTION"):
-                        os.environ["TELEGRAM_REQUIRE_MENTION"] = str(_tl_require_mention).lower()
-
-            # Telegram settings → env vars / extra: migrated to the telegram
-            # plugin's apply_yaml_config_fn hook
-            # (plugins/platforms/telegram/adapter.py). #41112 / #3823.
 
             # Signal settings → env vars (env vars take precedence)
             signal_cfg = yaml_cfg.get("signal", {})
@@ -1895,36 +1861,6 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
         if not platform_config.enabled and not enabled_was_explicit:
             platform_config.enabled = True
         return platform_config
-    
-    # Telegram
-    telegram_token = getenv("TELEGRAM_BOT_TOKEN")
-    if telegram_token:
-        telegram_config = _enable_from_env(Platform.TELEGRAM)
-        telegram_config.token = telegram_token
-    
-    # Reply threading mode for Telegram (off/first/all)
-    telegram_reply_mode = getenv("TELEGRAM_REPLY_TO_MODE", "").lower()
-    if telegram_reply_mode in {"off", "first", "all"}:
-        if Platform.TELEGRAM not in config.platforms:
-            config.platforms[Platform.TELEGRAM] = PlatformConfig()
-        config.platforms[Platform.TELEGRAM].reply_to_mode = telegram_reply_mode
-    
-    telegram_fallback_ips = getenv("TELEGRAM_FALLBACK_IPS", "")
-    if telegram_fallback_ips:
-        if Platform.TELEGRAM not in config.platforms:
-            config.platforms[Platform.TELEGRAM] = PlatformConfig()
-        config.platforms[Platform.TELEGRAM].extra["fallback_ips"] = [
-            ip.strip() for ip in telegram_fallback_ips.split(",") if ip.strip()
-        ]
-
-    telegram_home = getenv("TELEGRAM_HOME_CHANNEL")
-    if telegram_home and Platform.TELEGRAM in config.platforms:
-        config.platforms[Platform.TELEGRAM].home_channel = HomeChannel(
-            platform=Platform.TELEGRAM,
-            chat_id=telegram_home,
-            name=getenv("TELEGRAM_HOME_CHANNEL_NAME", "Home"),
-            thread_id=getenv("TELEGRAM_HOME_CHANNEL_THREAD_ID") or None,
-        )
     
     # Discord
     discord_token = getenv("DISCORD_BOT_TOKEN")

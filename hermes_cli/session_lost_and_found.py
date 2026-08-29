@@ -39,7 +39,7 @@ MESSAGE_ROLES = frozenset({"user", "assistant", "tool", "system"})
 
 # Values observed in sessions.source across gateway platforms and tooling.
 KNOWN_SOURCES = frozenset({
-    "cli", "telegram", "discord", "slack", "signal", "matrix",
+    "cli", "discord", "slack", "signal", "matrix",
     "irc", "email", "x", "twitter", "api", "gateway", "web", "dashboard",
     "tool", "subagent", "cron", "recovered", "imported", "acp",
 })

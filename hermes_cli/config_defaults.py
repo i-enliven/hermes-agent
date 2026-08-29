@@ -1406,7 +1406,6 @@ DEFAULT_CONFIG = {
         # streaming.enabled master switch still gates everything — these
         # per-platform flags only take effect once streaming is enabled.
         "platforms": {
-            "telegram": {"streaming": True},
             "discord": {"streaming": False},
             "slack": {"streaming": False},
         },
@@ -2101,17 +2100,6 @@ DEFAULT_CONFIG = {
                 "Give me a sec.",
                 "On it.",
             ],
-        },
-    },
-
-    # Telegram platform settings (gateway mode)
-    "telegram": {
-        "reactions": False,            # Add 👀/✅/❌ reactions to messages during processing
-        "channel_prompts": {},         # Per-chat/topic ephemeral system prompts (topics inherit from parent group)
-        "allowed_chats": "",           # If set, bot ONLY responds in these group/supergroup chat IDs (whitelist)
-        "extra": {
-            "rich_messages": False,     # Bot API 10.1 rich messages (tables/task lists/details/math) render natively; set True to opt in. Default stays legacy MarkdownV2 because rich messages can be hard to copy as plain text in Telegram clients.
-            "rich_drafts": False,       # Experimental Bot API 10.1 rich draft previews during Telegram DM streaming. Default off because Telegram Desktop/macOS can visually overlay rich draft frames until the chat redraws.
         },
     },
 
@@ -4083,26 +4071,6 @@ OPTIONAL_ENV_VARS = {
     },
 
     # ── Messaging platforms ──
-    "TELEGRAM_BOT_TOKEN": {
-        "description": "Complete Telegram bot token created by @BotFather (numeric bot ID followed by a colon and secret)",
-        "prompt": "Telegram bot token",
-        "url": "https://t.me/BotFather",
-        "password": True,
-        "category": "messaging",
-    },
-    "TELEGRAM_ALLOWED_USERS": {
-        "description": "Optional comma-separated numeric Telegram user IDs allowed immediately; leave blank to approve new users through DM pairing",
-        "prompt": "Allowed Telegram user IDs (comma-separated)",
-        "url": "https://t.me/userinfobot",
-        "password": False,
-        "category": "messaging",
-    },
-    "TELEGRAM_PROXY": {
-        "description": "Proxy URL for Telegram connections (overrides HTTPS_PROXY). Supports http://, https://, socks5://",
-        "prompt": "Telegram proxy URL (optional)",
-        "password": False,
-        "category": "messaging",
-    },
     "DISCORD_BOT_TOKEN": {
         "description": "Discord bot token from Developer Portal",
         "prompt": "Discord bot token",

@@ -351,11 +351,6 @@ _SECRET_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Telegram bot tokens: bot<digits>:<token> or <digits>:<token>,
-# where token part is restricted to [-A-Za-z0-9_] and length >= 30
-_TELEGRAM_RE = re.compile(
-    r"(bot)?(\d{8,}):([-A-Za-z0-9_]{30,})",
-)
 
 # Private key blocks: -----BEGIN RSA PRIVATE KEY----- ... -----END RSA PRIVATE KEY-----
 _PRIVATE_KEY_RE = re.compile(
@@ -933,13 +928,6 @@ def redact_sensitive_text(
             text,
         )
 
-    # Telegram bot tokens — pattern requires ":<token>" with digits prefix
-    if ":" in text:
-        def _redact_telegram(m):
-            prefix = m.group(1) or ""
-            digits = m.group(2)
-            return f"{prefix}{digits}:***"
-        text = _TELEGRAM_RE.sub(_redact_telegram, text)
 
     # Private key blocks
     if "BEGIN" in text and "-----" in text:

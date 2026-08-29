@@ -478,10 +478,6 @@ _PLATFORM_AUDIO_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "max_file_bytes": 10 * 1024 * 1024,
         "safety_ratio": 0.85,
     },
-    "telegram": {
-        "max_file_bytes": 50 * 1024 * 1024,
-        "safety_ratio": 0.85,
-    },
     "default": {
         "max_file_bytes": 10 * 1024 * 1024,
         "safety_ratio": 0.85,
@@ -785,7 +781,6 @@ DEFAULT_COMMAND_TTS_MAX_TEXT_LENGTH = 5000
 # voice replies were synthesized as MP3 and rendered as broken attachments
 # (#14841, #45557 and siblings).
 OPUS_VOICE_PLATFORMS = frozenset({
-    "telegram",
     "matrix",
     "feishu",
     "signal",
@@ -4374,7 +4369,7 @@ if __name__ == "__main__":
         minimax_status = f"unavailable ({exc})"
     print(f"  MiniMax:    {minimax_status}")
     print(f"  Piper:      {'installed' if _check_piper_available() else 'not installed (pip install piper-tts)'}")
-    print(f"  ffmpeg:     {'✅ found' if _has_ffmpeg() else '❌ not found (needed for Telegram Opus)'}")
+    print(f"  ffmpeg:     {'✅ found' if _has_ffmpeg() else '❌ not found (needed for Opus voice bubbles)'}")
     print(f"\n  Output dir: {DEFAULT_OUTPUT_DIR}")
 
     provider = _get_provider(config)
@@ -4388,7 +4383,7 @@ from tools.registry import registry, tool_error
 
 TTS_SCHEMA = {
     "name": "text_to_speech",
-    "description": "Convert text to speech audio. Returns a MEDIA: path that the platform delivers as native audio. Compatible providers render as a voice bubble on Telegram; otherwise audio is sent as a regular attachment. In CLI mode, saves to ~/voice-memos/. Voice and provider are user-configured (built-in providers like edge/openai or custom command providers under tts.providers.<name>), not model-selected.",
+    "description": "Convert text to speech audio. Returns a MEDIA: path that the platform delivers as native audio. Compatible providers render as a voice bubble on Matrix/Feishu/Signal; otherwise audio is sent as a regular attachment. In CLI mode, saves to ~/voice-memos/. Voice and provider are user-configured (built-in providers like edge/openai or custom command providers under tts.providers.<name>), not model-selected.",
     "parameters": {
         "type": "object",
         "properties": {

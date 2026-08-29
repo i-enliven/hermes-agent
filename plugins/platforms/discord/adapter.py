@@ -5341,7 +5341,7 @@ class DiscordAdapter(BasePlatformAdapter):
         runner = getattr(self, "gateway_runner", None)
         if not runner:
             return
-        for target in (Platform.TELEGRAM, Platform.SLACK):
+        for target in (Platform.SLACK,):
             try:
                 adapter = runner.adapters.get(target)
                 if not adapter:

@@ -1807,7 +1807,7 @@ def create_job(
         schedule: Schedule string (see parse_schedule)
         name: Optional friendly name
         repeat: How many times to run (None = forever, 1 = once)
-        deliver: Where to deliver output ("origin", "local", "telegram", etc.)
+        deliver: Where to deliver output ("origin", "local", "discord", etc.)
         origin: Source info where job was created (for "origin" delivery)
         skill: Optional legacy single skill name to load before running the prompt
         skills: Optional ordered list of skills to load before running the prompt

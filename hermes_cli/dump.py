@@ -181,7 +181,6 @@ def _cron_summary(hermes_home: Path) -> str:
 def _configured_platforms() -> list[str]:
     """Return list of configured messaging platform names."""
     checks = {
-        "telegram": "TELEGRAM_BOT_TOKEN",
         "discord": "DISCORD_BOT_TOKEN",
         "slack": "SLACK_BOT_TOKEN",
         "signal": "SIGNAL_HTTP_URL",

@@ -62,7 +62,6 @@ PAIRING_DIR = get_hermes_dir("platforms/pairing", "pairing")
 # Platforms absent from this map (or with no allowlist configured) keep the
 # pairing store as the sole grant record, honored by the authz union.
 _PLATFORM_ALLOWLIST_ENV = {
-    "telegram": "TELEGRAM_ALLOWED_USERS",
     "discord": "DISCORD_ALLOWED_USERS",
     "slack": "SLACK_ALLOWED_USERS",
     "signal": "SIGNAL_ALLOWED_USERS",

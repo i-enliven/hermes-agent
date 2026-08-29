@@ -20,7 +20,6 @@ class PlatformInfo(NamedTuple):
 # Ordered so that TUI menus are deterministic.
 PLATFORMS: OrderedDict[str, PlatformInfo] = OrderedDict([
     ("cli",            PlatformInfo(label="🖥️  CLI",            default_toolset="hermes-cli")),
-    ("telegram",       PlatformInfo(label="📱 Telegram",        default_toolset="hermes-telegram")),
     ("discord",        PlatformInfo(label="💬 Discord",         default_toolset="hermes-discord")),
     ("slack",          PlatformInfo(label="💼 Slack",           default_toolset="hermes-slack")),
     ("signal",         PlatformInfo(label="📡 Signal",          default_toolset="hermes-signal")),

@@ -117,7 +117,6 @@ _GLOBAL_ENV_EXACT = frozenset({
 })
 _GLOBAL_ENV_PREFIXES = (
     "HERMES_KANBAN_",
-    "HERMES_TELEGRAM_",   # tuning knobs (batch delays, fallback toggles) — NOT the token
     "TERMINAL_",          # terminal/sandbox backend settings
 )
 

@@ -6189,7 +6189,7 @@ def _set_platform_unauthorized_dm_behavior(platform_key: str, behavior: str) -> 
 
 
 def _setup_standard_platform(platform: dict):
-    """Interactive setup for Telegram, Discord, or Slack."""
+    """Interactive setup for Discord or Slack."""
     # Same hidden-knob list the dashboard/Desktop channel cards use.
     from hermes_cli.setup_hidden_env import is_setup_hidden_env as _is_setup_hidden_env
 
@@ -6214,37 +6214,6 @@ def _setup_standard_platform(platform: dict):
         if not prompt_yes_no(f"  Reconfigure {label}?", False):
             return
 
-    auto_token_saved = False
-    auto_owner_user_id = None
-    if platform.get("key") == "telegram":
-        print()
-        print_info("  Telegram can be configured automatically with a managed bot:")
-        print_info("  [1] Automatic (scan QR → confirm in Telegram → done)")
-        print_info("  [2] Manual BotFather token")
-        choice = prompt("  Choice [1/2]", default="1")
-        if choice.strip() == "1":
-            try:
-                from hermes_cli.telegram_managed_bot import (
-                    auto_setup_telegram_bot_result,
-                    is_valid_telegram_bot_token,
-                )
-            except ImportError:
-                print_warning("  Automatic setup is unavailable in this install.")
-            else:
-                result = auto_setup_telegram_bot_result()
-                if result and is_valid_telegram_bot_token(result.token):
-                    save_env_value(token_var, result.token)
-                    print_success("  Saved TELEGRAM_BOT_TOKEN")
-                    auto_token_saved = True
-                    auto_owner_user_id = result.owner_user_id
-                else:
-                    if result:
-                        print_warning("  Automatic setup returned an invalid Telegram token.")
-                    print()
-                    print_info("  Falling back to manual setup...")
-
-    allowed_val_set = None  # Track if user set an allowlist (for home channel offer)
-
     # Skip the knobs the setup forms hide (home channel, reply mode, proxy,
     # mention behavior). They're self-configuring or already correct by
     # default — /sethome sets the home channel on the first chat — so asking
@@ -6267,30 +6236,8 @@ def _setup_standard_platform(platform: dict):
         if existing and var["name"] != token_var:
             print_info(f"  Current: {existing}")
 
-        if auto_token_saved and var["name"] == token_var:
-            print_info("  Token saved by automatic setup.")
-            continue
-
         # Allowlist fields get special handling for the deny-by-default security model
         if var.get("is_allowlist"):
-            if "TELEGRAM" in var["name"] and auto_owner_user_id:
-                detected_id = str(auto_owner_user_id)
-                print_success(f"  Detected your Telegram user ID: {detected_id}")
-                if prompt_yes_no("  Allow this Telegram account to use the bot?", True):
-                    extra = prompt(
-                        "  Additional allowed user IDs (comma-separated, optional)",
-                        password=False,
-                    )
-                    ids = [detected_id]
-                    for uid in extra.replace(" ", "").split(","):
-                        if uid and uid not in ids:
-                            ids.append(uid)
-                    cleaned = ",".join(ids)
-                    save_env_value(var["name"], cleaned)
-                    print_success("  Saved — only these users can interact with the bot.")
-                    allowed_val_set = cleaned
-                    continue
-
             print_info("  The gateway DENIES all users by default for security.")
             print_info("  Enter user IDs to create an allowlist, or leave empty")
             print_info("  and you'll be asked about open access next.")
@@ -6311,7 +6258,6 @@ def _setup_standard_platform(platform: dict):
                     cleaned = ",".join(parts)
                 save_env_value(var["name"], cleaned)
                 print_success("  Saved — only these users can interact with the bot.")
-                allowed_val_set = cleaned
             else:
                 # No allowlist — ask about open access vs DM pairing
                 print()
@@ -6367,18 +6313,6 @@ def _setup_standard_platform(platform: dict):
             return
         else:
             print_info("  Skipped (can configure later)")
-
-    # If an allowlist was set and home channel wasn't, offer to reuse
-    # the first user ID (common for Telegram DMs).
-    home_var = f"{label.upper()}_HOME_CHANNEL"
-    home_val = get_env_value(home_var)
-    if allowed_val_set and not home_val and label == "Telegram":
-        first_id = allowed_val_set.split(",")[0].strip()
-        if first_id and prompt_yes_no(
-            f"  Use your user ID ({first_id}) as the home channel?", True
-        ):
-            save_env_value(home_var, first_id)
-            print_success(f"  Home channel set to {first_id}")
 
     print()
     print_success(f"{emoji} {label} configured!")

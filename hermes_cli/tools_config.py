@@ -2158,8 +2158,6 @@ def run_post_setup_command(args) -> int:
 def _get_enabled_platforms() -> List[str]:
     """Return platform keys that are configured (have tokens or are CLI)."""
     enabled = ["cli"]
-    if get_env_value("TELEGRAM_BOT_TOKEN"):
-        enabled.append("telegram")
     if get_env_value("DISCORD_BOT_TOKEN"):
         enabled.append("discord")
     if get_env_value("SLACK_BOT_TOKEN"):

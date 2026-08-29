@@ -1578,16 +1578,6 @@ def _maybe_auto_subscribe(conn: Any, task_id: str) -> bool:
             delivery_metadata["thread_id"] = thread_id
         if chat_type:
             delivery_metadata["chat_type"] = chat_type
-        if (
-            platform.lower() == "telegram"
-            and thread_id
-            and (chat_type or "").lower() in {"dm", "direct", "private"}
-        ):
-            delivery_metadata["telegram_dm_topic_reply_fallback"] = True
-            if str(thread_id) not in {"", "1"}:
-                delivery_metadata["direct_messages_topic_id"] = str(thread_id)
-            if message_id:
-                delivery_metadata["telegram_reply_to_message_id"] = str(message_id)
 
         # Lazy-import to keep the module-level dependency light
         from hermes_cli import kanban_db as _kb

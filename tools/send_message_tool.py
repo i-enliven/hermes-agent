@@ -1,7 +1,7 @@
 """Send Message Tool -- cross-channel messaging via platform APIs.
 
 Sends a message to a user or channel on any connected messaging platform
-(Telegram, Discord, Slack). Supports listing available targets and resolving
+(Discord, Slack). Supports listing available targets and resolving
 human-friendly channel names to IDs. Works in both CLI and gateway contexts.
 """
 
@@ -18,7 +18,6 @@ from agent.secret_scope import get_secret
 
 logger = logging.getLogger(__name__)
 
-_TELEGRAM_TOPIC_TARGET_RE = re.compile(r"^\s*(-?\d+)(?::(\d+))?\s*$")
 _FEISHU_TARGET_RE = re.compile(r"^\s*((?:oc|ou|on|chat|open)_[-A-Za-z0-9]+)(?::([-A-Za-z0-9_]+))?\s*$")
 # Slack conversation IDs: C (public channel), G (private/group channel), D (DM).
 # Must be uppercase alphanumeric, 9+ chars. User IDs (U...) are parsed as
@@ -34,8 +33,8 @@ _SLACK_MENTION_RE = re.compile(r"^\s*<@(U[A-Z0-9]{8,})(?:\|[^>]+)?>\s*$")
 _SLACK_THREAD_TARGET_RE = re.compile(r"^\s*([CGD][A-Z0-9]{8,}):([^\s:]+)\s*$")
 _WEIXIN_TARGET_RE = re.compile(r"^\s*((?:wxid|gh|v\d+|wm|wb)_[A-Za-z0-9_-]+|[A-Za-z0-9._-]+@chatroom|filehelper)\s*$")
 _YUANBAO_TARGET_RE = re.compile(r"^\s*((?:group|direct):[^:]+)\s*$")
-# Discord snowflake IDs are numeric, same regex pattern as Telegram topic targets.
-_NUMERIC_TOPIC_RE = _TELEGRAM_TOPIC_TARGET_RE
+# Discord snowflake IDs are numeric chat IDs, optionally followed by a thread ID.
+_NUMERIC_TOPIC_RE = re.compile(r"^\s*(-?\d+)(?::(\d+))?\s*$")
 # Platforms that address recipients by phone number and accept E.164 format
 # (with a leading '+'). Without this, "+15551234567" fails the isdigit() check
 # below and falls through to channel-name resolution, which has no way to
@@ -58,10 +57,6 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".3gp"}
 _AUDIO_EXTS = {".ogg", ".opus", ".mp3", ".m2a", ".wav", ".m4a", ".flac"}
 _VOICE_EXTS = {".ogg", ".opus"}
-# Telegram's Bot API sendAudio only accepts MP3 / M4A. Other audio
-# formats either route through sendVoice (Opus/OGG) or fall back to
-# document delivery.
-_TELEGRAM_SEND_AUDIO_EXTS = {".mp3", ".m4a"}
 
 # Extensions that carry a native caption on the media bubble itself
 # (photo/video/document). Voice/audio notes are excluded: a caption on a
@@ -73,9 +68,6 @@ _CAPTIONABLE_EXTS = _IMAGE_EXTS | _VIDEO_EXTS | {
 
 # Per-platform native caption length limits (characters). Text longer than
 # the limit can't ride on the media bubble and stays a separate body message.
-# Telegram's photo/video caption cap is 1024; WhatsApp and Discord are far
-# more generous, so a conservative shared ceiling keeps behavior predictable.
-_TELEGRAM_CAPTION_LIMIT = 1024
 _DEFAULT_CAPTION_LIMIT = 4096
 
 def prepare_send_message_platforms() -> None:
@@ -154,49 +146,6 @@ def _display_chat_id(platform_name: str, chat_id: str) -> str:
     return chat_id
 
 
-def _telegram_retry_delay(exc: Exception, attempt: int) -> float | None:
-    retry_after = getattr(exc, "retry_after", None)
-    if retry_after is not None:
-        try:
-            return max(float(retry_after), 0.0)
-        except (TypeError, ValueError):
-            return 1.0
-
-    text = str(exc).lower()
-    if "timed out" in text or "timeout" in text:
-        return None
-    if (
-        "bad gateway" in text
-        or "502" in text
-        or "too many requests" in text
-        or "429" in text
-        or "service unavailable" in text
-        or "503" in text
-        or "gateway timeout" in text
-        or "504" in text
-    ):
-        return float(2 ** attempt)
-    return None
-
-
-async def _send_telegram_message_with_retry(bot, *, attempts: int = 3, **kwargs):
-    for attempt in range(attempts):
-        try:
-            return await bot.send_message(**kwargs)
-        except Exception as exc:
-            delay = _telegram_retry_delay(exc, attempt)
-            if delay is None or attempt >= attempts - 1:
-                raise
-            logger.warning(
-                "Transient Telegram send failure (attempt %d/%d), retrying in %.1fs: %s",
-                attempt + 1,
-                attempts,
-                delay,
-                _sanitize_error_text(exc),
-            )
-            await asyncio.sleep(delay)
-
-
 SEND_MESSAGE_SCHEMA = {
     "name": "send_message",
     "description": (
@@ -204,7 +153,7 @@ SEND_MESSAGE_SCHEMA = {
         "IMPORTANT: When the user asks to send to a specific channel or person "
         "(not just a bare platform name), call send_message(action='list') FIRST to see "
         "available targets, then send to the correct one.\n"
-        "If the user just says a platform name like 'send to telegram', send directly "
+        "If the user just says a platform name like 'send to discord', send directly "
         "to the home channel without listing first."
     ),
     "parameters": {
@@ -217,7 +166,7 @@ SEND_MESSAGE_SCHEMA = {
             },
             "target": {
                 "type": "string",
-                "description": "Delivery target. Format: 'platform' (uses home channel), 'platform:#channel-name', 'platform:chat_id', or 'platform:chat_id:thread_id' for Telegram topics and Discord threads. Examples: 'telegram', 'telegram:-1001234567890:17585', 'discord:999888777:555444333', 'discord:#bot-home', 'slack:#engineering', 'signal:+155****4567', 'matrix:!roomid:server.org', 'matrix:@user:server.org', 'ntfy:alerts-channel' (explicit ntfy topic), 'yuanbao:direct:<account_id>' (DM), 'yuanbao:group:<group_code>' (group chat)"
+                "description": "Delivery target. Format: 'platform' (uses home channel), 'platform:#channel-name', 'platform:chat_id', or 'platform:chat_id:thread_id' for Discord threads. Examples: 'discord:999888777:555444333', 'discord:#bot-home', 'slack:#engineering', 'signal:+155****4567', 'matrix:!roomid:server.org', 'matrix:@user:server.org', 'ntfy:alerts-channel' (explicit ntfy topic), 'yuanbao:direct:<account_id>' (DM), 'yuanbao:group:<group_code>' (group chat)"
             },
             "message": {
                 "type": "string",
@@ -524,17 +473,6 @@ def _handle_send(args):
 
 def _parse_target_ref(platform_name: str, target_ref: str):
     """Parse a tool target into chat_id/thread_id and whether it is explicit."""
-    if platform_name == "telegram":
-        match = _TELEGRAM_TOPIC_TARGET_RE.fullmatch(target_ref)
-        if match:
-            return match.group(1), match.group(2), True
-        from plugins.platforms.telegram.telegram_ids import (
-            parse_telegram_username_target,
-        )
-
-        username = parse_telegram_username_target(target_ref)
-        if username:
-            return username, None, True
     if platform_name == "feishu":
         match = _FEISHU_TARGET_RE.fullmatch(target_ref)
         if match:
@@ -930,13 +868,6 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
 
     from gateway.platforms.base import BasePlatformAdapter, utf16_len
 
-    # Telegram adapter import is optional (requires python-telegram-bot)
-    try:
-        from plugins.platforms.telegram.adapter import TelegramAdapter
-        _telegram_available = True
-    except ImportError:
-        _telegram_available = False
-
     # Feishu adapter migrated to a plugin (#41112); its max_message_length
     # (8000) now flows through the registry fallback below.
 
@@ -950,9 +881,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     # built-in platforms; from PlatformEntry.max_message_length for plugins,
     # resolved via the registry fallback below — covers Slack and Feishu, both
     # migrated to plugins in #41112).
-    _MAX_LENGTHS = {
-        Platform.TELEGRAM: TelegramAdapter.MAX_MESSAGE_LENGTH if _telegram_available else 4096,
-    }
+    _MAX_LENGTHS = {}
 
     # Check plugin registry for max_message_length
     if platform not in _MAX_LENGTHS:
@@ -966,31 +895,11 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
 
     # Smart-chunk the message to fit within platform limits.
     # For short messages or platforms without a known limit this is a no-op.
-    # Telegram measures length in UTF-16 code units, not Unicode codepoints.
     max_len = _MAX_LENGTHS.get(platform)
     if max_len:
-        _len_fn = utf16_len if platform == Platform.TELEGRAM else None
-        chunks = BasePlatformAdapter.truncate_message(message, max_len, len_fn=_len_fn)
+        chunks = BasePlatformAdapter.truncate_message(message, max_len, len_fn=None)
     else:
         chunks = [message]
-
-    # --- Telegram: special handling for media attachments ---
-    # _send_telegram now owns text chunking internally — it formats the full
-    # message (MarkdownV2/HTML) and then splits the *formatted* text on UTF-16
-    # length so escaping inflation can't push a chunk over Telegram's 4096
-    # limit (issue #28557). Pass the whole message in one call; media attaches
-    # after all text chunks.
-    if platform == Platform.TELEGRAM:
-        disable_link_previews = bool(getattr(pconfig, "extra", {}) and pconfig.extra.get("disable_link_previews"))
-        return await _send_telegram(
-            pconfig.token,
-            chat_id,
-            message,
-            media_files=media_files,
-            thread_id=thread_id,
-            disable_link_previews=disable_link_previews,
-            force_document=force_document,
-        )
 
     # --- Discord: chunked delivery via the registry's standalone_sender_fn.
     # The plugin's ``_standalone_send`` (registered in
@@ -1187,7 +1096,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     if media_files and not message.strip():
         return {
             "error": (
-                f"send_message MEDIA delivery is currently only supported for telegram, discord, matrix, weixin, signal, yuanbao, feishu and slack; "
+                f"send_message MEDIA delivery is currently only supported for discord, matrix, weixin, signal, yuanbao, feishu and slack; "
                 f"target {platform.value} had only media attachments"
             )
         }
@@ -1195,7 +1104,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     if media_files:
         warning = (
             f"MEDIA attachments were omitted for {platform.value}; "
-            "native send_message media delivery is currently only supported for telegram, discord, matrix, weixin, signal, yuanbao, feishu and slack"
+            "native send_message media delivery is currently only supported for discord, matrix, weixin, signal, yuanbao, feishu and slack"
         )
 
     last_result = None
@@ -1254,337 +1163,6 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
         warnings.append(warning)
         last_result["warnings"] = warnings
     return last_result
-
-
-def _is_telegram_thread_not_found(error: Exception) -> bool:
-    """Check if a Telegram error is a thread-not-found failure.
-
-    Matches the gateway adapter's ``_is_thread_not_found_error`` for
-    the standalone ``_send_telegram`` path (issue #27012).
-    """
-    return "thread not found" in str(error).lower()
-
-
-async def _send_telegram(token, chat_id, message, media_files=None, thread_id=None, disable_link_previews=False, force_document=False):
-    """Send via Telegram Bot API (one-shot, no polling needed).
-
-    Applies markdown→MarkdownV2 formatting (same as the gateway adapter)
-    so that bold, links, and headers render correctly.  If the message
-    already contains HTML tags, it is sent with ``parse_mode='HTML'``
-    instead, bypassing MarkdownV2 conversion.
-    """
-    try:
-        from telegram import Bot
-        from telegram.constants import ParseMode
-
-        # Auto-detect HTML tags — if present, skip MarkdownV2 and send as HTML.
-        # Inspired by github.com/ashaney — PR #1568.
-        _has_html = bool(re.search(r'<[a-zA-Z/][^>]*>', message))
-
-        if _has_html:
-            formatted = message
-            send_parse_mode = ParseMode.HTML
-        else:
-            # Reuse the gateway adapter's format_message for markdown→MarkdownV2
-            try:
-                from plugins.platforms.telegram.adapter import TelegramAdapter
-                _adapter = TelegramAdapter.__new__(TelegramAdapter)
-                formatted = _adapter.format_message(message)
-            except Exception:
-                # Fallback: send as-is if formatting unavailable
-                formatted = message
-            send_parse_mode = ParseMode.MARKDOWN_V2
-
-        # Honour a configured proxy (telegram.proxy_url in config.yaml, exported
-        # as TELEGRAM_PROXY env var by load_gateway_config). Without this, the
-        # standalone send path bypasses the proxy and times out in regions
-        # where api.telegram.org is blocked. The in-gateway adapter does the
-        # same thing in gateway/platforms/telegram.py.
-        try:
-            from gateway.platforms.base import resolve_proxy_url
-            _tg_proxy = resolve_proxy_url("TELEGRAM_PROXY", target_hosts=["api.telegram.org"])
-        except Exception:
-            _tg_proxy = None
-        if _tg_proxy:
-            try:
-                from telegram.request import HTTPXRequest
-                logger.info("send_message: standalone Telegram send routed through proxy %s", _tg_proxy)
-                bot = Bot(
-                    token=token,
-                    request=HTTPXRequest(proxy=_tg_proxy),
-                    get_updates_request=HTTPXRequest(proxy=_tg_proxy),
-                )
-            except Exception as _proxy_err:
-                logger.warning("send_message: failed to attach Telegram proxy (%s), falling back to direct connection", _proxy_err)
-                bot = Bot(token=token)
-        else:
-            bot = Bot(token=token)
-        from plugins.platforms.telegram.telegram_ids import (
-            normalize_telegram_chat_id,
-        )
-
-        # Telegram accepts a numeric chat_id OR an @username string; normalize
-        # rather than force-int so username home channels don't crash (#13206).
-        int_chat_id = normalize_telegram_chat_id(chat_id)
-        media_files = media_files or []
-        thread_kwargs = {}
-        if thread_id is not None:
-            # Reuse the gateway adapter's General-topic mapping: in Telegram
-            # forum supergroups, the General topic is addressed as
-            # message_thread_id="1" on incoming updates, but Bot API
-            # sendMessage rejects message_thread_id=1 with "Message thread
-            # not found". The adapter's helper maps "1" to None for that
-            # reason; the send_message tool needs the same mapping or a
-            # send to a forum group's General topic always errors out
-            # (see issue #22267).
-            try:
-                from plugins.platforms.telegram.adapter import TelegramAdapter
-                effective_thread_id = TelegramAdapter._message_thread_id_for_send(
-                    str(thread_id)
-                )
-            except Exception:
-                # Fallback: explicit mapping in case the adapter import
-                # fails (e.g. python-telegram-bot missing in this venv).
-                effective_thread_id = (
-                    None if str(thread_id) == "1" else int(thread_id)
-                )
-            if effective_thread_id is not None:
-                thread_kwargs["message_thread_id"] = effective_thread_id
-        # disable_web_page_preview is only valid for send_message, not
-        # send_photo/send_video/etc.  Keep it separate so media sends
-        # don't inherit an invalid parameter (issue #27012).
-        text_kwargs = dict(thread_kwargs)
-        if disable_link_previews:
-            text_kwargs["disable_web_page_preview"] = True
-
-        last_msg = None
-        warnings = []
-
-        # MEDIA:<path> caption: when a single captionable file is accompanied
-        # by short text, attach the text to the media bubble as its native
-        # caption instead of sending it as a separate message beforehand
-        # (single enforced decision in _media_caption_split). Caption with the
-        # *formatted* text so MarkdownV2/HTML styling is preserved, but guard
-        # the formatted length against Telegram's 1024 cap — formatting can
-        # inflate a raw-<1024 string past it, in which case fall back to a
-        # separate body message.
-        _tg_caption = None
-        from gateway.platforms.base import utf16_len as _utf16_len
-        _cap, _ = _media_caption_split(
-            message, media_files, max_caption_len=_TELEGRAM_CAPTION_LIMIT
-        )
-        if _cap is not None and _utf16_len(formatted) <= _TELEGRAM_CAPTION_LIMIT:
-            _tg_caption = formatted
-            formatted = ""  # suppress the separate text send below
-
-        if formatted.strip():
-            # Chunk *after* formatting: MarkdownV2/HTML escaping inflates the
-            # text (each escaped char like `!`/`.`/`-` becomes `\!`/`\.`/`\-`),
-            # so a message that fit under 4096 UTF-16 units raw can exceed the
-            # Telegram limit once formatted and get rejected as "Message is too
-            # long". Sizing on the formatted text in UTF-16 units guarantees
-            # every chunk is deliverable. (issue #28557)
-            from gateway.platforms.base import BasePlatformAdapter, utf16_len
-
-            text_chunks = BasePlatformAdapter.truncate_message(
-                formatted, 4096, len_fn=utf16_len
-            )
-            for chunk in text_chunks:
-                try:
-                    last_msg = await _send_telegram_message_with_retry(
-                        bot,
-                        chat_id=int_chat_id, text=chunk,
-                        parse_mode=send_parse_mode, **text_kwargs
-                    )
-                except Exception as md_error:
-                    # Thread not found — retry without message_thread_id so the
-                    # message still delivers (matching the gateway adapter's
-                    # fallback behaviour, issue #27012).
-                    if _is_telegram_thread_not_found(md_error) and text_kwargs.get("message_thread_id") is not None:
-                        logger.warning(
-                            "Thread %s not found in _send_telegram, retrying without message_thread_id",
-                            text_kwargs.get("message_thread_id"),
-                        )
-                        text_kwargs.pop("message_thread_id", None)
-                        last_msg = await _send_telegram_message_with_retry(
-                            bot,
-                            chat_id=int_chat_id, text=chunk,
-                            parse_mode=send_parse_mode, **text_kwargs
-                        )
-                    elif "parse" in str(md_error).lower() or "markdown" in str(md_error).lower() or "html" in str(md_error).lower():
-                        logger.warning(
-                            "Parse mode %s failed in _send_telegram, falling back to plain text: %s",
-                            send_parse_mode,
-                            _sanitize_error_text(md_error),
-                        )
-                        if not _has_html:
-                            try:
-                                from plugins.platforms.telegram.adapter import _strip_mdv2
-                                plain = _strip_mdv2(chunk)
-                            except Exception:
-                                plain = chunk
-                        else:
-                            plain = chunk
-                        last_msg = await _send_telegram_message_with_retry(
-                            bot,
-                            chat_id=int_chat_id, text=plain,
-                            parse_mode=None, **text_kwargs
-                        )
-                    else:
-                        raise
-
-        for media_path, is_voice in media_files:
-            if not os.path.exists(media_path):
-                warning = f"Media file not found, skipping: {media_path}"
-                logger.warning(warning)
-                warnings.append(warning)
-                # Caption mode suppressed the separate text send; if the file
-                # it was meant to caption is gone, deliver the caption text on
-                # its own so the words aren't silently lost.
-                if _tg_caption is not None and last_msg is None:
-                    try:
-                        last_msg = await _send_telegram_message_with_retry(
-                            bot, chat_id=int_chat_id, text=_tg_caption,
-                            parse_mode=send_parse_mode, **text_kwargs
-                        )
-                        _tg_caption = None  # delivered — don't re-caption a later file
-                    except Exception as _cap_err:
-                        logger.warning(
-                            "Telegram caption-fallback send failed for missing media: %s",
-                            _sanitize_error_text(_cap_err),
-                        )
-                continue
-
-            ext = os.path.splitext(media_path)[1].lower()
-            try:
-                with open(media_path, "rb") as f:
-                    media_kwargs = dict(thread_kwargs)
-                    # Attach the MEDIA:<path> caption to the bubble itself for
-                    # captionable kinds (photo/video/document). _tg_caption is
-                    # only set for a single captionable file, so this never
-                    # double-captions a multi-file send or a voice note.
-                    if _tg_caption is not None and not (ext in _VOICE_EXTS and is_voice):
-                        media_kwargs["caption"] = _tg_caption
-                        media_kwargs["parse_mode"] = send_parse_mode
-                    if (ext in _VOICE_EXTS and is_voice) or ext in _TELEGRAM_SEND_AUDIO_EXTS:
-                        try:
-                            from plugins.platforms.telegram.adapter import _probe_voice_duration_seconds
-                            duration = await asyncio.to_thread(_probe_voice_duration_seconds, media_path)
-                            if duration is not None:
-                                media_kwargs["duration"] = duration
-                        except Exception:
-                            pass
-                    try:
-                        if ext in _IMAGE_EXTS and not force_document:
-                            last_msg = await bot.send_photo(
-                                chat_id=int_chat_id, photo=f, **media_kwargs
-                            )
-                        elif ext in _VIDEO_EXTS:
-                            last_msg = await bot.send_video(
-                                chat_id=int_chat_id, video=f, **media_kwargs
-                            )
-                        elif ext in _VOICE_EXTS and is_voice:
-                            last_msg = await bot.send_voice(
-                                chat_id=int_chat_id, voice=f, **media_kwargs
-                            )
-                        elif ext in _TELEGRAM_SEND_AUDIO_EXTS:
-                            last_msg = await bot.send_audio(
-                                chat_id=int_chat_id, audio=f, **media_kwargs
-                            )
-                        else:
-                            last_msg = await bot.send_document(
-                                chat_id=int_chat_id, document=f, **media_kwargs
-                            )
-                    except Exception as media_err:
-                        if _is_telegram_thread_not_found(media_err) and media_kwargs.get("message_thread_id"):
-                            # Thread not found for media — retry without
-                            # message_thread_id (issue #27012).
-                            logger.warning(
-                                "Thread %s not found for media send, retrying without message_thread_id",
-                                media_kwargs["message_thread_id"],
-                            )
-                            # Re-seek the file since the first attempt consumed it
-                            f.seek(0)
-                            media_kwargs.pop("message_thread_id", None)
-                            if ext in _IMAGE_EXTS and not force_document:
-                                last_msg = await bot.send_photo(
-                                    chat_id=int_chat_id, photo=f, **media_kwargs
-                                )
-                            elif ext in _VIDEO_EXTS:
-                                last_msg = await bot.send_video(
-                                    chat_id=int_chat_id, video=f, **media_kwargs
-                                )
-                            elif ext in _VOICE_EXTS and is_voice:
-                                last_msg = await bot.send_voice(
-                                    chat_id=int_chat_id, voice=f, **media_kwargs
-                                )
-                            elif ext in _TELEGRAM_SEND_AUDIO_EXTS:
-                                last_msg = await bot.send_audio(
-                                    chat_id=int_chat_id, audio=f, **media_kwargs
-                                )
-                            else:
-                                last_msg = await bot.send_document(
-                                    chat_id=int_chat_id, document=f, **media_kwargs
-                                )
-                        elif media_kwargs.get("parse_mode") and (
-                            "parse" in str(media_err).lower()
-                            or "caption" in str(media_err).lower()
-                        ):
-                            # Caption failed to parse as MarkdownV2/HTML —
-                            # retry with a plain-text caption so the media
-                            # (and its caption) still deliver.
-                            logger.warning(
-                                "Caption parse failed for media send, retrying plain: %s",
-                                _sanitize_error_text(media_err),
-                            )
-                            f.seek(0)
-                            media_kwargs.pop("parse_mode", None)
-                            if not _has_html and media_kwargs.get("caption"):
-                                try:
-                                    from plugins.platforms.telegram.adapter import _strip_mdv2
-                                    media_kwargs["caption"] = _strip_mdv2(media_kwargs["caption"])
-                                except Exception:
-                                    pass
-                            if ext in _IMAGE_EXTS and not force_document:
-                                last_msg = await bot.send_photo(
-                                    chat_id=int_chat_id, photo=f, **media_kwargs
-                                )
-                            elif ext in _VIDEO_EXTS:
-                                last_msg = await bot.send_video(
-                                    chat_id=int_chat_id, video=f, **media_kwargs
-                                )
-                            else:
-                                last_msg = await bot.send_document(
-                                    chat_id=int_chat_id, document=f, **media_kwargs
-                                )
-                        else:
-                            raise
-            except Exception as e:
-                warning = _sanitize_error_text(f"Failed to send media {media_path}: {e}")
-                logger.error(warning)
-                warnings.append(warning)
-
-        if last_msg is None:
-            error = "No deliverable text or media remained after processing MEDIA tags"
-            if warnings:
-                return {"error": error, "warnings": warnings}
-            return {"error": error}
-
-        result = {
-            "success": True,
-            "platform": "telegram",
-            "chat_id": chat_id,
-            "message_id": str(last_msg.message_id),
-        }
-        if warnings:
-            result["warnings"] = warnings
-        return result
-    except ImportError:
-        return {"error": "python-telegram-bot not installed. Run: pip install python-telegram-bot"}
-    except Exception as e:
-        return _error(f"Telegram send failed: {e}")
-
-
 # _send_slack moved to the slack plugin as _standalone_send
 # (plugins/platforms/slack/adapter.py), wired via standalone_sender_fn. #41112.
 

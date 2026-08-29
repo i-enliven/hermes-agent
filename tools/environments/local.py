@@ -277,8 +277,6 @@ def _build_provider_env_blocklist() -> frozenset:
         "PARALLEL_API_KEY",
         "FIRECRAWL_API_KEY",
         "FIRECRAWL_API_URL",
-        "TELEGRAM_HOME_CHANNEL",
-        "TELEGRAM_HOME_CHANNEL_NAME",
         "DISCORD_HOME_CHANNEL",
         "DISCORD_HOME_CHANNEL_NAME",
         "DISCORD_REQUIRE_MENTION",
@@ -557,7 +555,6 @@ _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
     "GITHUB_APP_PRIVATE_KEY_PATH",
     "GITHUB_APP_INSTALLATION_ID",
     # Gateway / messaging bot tokens and access control
-    "TELEGRAM_BOT_TOKEN",
     "DISCORD_BOT_TOKEN",
     "SLACK_BOT_TOKEN",
     "SLACK_APP_TOKEN",

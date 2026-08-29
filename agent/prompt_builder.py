@@ -743,18 +743,6 @@ STEER_CHANNEL_NOTE += (
 DEVELOPER_ROLE_MODELS = ("gpt-5", "codex")
 
 PLATFORM_HINTS = {
-    "telegram": (
-        "You are on a text messaging communication platform, Telegram. "
-        "Standard Markdown is automatically converted to Telegram formatting. "
-        "Supported: **bold**, *italic*, ~~strikethrough~~, ||spoiler||, "
-        "`inline code`, ```code blocks```, [links](url), and ## headers. "
-        "Prefer bullet lists and labeled key:value pairs for structured data. "
-        "You can send media files natively: to deliver a file to the user, "
-        "include MEDIA:/absolute/path/to/file in your response. Images "
-        "(.png, .jpg, .webp) appear as photos, audio (.ogg) sends as voice "
-        "bubbles, and videos (.mp4) play inline. You can also include image "
-        "URLs in markdown format ![alt](url) and they will be sent as native photos."
-    ),
     "discord": (
         "You are in a Discord server or group chat communicating with your user. "
         "You can send media files natively: include MEDIA:/absolute/path/to/file "
@@ -953,24 +941,6 @@ PLATFORM_HINTS = {
 # to ``gateway.platforms.telegram.extra.rich_messages: true`` (or the
 # top-level ``platforms.telegram.extra.rich_messages``).  The base
 # PLATFORM_HINTS["telegram"] covers MarkdownV2-compatible constructs; this
-# extension adds the Bot API 10.1 rich-Markdown guidance (tables, task lists,
-# collapsible details, math, etc.).
-TELEGRAM_RICH_MESSAGES_HINT = (
-    "Telegram now supports rich Markdown, so lean into it: whenever it "
-    "makes the answer clearer or easier to scan, actively reach for real "
-    "Markdown tables (pipe `| col | col |` syntax), bullet and numbered "
-    "lists, task lists (`- [ ]` / `- [x]`), headings, nested blockquotes, "
-    "collapsible details, footnotes/references, math/formulas (`$...$`, "
-    "`$$...$$`), underline, subscript/superscript, marked (highlighted) "
-    "text, and anchors. Default to structured formatting over dense "
-    "paragraphs for any comparison, set of steps, key/value summary, or "
-    "tabular data. Prefer real Markdown tables and task lists over "
-    "hand-built bullet substitutes when presenting structured data; these "
-    "degrade gracefully (tables become readable bullet groups) when rich "
-    "rendering is unavailable, but advanced constructs like math and "
-    "collapsible details may render as plain source text in that case. "
-)
-
 # ---------------------------------------------------------------------------
 # Environment hints — execution-environment awareness for the agent.
 # Unlike PLATFORM_HINTS (which describe the messaging channel), these describe

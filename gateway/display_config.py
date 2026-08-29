@@ -126,12 +126,7 @@ _PLATFORM_DEFAULTS: dict[str, dict[str, Any]] = {
     # heartbeats (long_running_notifications) so the user has signal between
     # turn start and final answer. Otherwise it looks like "typing..." for
     # 30 minutes with nothing happening. Opt in to verbose iteration detail
-    # via display.platforms.telegram.busy_ack_detail / tool_progress.
-    "telegram":    {
-        **_TIER_HIGH,
-        "tool_progress": "off",
-        "busy_ack_detail": False,
-    },
+    # Opt in to verbose iteration detail via display.platforms.<platform>.busy_ack_detail / tool_progress.
     # Discord has a native "subtext" primitive (-# small grey text) that reads
     # as metadata rather than content, so reasoning summaries default to it
     # here instead of the fenced code block used elsewhere.
