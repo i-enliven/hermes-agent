@@ -17,15 +17,13 @@ from gateway.session import SessionSource
 
 def _clear_auth_env(monkeypatch) -> None:
     for key in (
-        "TELEGRAM_ALLOWED_USERS",
         "GATEWAY_ALLOWED_USERS",
-        "TELEGRAM_ALLOW_ALL_USERS",
         "GATEWAY_ALLOW_ALL_USERS",
     ):
         monkeypatch.delenv(key, raising=False)
 
 
-def _make_event(text: str = "hello", platform: Platform = Platform.TELEGRAM) -> MessageEvent:
+def _make_event(text: str = "hello", platform: Platform = Platform.DISCORD) -> MessageEvent:
     return MessageEvent(
         text=text,
         message_id="m1",
@@ -62,7 +60,7 @@ def _make_runner(platform: Platform):
 async def test_internal_events_bypass_hook(monkeypatch):
     """Internal events (event.internal=True) skip the plugin hook entirely."""
     _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "*")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "*")
 
     called = {"count": 0}
 
@@ -75,7 +73,7 @@ async def test_internal_events_bypass_hook(monkeypatch):
 
     monkeypatch.setattr("hermes_cli.plugins.invoke_hook", _fake_hook)
 
-    runner, _adapter = _make_runner(Platform.TELEGRAM)
+    runner, _adapter = _make_runner(Platform.DISCORD)
     runner._handle_message_with_agent = _capture  # noqa: SLF001
 
     event = _make_event("hi")
@@ -108,7 +106,7 @@ async def test_hook_fires_without_session_store_attribute(monkeypatch):
 
     monkeypatch.setattr("hermes_cli.plugins.invoke_hook", _fake_hook)
 
-    runner, adapter = _make_runner(Platform.TELEGRAM)
+    runner, adapter = _make_runner(Platform.DISCORD)
     del runner.session_store
 
     result = await runner._handle_message(_make_event("hi"))

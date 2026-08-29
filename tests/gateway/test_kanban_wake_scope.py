@@ -177,13 +177,13 @@ def test_unscoped_platform_wake_key_is_byte_identical(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "wake-scope-telegram.db"))
     kb.init_db()
     _completed_subscription(
-        platform="telegram",
+        platform="discord",
         chat_id="chat-dm",
         chat_type="dm",
     )
 
     adapter = UnscopedAdapter()
-    asyncio.run(_one_notifier_tick(monkeypatch, _runner(adapter, Platform.TELEGRAM)))
+    asyncio.run(_one_notifier_tick(monkeypatch, _runner(adapter, Platform.DISCORD)))
 
     assert len(adapter.handled) == 1
     wake = adapter.handled[0].source

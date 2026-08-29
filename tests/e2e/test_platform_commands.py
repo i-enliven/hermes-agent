@@ -95,7 +95,7 @@ class TestSlashCommands:
 
     @pytest.mark.asyncio
     async def test_plaintext_restart_gateway_routes_to_safe_restart_command(self, adapter, runner, platform, monkeypatch):
-        if platform != Platform.TELEGRAM:
+        if platform != Platform.DISCORD:
             pytest.skip("Plaintext restart shortcut is intentionally DM/Telegram-focused")
 
         monkeypatch.setenv("INVOCATION_ID", "e2e-systemd")
@@ -110,7 +110,7 @@ class TestSlashCommands:
 
     @pytest.mark.asyncio
     async def test_plaintext_restart_gateway_in_group_stays_plain_text(self, adapter, runner, platform, monkeypatch):
-        if platform != Platform.TELEGRAM:
+        if platform != Platform.DISCORD:
             pytest.skip("Shortcut scope is only verified for Telegram here")
 
         monkeypatch.setenv("INVOCATION_ID", "e2e-systemd")

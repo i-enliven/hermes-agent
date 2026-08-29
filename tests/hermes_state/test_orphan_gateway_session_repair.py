@@ -21,7 +21,7 @@ from hermes_state import SessionDB
 
 
 PEER = {
-    "source": "telegram",
+    "source": "discord",
     "user_id": "6308981865",
     "session_key": "agent:main:telegram:dm:6308981865",
     "chat_id": "6308981865",
@@ -41,7 +41,7 @@ def _mk_session(
     session_id,
     *,
     keyed=True,
-    source="telegram",
+    source="discord",
     user_id=PEER["user_id"],
     started_at=None,
     last_activity_at=None,

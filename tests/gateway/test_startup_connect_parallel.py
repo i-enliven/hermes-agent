@@ -94,7 +94,7 @@ async def test_startup_connects_platforms_concurrently(monkeypatch, tmp_path):
 
     config = GatewayConfig(
         platforms={
-            Platform.TELEGRAM: PlatformConfig(enabled=True, token="***"),
+            Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
             Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
         },
         sessions_dir=tmp_path / "sessions",
@@ -102,7 +102,7 @@ async def test_startup_connects_platforms_concurrently(monkeypatch, tmp_path):
     runner = GatewayRunner(config)
 
     def _make_adapter(platform, platform_config):
-        sleep = 0.3 if platform is Platform.TELEGRAM else 0.0
+        sleep = 0.3 if platform is Platform.DISCORD else 0.0
         return _TimingAdapter(platform, sleep)
 
     monkeypatch.setattr(runner, "_create_adapter", _make_adapter)
@@ -115,7 +115,7 @@ async def test_startup_connects_platforms_concurrently(monkeypatch, tmp_path):
     assert events, "no connect() event was recorded"
 
     fast_end = _OrderRecorder.index_of(Platform.DISCORD.value, "end")
-    slow_end = _OrderRecorder.index_of(Platform.TELEGRAM.value, "end")
+    slow_end = _OrderRecorder.index_of(Platform.DISCORD.value, "end")
     assert fast_end != -1 and slow_end != -1, f"missing end events: {events}"
 
     # Overlap proof: the fast platform finished before the slow one did,
@@ -124,7 +124,7 @@ async def test_startup_connects_platforms_concurrently(monkeypatch, tmp_path):
         f"connects did not overlap (serial loop?): events={events}"
     )
     # Both platforms should be registered once startup settles.
-    assert Platform.TELEGRAM in runner.adapters
+    assert Platform.DISCORD in runner.adapters
     assert Platform.DISCORD in runner.adapters
 
 
@@ -139,7 +139,7 @@ async def test_startup_one_failing_platform_does_not_block_others(monkeypatch, t
 
     class _FailingSlowAdapter(BasePlatformAdapter):
         def __init__(self):
-            super().__init__(PlatformConfig(enabled=True, token="***"), Platform.TELEGRAM)
+            super().__init__(PlatformConfig(enabled=True, token="***"), Platform.DISCORD)
 
         async def connect(self, *, is_reconnect: bool = False) -> bool:
             await asyncio.sleep(0.3)
@@ -160,7 +160,7 @@ async def test_startup_one_failing_platform_does_not_block_others(monkeypatch, t
 
     config = GatewayConfig(
         platforms={
-            Platform.TELEGRAM: PlatformConfig(enabled=True, token="***"),
+            Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
             Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
         },
         sessions_dir=tmp_path / "sessions",
@@ -168,7 +168,7 @@ async def test_startup_one_failing_platform_does_not_block_others(monkeypatch, t
     runner = GatewayRunner(config)
 
     def _make_adapter(platform, platform_config):
-        if platform is Platform.TELEGRAM:
+        if platform is Platform.DISCORD:
             return _FailingSlowAdapter()
         return _TimingAdapter(platform, 0.0)
 
@@ -180,10 +180,10 @@ async def test_startup_one_failing_platform_does_not_block_others(monkeypatch, t
     # The healthy platform connected and is registered despite Telegram failing.
     assert Platform.DISCORD in runner.adapters
     # The failed platform is queued for retry, not silently dropped.
-    assert Platform.TELEGRAM in runner._failed_platforms
+    assert Platform.DISCORD in runner._failed_platforms
 
 
-class TestTelegramColdStartCap:
+class TestColdStartCap:
     """The initial (pre-`running`) Telegram connect uses a capped budget (#85993).
 
     The full 180s Telegram connect budget (#67498) still applies to reconnect
@@ -202,9 +202,9 @@ class TestTelegramColdStartCap:
         monkeypatch.delenv("HERMES_GATEWAY_PLATFORM_CONNECT_TIMEOUT", raising=False)
         runner = self._runner(tmp_path)
         initial = runner._platform_connect_timeout_secs(
-            Platform.TELEGRAM, initial=True
+            Platform.DISCORD, initial=True
         )
-        full = runner._platform_connect_timeout_secs(Platform.TELEGRAM)
+        full = runner._platform_connect_timeout_secs(Platform.DISCORD)
         assert initial < full, (
             "cold-start Telegram budget must be shorter than the reconnect "
             f"budget (initial={initial}, full={full})"
@@ -223,7 +223,7 @@ class TestTelegramColdStartCap:
         monkeypatch.setenv("HERMES_GATEWAY_PLATFORM_CONNECT_TIMEOUT", "12")
         runner = self._runner(tmp_path)
         assert runner._platform_connect_timeout_secs(
-            Platform.TELEGRAM, initial=True
+            Platform.DISCORD, initial=True
         ) == 12.0
 
     @pytest.mark.asyncio
@@ -238,7 +238,7 @@ class TestTelegramColdStartCap:
         class _WedgedAdapter(BasePlatformAdapter):
             def __init__(self):
                 super().__init__(
-                    PlatformConfig(enabled=True, token="***"), Platform.TELEGRAM
+                    PlatformConfig(enabled=True, token="***"), Platform.DISCORD
                 )
 
             async def connect(self, *, is_reconnect: bool = False) -> bool:
@@ -256,7 +256,7 @@ class TestTelegramColdStartCap:
 
         config = GatewayConfig(
             platforms={
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="***"),
+                Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
                 Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
             },
             sessions_dir=tmp_path / "sessions",
@@ -269,11 +269,11 @@ class TestTelegramColdStartCap:
         import gateway.run as gateway_run
 
         monkeypatch.setattr(
-            gateway_run, "_TELEGRAM_INITIAL_CONNECT_TIMEOUT_SECS_DEFAULT", 0.2
+            gateway_run, "_PLATFORM_CONNECT_TIMEOUT_SECS_DEFAULT", 0.2
         )
 
         def _make_adapter(platform, platform_config):
-            if platform is Platform.TELEGRAM:
+            if platform is Platform.DISCORD:
                 return _WedgedAdapter()
             return _TimingAdapter(platform, 0.0)
 
@@ -284,5 +284,5 @@ class TestTelegramColdStartCap:
 
         # Discord served; Telegram queued for the watcher's full-budget retry.
         assert Platform.DISCORD in runner.adapters
-        assert Platform.TELEGRAM not in runner.adapters
-        assert Platform.TELEGRAM in runner._failed_platforms
+        assert Platform.DISCORD not in runner.adapters
+        assert Platform.DISCORD in runner._failed_platforms

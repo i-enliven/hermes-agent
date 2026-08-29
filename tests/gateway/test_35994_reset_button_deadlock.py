@@ -28,7 +28,7 @@ from gateway.session import SessionEntry, SessionSource, build_session_key
 
 def _make_source() -> SessionSource:
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         user_id="u1",
         chat_id="c1",
         user_name="tester",
@@ -47,11 +47,11 @@ def _make_runner_with_cached_agent(close_fn):
 
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="***")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="***")}
     )
     adapter = MagicMock()
     adapter.send = AsyncMock()
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner._session_model_overrides = {}
@@ -62,12 +62,12 @@ def _make_runner_with_cached_agent(close_fn):
     session_entry = SessionEntry(
         session_key=session_key, session_id="sess-old",
         created_at=datetime.now(), updated_at=datetime.now(),
-        platform=Platform.TELEGRAM, chat_type="dm",
+        platform=Platform.DISCORD, chat_type="dm",
     )
     new_entry = SessionEntry(
         session_key=session_key, session_id="sess-new",
         created_at=datetime.now(), updated_at=datetime.now(),
-        platform=Platform.TELEGRAM, chat_type="dm",
+        platform=Platform.DISCORD, chat_type="dm",
     )
     runner.session_store = MagicMock()
     runner.session_store.reset_session.return_value = new_entry

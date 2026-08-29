@@ -45,7 +45,7 @@ FULL_OPS = (
 def make_desc(**kw) -> CapabilityDescriptor:
     base = dict(
         contract_version=CONTRACT_VERSION,
-        platform="telegram",
+        platform="discord",
         label="Telegram",
         max_message_length=4096,
         supports_draft_streaming=False,
@@ -74,7 +74,7 @@ def _event(
         text=text,
         message_type=MessageType.COMMAND,
         source=SessionSource(
-            platform="telegram", chat_id=chat_id, chat_type="dm", user_id="u1"
+            platform="discord", chat_id=chat_id, chat_type="dm", user_id="u1"
         ),
         prompt_response=prompt_response,
     )

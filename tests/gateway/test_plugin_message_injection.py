@@ -25,7 +25,7 @@ def _entry(*, origin=True) -> SessionEntry:
     source = None
     if origin:
         source = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="42",
             chat_type="dm",
             user_id="42",
@@ -38,7 +38,7 @@ def _entry(*, origin=True) -> SessionEntry:
         created_at=now,
         updated_at=now,
         origin=source,
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
     )
 
 
@@ -48,7 +48,7 @@ def _runner(entry: SessionEntry | None, adapter=None) -> GatewayRunner:
     runner._async_session_store = SimpleNamespace(
         _store=runner.session_store, lookup_by_session_key=AsyncMock(return_value=entry)
     )
-    runner.adapters = {Platform.TELEGRAM: adapter} if adapter else {}
+    runner.adapters = {Platform.DISCORD: adapter} if adapter else {}
     runner._profile_adapters = {}
     runner._running = True
     runner._draining = False
@@ -59,7 +59,7 @@ def _runner(entry: SessionEntry | None, adapter=None) -> GatewayRunner:
 
 class _RoutingAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.DISCORD)
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:
         return True
@@ -105,7 +105,7 @@ async def test_plugin_context_routes_through_live_gateway_to_existing_session(
 
     runner = object.__new__(GatewayRunner)
     runner.session_store = store
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._profile_adapters = {}
     runner._gateway_loop = asyncio.get_running_loop()
     runner._running = True

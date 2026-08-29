@@ -57,7 +57,7 @@ async def test_restart_command_writes_notify_file(tmp_path, monkeypatch):
     notify_path = tmp_path / ".restart_notify.json"
     assert notify_path.exists()
     data = json.loads(notify_path.read_text())
-    assert data["platform"] == "telegram"
+    assert data["platform"] == "discord"
     assert data["chat_id"] == "42"
     assert data["chat_type"] == "dm"
     assert data["message_id"] == "m1"
@@ -95,7 +95,7 @@ async def test_restart_command_uses_atomic_json_writes_for_marker_files(tmp_path
     names = [name for name, _payload, _kwargs in calls]
     assert names == [".restart_notify.json", ".restart_last_processed.json"]
     assert calls[0][1]["chat_id"] == "42"
-    assert calls[1][1]["platform"] == "telegram"
+    assert calls[1][1]["platform"] == "discord"
 
 
 @pytest.mark.asyncio
@@ -123,9 +123,9 @@ async def test_sethome_updates_running_config_for_same_process_restart(tmp_path,
 
     result = await runner._handle_set_home_command(event)
 
-    home = runner.config.get_home_channel(Platform.TELEGRAM)
+    home = runner.config.get_home_channel(Platform.DISCORD)
     assert "Home channel set" in result
-    assert saved["TELEGRAM_HOME_CHANNEL"] == "home-42"
+    assert saved["DISCORD_HOME_CHANNEL"] == "home-42"
     assert home is not None
     assert home.chat_id == "home-42"
     assert home.name == "Ops Home"
@@ -156,10 +156,10 @@ async def test_sethome_preserves_thread_target_for_same_process_restart(tmp_path
 
     result = await runner._handle_set_home_command(event)
 
-    home = runner.config.get_home_channel(Platform.TELEGRAM)
+    home = runner.config.get_home_channel(Platform.DISCORD)
     assert "Home channel set" in result
-    assert saved["TELEGRAM_HOME_CHANNEL"] == "parent-42"
-    assert saved["TELEGRAM_HOME_CHANNEL_THREAD_ID"] == "topic-7"
+    assert saved["DISCORD_HOME_CHANNEL"] == "parent-42"
+    assert saved["DISCORD_HOME_CHANNEL_THREAD_ID"] == "topic-7"
     assert home is not None
     assert home.chat_id == "parent-42"
     assert home.thread_id == "topic-7"
@@ -175,8 +175,8 @@ async def test_send_home_channel_startup_notification_preserves_thread_metadata(
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
 
     runner, adapter = make_restart_runner()
-    runner.config.platforms[Platform.TELEGRAM].home_channel = HomeChannel(
-        platform=Platform.TELEGRAM,
+    runner.config.platforms[Platform.DISCORD].home_channel = HomeChannel(
+        platform=Platform.DISCORD,
         chat_id="parent-42",
         name="Ops Topic",
         thread_id="777",
@@ -195,14 +195,13 @@ async def test_send_home_channel_startup_notification_preserves_thread_metadata(
 
     delivered = await runner._send_home_channel_startup_notifications()
 
-    assert delivered == {("telegram", "parent-42", "777")}
+    assert delivered == {("discord", "parent-42", "777")}
     adapter.send.assert_called_once_with(
         "parent-42",
         "♻️ Gateway online — Hermes is back and ready.",
         metadata={
             "thread_id": "777",
-            "telegram_dm_topic_reply_fallback": True,
-            "direct_messages_topic_id": "777",
+            "non_conversational": True,
         },
     )
 
@@ -304,7 +303,7 @@ async def test_send_restart_notification_logs_warning_on_sendresult_failure(
 
     notify_path = tmp_path / ".restart_notify.json"
     notify_path.write_text(json.dumps({
-        "platform": "telegram",
+        "platform": "discord",
         "chat_id": "42",
     }))
 
@@ -350,7 +349,7 @@ async def test_send_restart_notification_logs_info_on_sendresult_success(
 
     notify_path = tmp_path / ".restart_notify.json"
     notify_path.write_text(json.dumps({
-        "platform": "telegram",
+        "platform": "discord",
         "chat_id": "42",
     }))
 
@@ -364,7 +363,7 @@ async def test_send_restart_notification_logs_info_on_sendresult_success(
         r for r in caplog.records
         if r.levelname == "INFO" and "Sent restart notification" in r.getMessage()
     ]
-    assert delivered_target == ("telegram", "42", None)
+    assert delivered_target == ("discord", "42", None)
     assert success_lines, (
         "Expected INFO 'Sent restart notification' when send succeeded; "
         f"got records: {[(r.levelname, r.getMessage()) for r in caplog.records]}"
@@ -398,9 +397,9 @@ async def test_shutdown_notifications_are_fully_muted_when_flag_disabled():
     source = make_restart_source(chat_id="active-42", chat_type="group", thread_id="topic-7")
     session_key = build_session_key(source)
 
-    runner.config.platforms[Platform.TELEGRAM].gateway_restart_notification = False
-    runner.config.platforms[Platform.TELEGRAM].home_channel = HomeChannel(
-        platform=Platform.TELEGRAM,
+    runner.config.platforms[Platform.DISCORD].gateway_restart_notification = False
+    runner.config.platforms[Platform.DISCORD].home_channel = HomeChannel(
+        platform=Platform.DISCORD,
         chat_id="home-42",
         name="Ops Home",
     )

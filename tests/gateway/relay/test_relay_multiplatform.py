@@ -54,7 +54,7 @@ def test_identities_multi_platform_keyed_map(monkeypatch):
     # The PRIMARY is the first listed platform.
     assert relay.relay_platform_identity() == ("discord", "app-1")
     # Username folded into the per-platform entry; the leading @ is stripped.
-    assert relay.relay_bot_username("telegram") == "my_bot"
+    assert relay.relay_bot_username("discord") == "my_bot"
     assert relay.relay_bot_username("discord") is None
 
 
@@ -100,7 +100,7 @@ async def test_adapter_stamps_per_frame_platform_from_inbound(monkeypatch):
         MessageEvent(
             text="hi",
             message_type=MessageType.TEXT,
-            source=SessionSource(platform=Platform.TELEGRAM, chat_id="tg-1", chat_type="dm", user_id="u-1"),
+            source=SessionSource(platform=Platform.DISCORD, chat_id="tg-1", chat_type="dm", user_id="u-1"),
         )
     )
     await adapter.send("tg-1", "a telegram reply")

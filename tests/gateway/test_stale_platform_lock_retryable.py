@@ -31,7 +31,7 @@ from gateway.run import GatewayRunner
 class _StubAdapter(BasePlatformAdapter):
     """Minimal concrete subclass for testing _acquire_platform_lock."""
 
-    platform = MagicMock(value="telegram")
+    platform = MagicMock(value="discord")
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:
         return True

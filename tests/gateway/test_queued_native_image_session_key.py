@@ -18,7 +18,7 @@ _ONE_BY_ONE_PNG = base64.b64decode(
 
 class CaptureAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="***"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="***"), Platform.DISCORD)
         self.sent = []
         self.typing = []
 
@@ -113,12 +113,12 @@ async def test_queued_followup_uses_pending_event_session_key_for_native_images(
     image_path.write_bytes(_ONE_BY_ONE_PNG)
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
     )
     pending_source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
         thread_id="17585",

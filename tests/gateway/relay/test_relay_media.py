@@ -31,7 +31,7 @@ from tests.gateway.relay.stub_connector import StubConnector
 def make_desc(**kw) -> CapabilityDescriptor:
     base = dict(
         contract_version=CONTRACT_VERSION,
-        platform="telegram",
+        platform="discord",
         label="Telegram",
         max_message_length=4096,
         supports_draft_streaming=False,
@@ -143,7 +143,7 @@ def _make_event(media_urls):
         text="look",
         message_type=MessageType.TEXT,
         source=SessionSource(
-            platform="telegram", chat_id="c1", chat_type="dm", user_id="u1"
+            platform="discord", chat_id="c1", chat_type="dm", user_id="u1"
         ),
         media_urls=list(media_urls),
     )

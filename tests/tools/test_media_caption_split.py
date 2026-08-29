@@ -13,7 +13,6 @@ the platforms can't diverge.
 
 from tools.send_message_tool import (
     _DEFAULT_CAPTION_LIMIT,
-    _TELEGRAM_CAPTION_LIMIT,
     _media_caption_split,
 )
 

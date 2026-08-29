@@ -31,7 +31,7 @@ class TestFindSessionId:
 
         with patch.object(mirror_mod, "_SESSIONS_DIR", sessions_dir), \
              patch.object(mirror_mod, "_SESSIONS_INDEX", index_file):
-            result = _find_session_id("telegram", "12345")
+            result = _find_session_id("discord", "12345")
 
         assert result == "sess_abc"
 
@@ -51,7 +51,7 @@ class TestFindSessionId:
 
         with patch.object(mirror_mod, "_SESSIONS_DIR", sessions_dir), \
              patch.object(mirror_mod, "_SESSIONS_INDEX", index_file):
-            result = _find_session_id("telegram", "12345")
+            result = _find_session_id("discord", "12345")
 
         assert result == "sess_new"
 
@@ -71,7 +71,7 @@ class TestFindSessionId:
 
         with patch.object(mirror_mod, "_SESSIONS_DIR", sessions_dir), \
              patch.object(mirror_mod, "_SESSIONS_INDEX", index_file):
-            result = _find_session_id("telegram", "-1001", thread_id="10")
+            result = _find_session_id("discord", "-1001", thread_id="10")
 
         assert result == "sess_topic_a"
 
@@ -97,7 +97,7 @@ class TestMirrorToSession:
              patch.object(mirror_mod, "_SESSIONS_INDEX", index_file), \
              patch("gateway.mirror._append_to_sqlite") as mock_sqlite:
             result = mirror_to_session(
-                "telegram",
+                "discord",
                 "-1001",
                 "Hello group!",
                 source_label="cli",
@@ -113,7 +113,7 @@ class TestMirrorToSession:
 
         with patch.object(mirror_mod, "_SESSIONS_DIR", sessions_dir), \
              patch.object(mirror_mod, "_SESSIONS_INDEX", index_file):
-            result = mirror_to_session("telegram", "99999", "Hello!")
+            result = mirror_to_session("discord", "99999", "Hello!")
 
         assert result is False
 

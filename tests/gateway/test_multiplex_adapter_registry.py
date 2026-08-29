@@ -296,7 +296,7 @@ class TestSecondaryProfileConfigHandling:
                 enabled=True, extra={"connection_mode": "webhook"}
             ),
             Platform.WEBHOOK: PlatformConfig(enabled=True, extra={"port": 8644}),
-            Platform.TELEGRAM: PlatformConfig(enabled=True, token="t"),
+            Platform.DISCORD: PlatformConfig(enabled=True, token="t"),
         }
         monkeypatch.setattr(
             "gateway.config.load_gateway_config", lambda: reviewer_cfg
@@ -307,7 +307,7 @@ class TestSecondaryProfileConfigHandling:
         message = str(ei.value)
         assert "feishu" in message
         assert "webhook" in message
-        assert "telegram" not in message
+        assert "discord" not in message
         assert "reviewer" not in runner._profile_adapters
 
     def test_configured_secondary_adapter_namespaces_runtime_status(self):

@@ -44,7 +44,7 @@ def telegram_source():
     Used to prove profile routing is platform-generic, not Discord-only.
     """
     return SessionSource(
-        platform=MagicMock(value="telegram"),
+        platform=MagicMock(value="discord"),
         chat_id="-1001234567890",
         guild_id=None,
         thread_id=None,
@@ -160,7 +160,7 @@ class TestNonDiscordProfileRouting:
         """A configured Telegram route resolves to its profile via the real
         ``_profile_name_for_source`` (bound onto the mock runner)."""
         mock_runner.config.profile_routes = [
-            ProfileRoute(name="tg", platform="telegram", profile="tg-profile",
+            ProfileRoute(name="tg", platform="discord", profile="tg-profile",
                          chat_id="-1001234567890"),
         ]
         telegram_source.profile = None
@@ -177,7 +177,7 @@ class TestNonDiscordProfileRouting:
         mock_runner.config.profile_routes = [
             ProfileRoute(
                 name="worker-route",
-                platform="telegram",
+                platform="discord",
                 profile="worker",
                 chat_id="route-chat",
             )
@@ -200,7 +200,7 @@ class TestNonDiscordProfileRouting:
         mock_runner.config.profile_routes = [
             ProfileRoute(
                 name="restricted-route",
-                platform="telegram",
+                platform="discord",
                 profile="restricted",
                 chat_id="route-chat",
             )
@@ -222,7 +222,7 @@ class TestNonDiscordProfileRouting:
         mock_runner.config.profile_routes = [
             ProfileRoute(
                 name="other-chat",
-                platform="telegram",
+                platform="discord",
                 profile="worker",
                 chat_id="different-chat",
             )
@@ -230,7 +230,7 @@ class TestNonDiscordProfileRouting:
         telegram_source.chat_id = "route-chat"
 
         assert mock_runner._profile_name_for_source(telegram_source) is None
-        adapter = _stub_adapter(Platform.TELEGRAM, mock_runner)
+        adapter = _stub_adapter(Platform.DISCORD, mock_runner)
         source = adapter.build_source(chat_id="route-chat", chat_type="group")
         assert source.profile is None
 
@@ -285,7 +285,7 @@ class TestAdapterToSessionKeyIntegration:
         return [
             ProfileRoute(name="dc", platform="discord", profile="coder",
                          guild_id="111", chat_id="222"),
-            ProfileRoute(name="tg", platform="telegram", profile="ops",
+            ProfileRoute(name="tg", platform="discord", profile="ops",
                          chat_id="-1001234567890"),
         ]
 
@@ -314,12 +314,12 @@ class TestAdapterToSessionKeyIntegration:
         mock_runner.config.profile_routes = [
             ProfileRoute(
                 name="restricted-route",
-                platform="telegram",
+                platform="discord",
                 profile="restricted",
                 chat_id="route-chat",
             )
         ]
-        adapter = _stub_adapter(Platform.TELEGRAM, mock_runner)
+        adapter = _stub_adapter(Platform.DISCORD, mock_runner)
 
         with patch(
             "hermes_cli.profiles.profiles_to_serve",
@@ -345,12 +345,12 @@ class TestAdapterToSessionKeyIntegration:
         mock_runner.config.profile_routes = [
             ProfileRoute(
                 name="restricted-route",
-                platform="telegram",
+                platform="discord",
                 profile="restricted",
                 chat_id="route-chat",
             )
         ]
-        source = SessionSource(platform=Platform.TELEGRAM, chat_id="route-chat")
+        source = SessionSource(platform=Platform.DISCORD, chat_id="route-chat")
 
         with patch(
             "hermes_cli.profiles.profiles_to_serve",

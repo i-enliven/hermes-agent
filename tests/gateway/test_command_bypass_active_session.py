@@ -45,7 +45,7 @@ class _StubAdapter(BasePlatformAdapter):
 def _make_adapter():
     """Create a minimal adapter for testing the active-session guard."""
     config = PlatformConfig(enabled=True, token="test-token")
-    adapter = _StubAdapter(config, Platform.TELEGRAM)
+    adapter = _StubAdapter(config, Platform.DISCORD)
     adapter._busy_text_mode = ""
     adapter.sent_responses = []
 
@@ -64,14 +64,14 @@ def _make_adapter():
 
 def _make_event(text="/stop", chat_id="12345"):
     source = SessionSource(
-        platform=Platform.TELEGRAM, chat_id=chat_id, chat_type="dm"
+        platform=Platform.DISCORD, chat_id=chat_id, chat_type="dm"
     )
     return MessageEvent(text=text, message_type=MessageType.TEXT, source=source)
 
 
 def _session_key(chat_id="12345"):
     source = SessionSource(
-        platform=Platform.TELEGRAM, chat_id=chat_id, chat_type="dm"
+        platform=Platform.DISCORD, chat_id=chat_id, chat_type="dm"
     )
     return build_session_key(source)
 

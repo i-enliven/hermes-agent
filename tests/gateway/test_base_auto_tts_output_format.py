@@ -118,12 +118,12 @@ async def _run_auto_tts(adapter: _DummyAdapter, platform: Platform):
 @pytest.mark.asyncio
 async def test_base_auto_tts_skips_playback_when_tool_reports_failure():
     """A success=False tool result must not deliver a stale/partial file."""
-    adapter = _DummyAdapter(Platform.TELEGRAM)
+    adapter = _DummyAdapter(Platform.DISCORD)
     adapter._keep_typing = _hold_typing()
     adapter._should_auto_tts_for_chat = lambda _chat_id: True
     adapter.play_tts = AsyncMock(return_value=SendResult(success=True, message_id="tts-1"))
     adapter.set_message_handler(lambda _event: asyncio.sleep(0, result="reply text"))
-    event = _make_voice_event(Platform.TELEGRAM)
+    event = _make_voice_event(Platform.DISCORD)
 
     def fake_tts(*, text, output_path=None):
         from pathlib import Path

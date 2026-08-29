@@ -69,7 +69,7 @@ class TestParseBlueprint:
         assert spec is not None
         assert spec.skill_name == "morning-brief"
         assert spec.schedule == "0 8 * * *"
-        assert spec.deliver == "telegram"
+        assert spec.deliver == "discord"
         assert spec.prompt is not None and spec.prompt.startswith("Summarize")
 
 
@@ -131,7 +131,7 @@ class TestExportBlueprint:
             "name": "My Morning Brief",
             "schedule_display": "0 8 * * *",
             "skills": ["morning-brief"],
-            "deliver": "telegram",
+            "deliver": "discord",
             "prompt": "Summarize my unread email.",
         }
         md = export_blueprint(job, "# Morning Brief\n\nDoes the morning digest.")
@@ -139,7 +139,7 @@ class TestExportBlueprint:
         spec = parse_blueprint(md)
         assert spec is not None
         assert spec.schedule == "0 8 * * *"
-        assert spec.deliver == "telegram"
+        assert spec.deliver == "discord"
         # Name is sanitized to a valid skill identifier.
         assert spec.skill_name == "my-morning-brief"
 

@@ -146,7 +146,7 @@ def _make_store(tmp_path):
 
 
 def _make_source():
-    return SessionSource(platform=Platform.TELEGRAM, chat_id="123", user_id="u1")
+    return SessionSource(platform=Platform.DISCORD, chat_id="123", user_id="u1")
 
 
 def _bloat(n):
@@ -177,7 +177,7 @@ class TestAutoResetLoadsCleanContext:
         session_key = entry.session_key
         bloated_sid = entry.session_id
         store._db.create_session(
-            session_id=bloated_sid, source="telegram", user_id="u1"
+            session_id=bloated_sid, source="discord", user_id="u1"
         )
         store._db.replace_messages(bloated_sid, _bloat(120))
         assert len(store.load_transcript(bloated_sid)) == 120  # precondition

@@ -91,7 +91,7 @@ class _Adapter:
 
 def _runner(session_store):
     runner = object.__new__(gateway_run.GatewayRunner)
-    runner.adapters = {Platform.TELEGRAM: _Adapter()}
+    runner.adapters = {Platform.DISCORD: _Adapter()}
     runner.config = SimpleNamespace(streaming=None, group_sessions_per_user=True, thread_sessions_per_user=False)
     runner.hooks = SimpleNamespace(loaded_hooks=False, emit=AsyncMock())
     runner.session_store = session_store
@@ -163,7 +163,7 @@ def test_failed_turn_still_syncs_compression_session_split(monkeypatch):
 
     session_store = _SessionStore()
     runner = _runner(session_store)
-    source = SessionSource(platform=Platform.TELEGRAM, chat_id="12345", chat_type="dm", user_id="user-1")
+    source = SessionSource(platform=Platform.DISCORD, chat_id="12345", chat_type="dm", user_id="user-1")
 
     result = _run_compression_failure_turn(runner, source)
 
@@ -223,7 +223,7 @@ def test_empty_rate_limit_response_preserves_failure_metadata(monkeypatch):
     session_store = _SessionStore()
     runner = _runner(session_store)
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="12345",
         chat_type="dm",
         user_id="user-1",

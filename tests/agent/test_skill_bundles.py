@@ -213,7 +213,7 @@ class TestBuildBundleInvocationMessage:
             su_module, "get_disabled_skill_names", _fake_disabled
         )
 
-        result = build_bundle_invocation_message("/combo", platform="telegram")
+        result = build_bundle_invocation_message("/combo", platform="discord")
         assert result is not None
         msg, loaded, missing = result
         assert loaded == ["skill-a"]

@@ -236,7 +236,7 @@ class TestAttemptsOnlySpentOnRealSends:
     """
 
     def test_absent_platform_does_not_burn_attempts(self):
-        _record(platform="telegram")
+        _record(platform="discord")
         dl.mark_attempting("ob-1")
 
         for _ in range(dl.MAX_ATTEMPTS + 2):
@@ -254,7 +254,7 @@ class TestAttemptsOnlySpentOnRealSends:
         assert state == "attempting"
 
     def test_row_still_delivers_once_its_platform_returns(self):
-        _record(platform="telegram")
+        _record(platform="discord")
         for _ in range(dl.MAX_ATTEMPTS + 2):
             _orphan("ob-1")
             dl.sweep_recoverable(deliverable_platforms={"discord"})

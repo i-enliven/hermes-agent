@@ -31,7 +31,6 @@ def _isolate_discord_env(monkeypatch):
         "DISCORD_ALLOWED_USERS",
         "DISCORD_ALLOWED_ROLES",
         "DISCORD_ALLOW_ALL_USERS",
-        "TELEGRAM_ALLOW_BOTS",
         "GATEWAY_ALLOW_ALL_USERS",
         "GATEWAY_ALLOWED_USERS",
     ):
@@ -99,22 +98,22 @@ def test_discord_bot_authorized_when_allow_bots_mentions(monkeypatch):
 
 
 def test_bot_bypass_does_not_leak_to_other_platforms(monkeypatch):
-    """The is_bot bypass is Discord-specific — a Telegram bot source with
+    """The is_bot bypass is Discord-specific — a Slack bot source with
     is_bot=True must NOT be authorized just because DISCORD_ALLOW_BOTS=all.
     """
     runner = _make_bare_runner()
 
     monkeypatch.setenv("DISCORD_ALLOW_BOTS", "all")
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "100200300")
+    monkeypatch.setenv("SLACK_ALLOWED_USERS", "100200300")
 
-    telegram_bot = SessionSource(
-        platform=Platform.TELEGRAM,
+    slack_bot = SessionSource(
+        platform=Platform.SLACK,
         chat_id="123",
         chat_type="channel",
         user_id="999888777",
         is_bot=True,
     )
-    assert runner._is_user_authorized(telegram_bot) is False
+    assert runner._is_user_authorized(slack_bot) is False
 
 
 # -----------------------------------------------------------------------------
@@ -156,7 +155,7 @@ def test_discord_role_config_does_not_leak_to_other_platforms(monkeypatch):
     # Telegram has its own empty allowlist and no allow-all flag.
 
     telegram_user = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="123",
         chat_type="channel",
         user_id="999888777",

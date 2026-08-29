@@ -82,7 +82,7 @@ def _make_context(
         scope_id=guild_id,
         message_id=message_id,
     )
-    connected = connected if connected is not None else [Platform.DISCORD, Platform.TELEGRAM]
+    connected = connected if connected is not None else [Platform.DISCORD, Platform.DISCORD]
     if home_channels is None:
         home_channels = {
             Platform.DISCORD: HomeChannel(
@@ -134,7 +134,7 @@ class TestEphemeralChangeKeyParity:
         ("guild_id", dict(guild_id="123123123")),
         ("parent_chat_id", dict(parent_chat_id="999000111")),
         ("chat_id", dict(chat_id="999999999", parent_chat_id="999999999")),
-        ("platform", dict(platform=Platform.TELEGRAM)),
+        ("platform", dict(platform=Platform.DISCORD)),
         ("connected_platforms", dict(connected=[Platform.DISCORD])),
         (
             "home_channel_renamed",
@@ -153,8 +153,8 @@ class TestEphemeralChangeKeyParity:
                     Platform.DISCORD: HomeChannel(
                         platform=Platform.DISCORD, chat_id="111222333", name="general"
                     ),
-                    Platform.TELEGRAM: HomeChannel(
-                        platform=Platform.TELEGRAM, chat_id="tg1", name="tg-home"
+                    Platform.DISCORD: HomeChannel(
+                        platform=Platform.DISCORD, chat_id="tg1", name="tg-home"
                     ),
                 }
             ),
@@ -167,7 +167,7 @@ class TestEphemeralChangeKeyParity:
         # PII redaction only rewrites bytes on pii-safe platforms; the key
         # must react wherever the render does.
         runner = _make_runner()
-        ctx = _make_context(platform=Platform.TELEGRAM, thread_id=None, parent_chat_id=None)
+        ctx = _make_context(platform=Platform.DISCORD, thread_id=None, parent_chat_id=None)
         assert _render(ctx, False) != _render(ctx, True)
         assert _key(runner, ctx, False) != _key(runner, ctx, True)
 
@@ -314,14 +314,14 @@ class TestConnectedPlatformsOrder:
     def test_sorted_regardless_of_insertion_order(self):
         cfg_a = GatewayConfig(
             platforms={
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="t"),
+                Platform.DISCORD: PlatformConfig(enabled=True, token="t"),
                 Platform.DISCORD: PlatformConfig(enabled=True, token="d"),
             }
         )
         cfg_b = GatewayConfig(
             platforms={
                 Platform.DISCORD: PlatformConfig(enabled=True, token="d"),
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="t"),
+                Platform.DISCORD: PlatformConfig(enabled=True, token="t"),
             }
         )
         assert cfg_a.get_connected_platforms() == cfg_b.get_connected_platforms()

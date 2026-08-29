@@ -50,7 +50,7 @@ class _StubAdapter(BasePlatformAdapter):
 
 
 def _make_adapter():
-    adapter = _StubAdapter(PlatformConfig(enabled=True, token="t"), Platform.TELEGRAM)
+    adapter = _StubAdapter(PlatformConfig(enabled=True, token="t"), Platform.DISCORD)
     adapter._send_with_retry = AsyncMock(return_value=None)
     return adapter
 
@@ -60,14 +60,14 @@ def _make_event(text="hi", chat_id="42"):
         text=text,
         message_type=MessageType.TEXT,
         source=SessionSource(
-            platform=Platform.TELEGRAM, chat_id=chat_id, chat_type="dm"
+            platform=Platform.DISCORD, chat_id=chat_id, chat_type="dm"
         ),
     )
 
 
 def _sk(chat_id="42"):
     return build_session_key(
-        SessionSource(platform=Platform.TELEGRAM, chat_id=chat_id, chat_type="dm")
+        SessionSource(platform=Platform.DISCORD, chat_id=chat_id, chat_type="dm")
     )
 
 

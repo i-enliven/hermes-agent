@@ -120,7 +120,7 @@ class TestSharedCleanerWiring:
         class _DummyAdapter(BasePlatformAdapter):
             def __init__(self):
                 super().__init__(
-                    PlatformConfig(enabled=True, token="test"), Platform.TELEGRAM
+                    PlatformConfig(enabled=True, token="test"), Platform.DISCORD
                 )
 
             async def connect(self):

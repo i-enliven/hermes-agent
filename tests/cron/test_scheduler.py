@@ -123,7 +123,7 @@ class TestResolveOrigin:
     def test_full_origin(self):
         job = {
             "origin": {
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_id": "123456",
                 "chat_name": "Test Chat",
                 "thread_id": "42",
@@ -132,7 +132,7 @@ class TestResolveOrigin:
         result = _resolve_origin(job)
         assert isinstance(result, dict)
         assert result == job["origin"]
-        assert result["platform"] == "telegram"
+        assert result["platform"] == "discord"
         assert result["chat_id"] == "123456"
         assert result["chat_name"] == "Test Chat"
         assert result["thread_id"] == "42"
@@ -143,7 +143,7 @@ class TestResolveOrigin:
         [
             "combined-digest-replaces-x-and-y-20260503",
             123,
-            ["telegram", "12345"],
+            ["discord", "12345"],
             ("platform", "chat_id"),
             42.0,
         ],
@@ -167,14 +167,14 @@ class TestResolveDeliveryTarget:
         job = {
             "deliver": "origin",
             "origin": {
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_id": "-1001",
                 "thread_id": "17585",
             },
         }
 
         assert _resolve_delivery_target(job) == {
-            "platform": "telegram",
+            "platform": "discord",
             "chat_id": "-1001",
             "thread_id": "17585",
         }
@@ -192,52 +192,20 @@ class TestResolveDeliveryTarget:
                 "thread_id": "origin-thread",
             },
         }
-
-        assert _resolve_delivery_target(job) == {
-            "platform": "discord",
-            "chat_id": "home-parent",
-            "thread_id": None,
-        }
-
-    def test_telegram_cron_thread_id_overrides_home_thread_id(self, monkeypatch):
-        """TELEGRAM_CRON_THREAD_ID wins over TELEGRAM_HOME_CHANNEL_THREAD_ID for cron (#24409)."""
-        monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "-1001234567890")
-        monkeypatch.setenv("TELEGRAM_HOME_CHANNEL_THREAD_ID", "5")
-        monkeypatch.setenv("TELEGRAM_CRON_THREAD_ID", "42")
-
-        assert _resolve_delivery_target({"deliver": "telegram"}) == {
-            "platform": "telegram",
-            "chat_id": "-1001234567890",
-            "thread_id": "42",
-        }
-
-
-    def test_explicit_telegram_topic_target_overrides_cron_thread_id(self, monkeypatch):
-        """Explicit ``telegram:chat:thread`` targets bypass TELEGRAM_CRON_THREAD_ID."""
-        monkeypatch.setenv("TELEGRAM_CRON_THREAD_ID", "999")
-
-        job = {"deliver": "telegram:-1003724596514:17"}
-        assert _resolve_delivery_target(job) == {
-            "platform": "telegram",
-            "chat_id": "-1003724596514",
-            "thread_id": "17",
-        }
-
-
     def test_unresolved_target_still_delivered_as_written(self):
         """A stored job's platform-native target keeps delivering when neither
         parser nor directory recognizes it. Routing cron through
         resolve_send_target turned these into a warning plus a silently
         dropped delivery; pass_unresolved_references hands the raw id to the adapter
         again."""
-        job = {"deliver": "telegram:ops-room"}
+        job = {"deliver": "discord:ops-room"}
         with patch(
             "gateway.channel_directory.resolve_channel_name",
             return_value=None,
         ):
             result = _resolve_delivery_target(job)
         assert result == {
-            "platform": "telegram",
+            "platform": "discord",
             "chat_id": "ops-room",
             "thread_id": None,
         }
@@ -251,14 +219,14 @@ class TestResolveDeliveryTarget:
         resolved for deliver=['telegram']" because ``str(['telegram'])`` was
         passed through to ``split(',')`` verbatim.
         """
-        monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "-4004")
+        monkeypatch.setenv("DISCORD_HOME_CHANNEL", "-4004")
         job = {
-            "deliver": ["telegram"],
+            "deliver": ["discord"],
             "origin": None,
         }
 
         assert _resolve_delivery_target(job) == {
-            "platform": "telegram",
+            "platform": "discord",
             "chat_id": "-4004",
             "thread_id": None,
         }
@@ -271,20 +239,18 @@ class TestRoutingIntents:
         """deliver='all' fans out to every platform with a configured home channel."""
         from cron.scheduler import _resolve_delivery_targets
 
-        monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "-111")
         monkeypatch.setenv("DISCORD_HOME_CHANNEL", "-222")
         monkeypatch.setenv("SLACK_HOME_CHANNEL", "C333")
         # Sanity: platforms without the env var must NOT appear in the expansion.
-        monkeypatch.delenv("SIGNAL_HOME_CHANNEL", raising=False)
+        monkeypatch.delenv("DISCORD_HOME_CHANNEL", raising=False)
         monkeypatch.delenv("MATRIX_HOME_ROOM", raising=False)
 
         targets = _resolve_delivery_targets({"deliver": "all", "origin": None})
         platforms = sorted(t["platform"] for t in targets)
 
-        assert "telegram" in platforms
         assert "discord" in platforms
         assert "slack" in platforms
-        assert "signal" not in platforms
+        assert "discord" not in platforms
         assert "matrix" not in platforms
 
 
@@ -309,7 +275,7 @@ class TestDeliverResultWrapping:
         pconfig = MagicMock()
         pconfig.enabled = True
         mock_cfg = MagicMock()
-        mock_cfg.platforms = {Platform.TELEGRAM: pconfig}
+        mock_cfg.platforms = {Platform.DISCORD: pconfig}
 
         with patch("gateway.config.load_gateway_config", return_value=mock_cfg), \
              patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock:
@@ -317,7 +283,7 @@ class TestDeliverResultWrapping:
                 "id": "test-job",
                 "name": "daily-report",
                 "deliver": "origin",
-                "origin": {"platform": "telegram", "chat_id": "123"},
+                "origin": {"platform": "discord", "chat_id": "123"},
             }
             _deliver_result(job, "Here is today's summary.")
 
@@ -472,13 +438,13 @@ class TestDeliverResultErrorReturns:
         pconfig = MagicMock()
         pconfig.enabled = False
         mock_cfg = MagicMock()
-        mock_cfg.platforms = {Platform.TELEGRAM: pconfig}
+        mock_cfg.platforms = {Platform.DISCORD: pconfig}
 
         with patch("gateway.config.load_gateway_config", return_value=mock_cfg):
             job = {
                 "id": "disabled",
                 "deliver": "origin",
-                "origin": {"platform": "telegram", "chat_id": "123"},
+                "origin": {"platform": "discord", "chat_id": "123"},
             }
             result = _deliver_result(job, "Output.")
         assert result is not None
@@ -680,13 +646,13 @@ class TestRunJobSessionPersistence:
             "id": "test-job",
             "name": "test",
             "prompt": "hello",
-            "deliver": "telegram",
+            "deliver": "discord",
         }
         fake_db = MagicMock()
         seen = {}
 
-        (tmp_path / ".env").write_text("TELEGRAM_HOME_CHANNEL=-2002\n")
-        monkeypatch.delenv("TELEGRAM_HOME_CHANNEL", raising=False)
+        (tmp_path / ".env").write_text("DISCORD_HOME_CHANNEL=-2002\n")
+        monkeypatch.delenv("DISCORD_HOME_CHANNEL", raising=False)
         monkeypatch.delenv("HERMES_CRON_AUTO_DELIVER_PLATFORM", raising=False)
         monkeypatch.delenv("HERMES_CRON_AUTO_DELIVER_CHAT_ID", raising=False)
         monkeypatch.delenv("HERMES_CRON_AUTO_DELIVER_THREAD_ID", raising=False)
@@ -722,7 +688,7 @@ class TestRunJobSessionPersistence:
         assert final_response == "ok"
         assert "ok" in output
         assert seen == {
-            "platform": "telegram",
+            "platform": "discord",
             "chat_id": "-2002",
             "thread_id": None,
         }
@@ -902,13 +868,13 @@ class TestRunJobSessionPersistence:
                 "id": "threaded-job",
                 "name": "threaded",
                 "prompt": "hello",
-                "deliver": "telegram:-1001:42",
+                "deliver": "discord:-1001:42",
             },
             {
                 "id": "threadless-job",
                 "name": "threadless",
                 "prompt": "hello again",
-                "deliver": "telegram:-2002",
+                "deliver": "discord:-2002",
             },
         ]
         fake_db = MagicMock()
@@ -956,12 +922,12 @@ class TestRunJobSessionPersistence:
 
         assert seen == [
             {
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_id": "-1001",
                 "thread_id": "42",
             },
             {
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_id": "-2002",
                 "thread_id": None,
             },
@@ -1389,7 +1355,7 @@ class TestSilentDelivery:
             "id": "monitor-job",
             "name": "monitor",
             "deliver": "origin",
-            "origin": {"platform": "telegram", "chat_id": "123"},
+            "origin": {"platform": "discord", "chat_id": "123"},
         }
 
     def test_silent_response_suppresses_delivery(self, caplog):
@@ -1523,7 +1489,7 @@ class TestOneShotDispatchClaim:
             "id": "monitor-job",
             "name": "monitor",
             "deliver": "origin",
-            "origin": {"platform": "telegram", "chat_id": "123"},
+            "origin": {"platform": "discord", "chat_id": "123"},
             "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00+00:00"},
             "repeat": {"times": 1, "completed": 0},
         }
@@ -1839,7 +1805,7 @@ class TestParallelTick:
 
         jobs = [
             {"id": "tg-job", "name": "tg", "deliver": "local",
-             "origin": {"platform": "telegram", "chat_id": "111"}},
+             "origin": {"platform": "discord", "chat_id": "111"}},
             {"id": "dc-job", "name": "dc", "deliver": "local",
              "origin": {"platform": "discord", "chat_id": "222"}},
         ]
@@ -1853,7 +1819,7 @@ class TestParallelTick:
             from cron.scheduler import tick
             tick(verbose=False)
 
-        assert seen["tg-job"] == {"platform": "telegram", "chat_id": "111"}
+        assert seen["tg-job"] == {"platform": "discord", "chat_id": "111"}
         assert seen["dc-job"] == {"platform": "discord", "chat_id": "222"}
 
     def test_max_parallel_env_var(self, monkeypatch):
@@ -1914,7 +1880,7 @@ class TestDeliverResultTimeoutCancelsFuture:
         pconfig = MagicMock()
         pconfig.enabled = True
         mock_cfg = MagicMock()
-        mock_cfg.platforms = {Platform.TELEGRAM: pconfig}
+        mock_cfg.platforms = {Platform.DISCORD: pconfig}
 
         loop = MagicMock()
         loop.is_running.return_value = True
@@ -1941,7 +1907,7 @@ class TestDeliverResultTimeoutCancelsFuture:
         job = {
             "id": "timeout-job",
             "deliver": "origin",
-            "origin": {"platform": "telegram", "chat_id": "123"},
+            "origin": {"platform": "discord", "chat_id": "123"},
         }
 
         standalone_send = AsyncMock(return_value={"success": True})
@@ -1953,7 +1919,7 @@ class TestDeliverResultTimeoutCancelsFuture:
             result = _deliver_result(
                 job,
                 "Hello world",
-                adapters={Platform.TELEGRAM: adapter},
+                adapters={Platform.DISCORD: adapter},
                 loop=loop,
             )
 
@@ -1989,7 +1955,7 @@ class TestDeliverResultLiveAdapterUnconfirmed:
         pconfig = MagicMock()
         pconfig.enabled = True
         mock_cfg = MagicMock()
-        mock_cfg.platforms = {Platform.TELEGRAM: pconfig}
+        mock_cfg.platforms = {Platform.DISCORD: pconfig}
 
         loop = MagicMock()
         loop.is_running.return_value = True
@@ -2004,7 +1970,7 @@ class TestDeliverResultLiveAdapterUnconfirmed:
         job = {
             "id": "unconfirmed-job",
             "deliver": "origin",
-            "origin": {"platform": "telegram", "chat_id": "123"},
+            "origin": {"platform": "discord", "chat_id": "123"},
         }
 
         standalone_send = AsyncMock(return_value={"success": True})
@@ -2016,7 +1982,7 @@ class TestDeliverResultLiveAdapterUnconfirmed:
             result = _deliver_result(
                 job,
                 "Hello world",
-                adapters={Platform.TELEGRAM: adapter},
+                adapters={Platform.DISCORD: adapter},
                 loop=loop,
             )
         return result, standalone_send
@@ -2143,17 +2109,17 @@ class TestCronDeliveryTargets:
     def test_lists_configured_platforms_flagging_missing_home_channel(self, monkeypatch):
         from cron.scheduler import cron_delivery_targets
 
-        self._patch_connected(monkeypatch, ["matrix", "telegram"])
+        self._patch_connected(monkeypatch, ["matrix", "discord"])
         monkeypatch.delenv("MATRIX_HOME_ROOM", raising=False)
-        monkeypatch.delenv("TELEGRAM_HOME_CHANNEL", raising=False)
+        monkeypatch.delenv("DISCORD_HOME_CHANNEL", raising=False)
 
         targets = {t["id"]: t for t in cron_delivery_targets()}
 
-        assert set(targets) == {"matrix", "telegram"}
+        assert set(targets) == {"matrix", "discord"}
         # Configured but no home channel → surfaced, flagged for the UI.
         assert targets["matrix"]["home_target_set"] is False
         assert targets["matrix"]["home_env_var"] == "MATRIX_HOME_ROOM"
-        assert targets["telegram"]["home_target_set"] is False
+        assert targets["discord"]["home_target_set"] is False
 
 
 class TestHomeTargetEnvVarRegistry:
@@ -2182,7 +2148,7 @@ class TestCronDeliveryMirror:
 
         with patch("gateway.mirror.mirror_to_session", return_value=True) as m:
             _maybe_mirror_cron_delivery(
-                {"id": "j1", "name": "Morning Brief"}, "telegram", "123",
+                {"id": "j1", "name": "Morning Brief"}, "discord", "123",
                 "Market movers today", thread_id=None, enabled=True,
             )
         m.assert_called_once()
@@ -2203,7 +2169,7 @@ class TestCronDeliveryMirror:
         pconfig = MagicMock()
         pconfig.enabled = True
         mock_cfg = MagicMock()
-        mock_cfg.platforms = {Platform.TELEGRAM: pconfig}
+        mock_cfg.platforms = {Platform.DISCORD: pconfig}
 
         with patch("gateway.config.load_gateway_config", return_value=mock_cfg), \
              patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})), \
@@ -2212,7 +2178,7 @@ class TestCronDeliveryMirror:
                 "id": "test-job",
                 "name": "daily-report",
                 "deliver": "origin",
-                "origin": {"platform": "telegram", "chat_id": "123"},
+                "origin": {"platform": "discord", "chat_id": "123"},
                 "attach_to_session": True,
             }
             _deliver_result(job, "Here is today's summary.")
@@ -2268,7 +2234,7 @@ class TestCronDeliveryMirror:
 
         with patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
             _seed_cron_thread_session(
-                {"id": "j1"}, adapter, "telegram", "123", "9001",
+                {"id": "j1"}, adapter, "discord", "123", "9001",
                 "Daily brief Task #2", chat_name="Ops",
             )
 

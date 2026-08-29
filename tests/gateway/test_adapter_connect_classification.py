@@ -1,6 +1,6 @@
 """Connect-failure classification + reconnect-queue escalation (OOF-156).
 
-Four platforms (telegram, discord, photon, email) used to funnel every
+Four platforms (discord, photon, email, …) used to funnel every
 startup failure into an indefinitely-retried state — including permanent
 failures like revoked tokens, missing privileged intents, and sidecar deps
 that can never install on an immutable image. Fleet triage found agents that
@@ -28,59 +28,6 @@ from gateway.run import (
     GatewayRunner,
     _reconnect_needs_attention,
 )
-
-
-# ── Telegram: type-based auth classification ───────────────────────────
-
-
-class InvalidToken(Exception):  # noqa: N818 — name-matched stand-in
-    pass
-
-
-class Forbidden(Exception):  # noqa: N818
-    pass
-
-
-class NetworkError(Exception):  # noqa: N818
-    pass
-
-
-class TimedOut(Exception):  # noqa: N818
-    pass
-
-
-def _telegram_classifier():
-    from plugins.platforms.telegram.adapter import TelegramAdapter
-
-    return TelegramAdapter._looks_like_auth_error
-
-
-class TestTelegramAuthClassification:
-    """InvalidToken/Forbidden are terminal; transient transports are not."""
-
-    def test_invalid_token_is_auth_error(self):
-        # Classifier matches on class name so tests do not need real
-        # telegram.error types — mirrors _looks_like_network_error's design.
-        assert _telegram_classifier()(InvalidToken("401 Unauthorized")) is True
-
-    def test_forbidden_is_auth_error(self):
-        assert _telegram_classifier()(Forbidden("bot was deleted")) is True
-
-    def test_network_error_is_not_auth_error(self):
-        assert _telegram_classifier()(NetworkError("dns failure")) is False
-
-    def test_timeout_is_not_auth_error(self):
-        assert _telegram_classifier()(TimedOut("read timeout")) is False
-
-    def test_generic_exception_is_not_auth_error(self):
-        # Unknown types must stay retryable — a false terminal recreates the
-        # "silently dead bot" problem the auto-pause removal fixed.
-        assert _telegram_classifier()(RuntimeError("weird")) is False
-
-    def test_auth_message_text_does_not_classify(self):
-        # Guard against text matching creeping back in: an exception whose
-        # MESSAGE mentions auth but whose type is generic must stay retryable.
-        assert _telegram_classifier()(RuntimeError("InvalidToken Forbidden")) is False
 
 
 # ── Discord: connect exception classification ──────────────────────────
@@ -310,7 +257,7 @@ def _make_runner():
     test_platform_reconnect.py)."""
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="test")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="test")}
     )
     runner._running = True
     runner._shutdown_event = asyncio.Event()
@@ -344,7 +291,7 @@ class TestWatcherAttentionEscalation:
         )
 
         threshold = run_module._RECONNECT_ATTENTION_AFTER_SECONDS
-        runner._failed_platforms[Platform.TELEGRAM] = {
+        runner._failed_platforms[Platform.DISCORD] = {
             "config": PlatformConfig(enabled=True, token="test"),
             "attempts": 40,
             # Not yet due for a retry — escalation must not depend on the
@@ -372,8 +319,8 @@ class TestWatcherAttentionEscalation:
         assert attention[0].get("retrying_since")
         # Platform must STILL be queued — escalation is a signal, never a
         # circuit breaker.
-        assert Platform.TELEGRAM in runner._failed_platforms
-        assert runner._failed_platforms[Platform.TELEGRAM].get("attention_flagged") is True
+        assert Platform.DISCORD in runner._failed_platforms
+        assert runner._failed_platforms[Platform.DISCORD].get("attention_flagged") is True
 
     @pytest.mark.asyncio
     async def test_watcher_flags_only_once(self, monkeypatch):
@@ -388,7 +335,7 @@ class TestWatcherAttentionEscalation:
         )
 
         threshold = run_module._RECONNECT_ATTENTION_AFTER_SECONDS
-        runner._failed_platforms[Platform.TELEGRAM] = {
+        runner._failed_platforms[Platform.DISCORD] = {
             "config": PlatformConfig(enabled=True, token="test"),
             "attempts": 40,
             "next_retry": time.monotonic() + 300,
@@ -423,21 +370,21 @@ class TestRuntimeStatusAttentionFields:
         from gateway import status as status_module
 
         status_module.write_runtime_status(
-            platform="telegram",
+            platform="discord",
             platform_state="retrying",
-            error_code="telegram_connect_error",
+            error_code="discord_connect_error",
             error_message="boom",
             needs_attention=True,
             retrying_since="2026-08-11T00:00:00+00:00",
         )
         payload = status_module.read_runtime_status()
-        platform = payload["platforms"]["telegram"]
+        platform = payload["platforms"]["discord"]
         assert platform["needs_attention"] is True
         assert platform["retrying_since"] == "2026-08-11T00:00:00+00:00"
 
         # Reconnect clears both.
         status_module.write_runtime_status(
-            platform="telegram",
+            platform="discord",
             platform_state="connected",
             error_code=None,
             error_message=None,
@@ -445,6 +392,6 @@ class TestRuntimeStatusAttentionFields:
             retrying_since=None,
         )
         payload = status_module.read_runtime_status()
-        platform = payload["platforms"]["telegram"]
+        platform = payload["platforms"]["discord"]
         assert platform["needs_attention"] is False
         assert platform["retrying_since"] is None

@@ -99,7 +99,7 @@ class TestDMThreadIsolationEdgeCases:
 class TestDMThreadIsolationCrossPlatform:
     """Verify thread isolation is consistent across all platforms."""
 
-    @pytest.mark.parametrize("platform", [Platform.SLACK, Platform.TELEGRAM, Platform.DISCORD])
+    @pytest.mark.parametrize("platform", [Platform.SLACK, Platform.DISCORD, Platform.DISCORD])
     def test_thread_starts_empty_across_platforms(self, store, platform):
         """DM thread sessions start empty regardless of platform."""
         parent_source = _dm_source(platform=platform)

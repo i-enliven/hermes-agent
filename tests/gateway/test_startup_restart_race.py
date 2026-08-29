@@ -56,7 +56,7 @@ def make_startup_runner(tmp_path):
     runner = object.__new__(gateway_run.GatewayRunner)
     runner.config = GatewayConfig(
         platforms={
-            Platform.TELEGRAM: PlatformConfig(enabled=True, token="***"),
+            Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
             Platform.SLACK: PlatformConfig(enabled=True, token="***"),
         },
         sessions_dir=tmp_path / "sessions",
@@ -136,7 +136,7 @@ async def test_startup_aborts_when_restart_begins_during_platform_connect(tmp_pa
     runner = make_startup_runner(tmp_path)
     first_disconnected = asyncio.Event()
     telegram = StartupRaceAdapter(
-        Platform.TELEGRAM,
+        Platform.DISCORD,
         on_connect=lambda: runner.request_restart(detached=False, via_service=True),
     )
     slack = StartupRaceAdapter(Platform.SLACK, wait_for_disconnect=first_disconnected)

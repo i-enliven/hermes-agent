@@ -18,7 +18,7 @@ class TestGetDisabledSkills:
         """``skills:`` with no value (YAML null) must not crash (#13026)."""
         from hermes_cli.skills_config import get_disabled_skills
         assert get_disabled_skills({"skills": None}) == set()
-        assert get_disabled_skills({"skills": None}, platform="telegram") == set()
+        assert get_disabled_skills({"skills": None}, platform="discord") == set()
 
 
 
@@ -51,7 +51,7 @@ class TestIsSkillDisabled:
             "platform_disabled": {"telegram": ["tg-skill"]}
         }}
         from tools.skills_tool import _is_skill_disabled
-        assert _is_skill_disabled("tg-skill", platform="telegram") is True
+        assert _is_skill_disabled("tg-skill", platform="discord") is True
 
 
 
@@ -88,7 +88,7 @@ class TestGetDisabledSkillNames:
         monkeypatch.delenv("HERMES_SESSION_PLATFORM", raising=False)
 
         from agent.skill_utils import get_disabled_skill_names
-        result = get_disabled_skill_names(platform="telegram")
+        result = get_disabled_skill_names(platform="discord")
         assert result == {"tg-only-skill", "global-skill"}
 
     def test_session_platform_env_var(self, tmp_path, monkeypatch):
@@ -122,7 +122,7 @@ class TestGetDisabledSkillNames:
             "      - discord-skill\n"
         )
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-        monkeypatch.setenv("HERMES_PLATFORM", "telegram")
+        monkeypatch.setenv("HERMES_PLATFORM", "discord")
         monkeypatch.setenv("HERMES_SESSION_PLATFORM", "discord")
 
         from agent.skill_utils import get_disabled_skill_names

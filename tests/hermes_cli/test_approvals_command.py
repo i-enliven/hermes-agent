@@ -12,7 +12,7 @@ from hermes_cli.commands import (
     SlashCommandCompleter,
     gateway_help_lines,
     resolve_command,
-    telegram_bot_commands,
+    slack_subcommand_map,
 )
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
@@ -35,7 +35,7 @@ def test_approvals_registry_drives_help_menu_and_autocomplete():
     assert SUBCOMMANDS["/approvals"] == ["manual", "smart", "off"]
     assert "approvals" in GATEWAY_KNOWN_COMMANDS
     assert any("/approvals" in line for line in gateway_help_lines())
-    assert "approvals" in {name for name, _ in telegram_bot_commands()}
+    assert "approvals" in slack_subcommand_map()
     assert _completions("/approvals ") == {"manual", "smart", "off"}
 
 

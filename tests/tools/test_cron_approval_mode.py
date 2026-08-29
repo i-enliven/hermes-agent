@@ -442,7 +442,7 @@ class TestCronWithGatewayOrigin:
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
 
         from gateway.session_context import set_session_vars, clear_session_vars
-        tokens = set_session_vars(platform="telegram", chat_id="123")
+        tokens = set_session_vars(platform="discord", chat_id="123")
         try:
             from unittest.mock import patch as mock_patch
             with mock_patch("tools.approval._get_cron_approval_mode", return_value="deny"):

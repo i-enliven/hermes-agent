@@ -34,7 +34,7 @@ async def test_redelivered_restart_with_older_update_id_is_ignored(tmp_path, mon
 
     marker = tmp_path / ".restart_last_processed.json"
     marker.write_text(json.dumps({
-        "platform": "telegram",
+        "platform": "discord",
         "update_id": 12345,
         "requested_at": time.time() - 5,
     }))
@@ -59,7 +59,7 @@ async def test_stale_marker_older_than_5min_does_not_block(tmp_path, monkeypatch
 
     marker = tmp_path / ".restart_last_processed.json"
     marker.write_text(json.dumps({
-        "platform": "telegram",
+        "platform": "discord",
         "update_id": 12345,
         "requested_at": time.time() - 600,  # 10 minutes ago
     }))
@@ -83,7 +83,7 @@ async def test_event_without_update_id_bypasses_dedup(tmp_path, monkeypatch):
 
     marker = tmp_path / ".restart_last_processed.json"
     marker.write_text(json.dumps({
-        "platform": "telegram",
+        "platform": "discord",
         "update_id": 999999,
         "requested_at": time.time(),
     }))
@@ -110,7 +110,7 @@ async def test_different_platform_bypasses_dedup(tmp_path, monkeypatch):
 
     marker = tmp_path / ".restart_last_processed.json"
     marker.write_text(json.dumps({
-        "platform": "telegram",
+        "platform": "discord",
         "update_id": 12345,
         "requested_at": time.time(),
     }))

@@ -58,7 +58,7 @@ def _event(*, profile: str | None) -> MessageEvent:
         text="follow up",
         message_type=MessageType.TEXT,
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="chat-1",
             chat_type="dm",
             user_id="user-1",
@@ -71,7 +71,7 @@ def _event(*, profile: str | None) -> MessageEvent:
 def _adapter() -> _ProfileAdapter:
     adapter = _ProfileAdapter(
         PlatformConfig(enabled=True, token="test-token"),
-        Platform.TELEGRAM,
+        Platform.DISCORD,
     )
     return adapter
 
@@ -93,8 +93,8 @@ async def _load_profile_snapshot(
 
     assert await runner._start_one_profile_adapters("research", profile_home, {}) == 0
     adapter = _adapter()
-    runner._profile_adapters["research"][Platform.TELEGRAM] = adapter
-    runner._configure_profile_adapter(adapter, "research", Platform.TELEGRAM)
+    runner._profile_adapters["research"][Platform.DISCORD] = adapter
+    runner._configure_profile_adapter(adapter, "research", Platform.DISCORD)
     return adapter
 
 
@@ -153,7 +153,6 @@ async def test_secondary_profile_busy_mode_controls_priority_path(
     secondary_mode,
 ):
     """The runner's early active-agent path uses the same routed policy."""
-    monkeypatch.setenv("HERMES_TELEGRAM_FOLLOWUP_GRACE_SECONDS", "0")
     runner = _runner(default_mode="interrupt")
     adapter = await _load_profile_snapshot(
         runner,
@@ -212,7 +211,6 @@ async def test_secondary_profile_busy_mode_controls_priority_restart_drain(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setenv("HERMES_TELEGRAM_FOLLOWUP_GRACE_SECONDS", "0")
     runner = _runner(default_mode="interrupt")
     adapter = await _load_profile_snapshot(
         runner,
@@ -292,7 +290,7 @@ async def test_default_busy_mode_is_unchanged_by_secondary_profile(tmp_path, mon
     runner = _runner(default_mode="interrupt")
     await _load_profile_snapshot(runner, tmp_path / "research", "steer")
     adapter = _adapter()
-    runner.adapters[Platform.TELEGRAM] = adapter
+    runner.adapters[Platform.DISCORD] = adapter
     event = _event(profile=None)
     session_key = runner._session_key_for_source(event.source)
     agent = MagicMock()
@@ -337,7 +335,7 @@ def test_profile_route_and_nonmultiplexed_resolution_preserve_boundaries(
     runner.config.profile_routes = [
         ProfileRoute(
             name="research-chat",
-            platform="telegram",
+            platform="discord",
             profile="research",
             chat_id="chat-1",
         )

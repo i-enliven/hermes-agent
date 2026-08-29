@@ -139,7 +139,7 @@ class TestCollectKanbanNotifications:
         assert rows[0]["last_event_id"] > pre_cursor
 
     def test_non_tui_subscription_does_not_open_board_writable(self):
-        tid = _create_subscribed_task(platform="telegram", chat_id="chat-1")
+        tid = _create_subscribed_task(platform="discord", chat_id="chat-1")
         # New subs start caught up at creation time (issue #29905); record the
         # pre-completion cursors so we can assert they were never claimed.
         pre_cursor = _sub_rows(tid)[0]["last_event_id"]

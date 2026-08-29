@@ -109,7 +109,7 @@ class TestNotifyInterruptedCronJobs:
     async def test_respects_platform_gateway_restart_notification_false(self):
         runner, adapter = make_restart_runner()
         _bind_notifier(runner)
-        runner.config.platforms[Platform.TELEGRAM].gateway_restart_notification = False
+        runner.config.platforms[Platform.DISCORD].gateway_restart_notification = False
         job = _telegram_job()
 
         with patch("cron.jobs.get_job", return_value=job), \

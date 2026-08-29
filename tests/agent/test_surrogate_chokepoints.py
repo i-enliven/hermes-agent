@@ -110,7 +110,7 @@ def test_gateway_final_response_sanitized_for_chat_surfaces():
     from gateway.run import _sanitize_gateway_final_response
 
     dirty = f"Here is your answer {LONE_HIGH} done"
-    cleaned = _sanitize_gateway_final_response("telegram", dirty)
+    cleaned = _sanitize_gateway_final_response("discord", dirty)
 
     # The raw text raises; the sanitized boundary output must not.
     with pytest.raises(UnicodeEncodeError):

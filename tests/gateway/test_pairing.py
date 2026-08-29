@@ -72,9 +72,9 @@ class TestProfileScopedDiscovery:
             assert store._dir == home / "profiles" / "alice" / "platforms" / "pairing"
             assert store._dir != global_dir
             with store._lock:
-                store._approve_user("telegram", "tg-456", "Bob")
+                store._approve_user("discord", "tg-456", "Bob")
 
-            assert store.is_approved("telegram", "tg-456") is True
+            assert store.is_approved("discord", "tg-456") is True
             approved = store.list_approved()
 
         assert [r["user_id"] for r in approved] == ["tg-456"]
@@ -128,7 +128,7 @@ class TestHashedStorage:
         """Stored entries must have 'hash' and 'salt', never the plaintext code."""
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1", "Alice")
+            code = store.generate_code("discord", "user1", "Alice")
             raw = json.loads(
                 (tmp_path / "telegram-pending.json").read_text(encoding="utf-8")
             )
@@ -156,7 +156,7 @@ class TestHashedStorage:
         """The raw JSON file must not contain the plaintext code anywhere."""
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1")
+            code = store.generate_code("discord", "user1")
             raw_text = (tmp_path / "telegram-pending.json").read_text(encoding="utf-8")
         assert code not in raw_text
 
@@ -200,7 +200,7 @@ class TestLegacyPendingFileCompat:
                 encoding="utf-8",
             )
             store = PairingStore()
-            store._cleanup_expired("telegram")
+            store._cleanup_expired("discord")
             raw = json.loads(
                 (tmp_path / "telegram-pending.json").read_text(encoding="utf-8")
             )
@@ -219,7 +219,7 @@ class TestLegacyPendingFileCompat:
             )
             store = PairingStore()
             # Approving with any code must just return None, not crash.
-            assert store.approve_code("telegram", "ABCD1234") is None
+            assert store.approve_code("discord", "ABCD1234") is None
 
 
 # ---------------------------------------------------------------------------
@@ -231,8 +231,8 @@ class TestRateLimiting:
     def test_same_user_rate_limited(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code1 = store.generate_code("telegram", "user1")
-            code2 = store.generate_code("telegram", "user1")
+            code1 = store.generate_code("discord", "user1")
+            code2 = store.generate_code("discord", "user1")
         assert isinstance(code1, str) and len(code1) == CODE_LENGTH
         assert code2 is None  # rate limited
 
@@ -266,8 +266,8 @@ class TestApprovalFlow:
     def test_approve_valid_code(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1", "Alice")
-            result = store.approve_code("telegram", code)
+            code = store.generate_code("discord", "user1", "Alice")
+            result = store.approve_code("discord", code)
 
         assert isinstance(result, dict)
         assert "user_id" in result
@@ -278,22 +278,22 @@ class TestApprovalFlow:
     def test_approved_user_is_approved(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1", "Alice")
-            store.approve_code("telegram", code)
-            assert store.is_approved("telegram", "user1") is True
+            code = store.generate_code("discord", "user1", "Alice")
+            store.approve_code("discord", code)
+            assert store.is_approved("discord", "user1") is True
 
     def test_approve_request_id_from_pending_list(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            bot_code = store.generate_code("telegram", "user1", "Alice")
-            pending = store.list_pending("telegram")
+            bot_code = store.generate_code("discord", "user1", "Alice")
+            pending = store.list_pending("discord")
             request_id = pending[0]["request_id"]
 
             assert request_id
             assert request_id != bot_code
 
-            result = store.approve_request("telegram", request_id.upper())
-            remaining = store.list_pending("telegram")
+            result = store.approve_request("discord", request_id.upper())
+            remaining = store.list_pending("discord")
 
         assert isinstance(result, dict)
         assert result["user_id"] == "user1"
@@ -309,7 +309,7 @@ class TestApprovalFlow:
         """
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            bot_code = store.generate_code("telegram", "user1", "Alice")
+            bot_code = store.generate_code("discord", "user1", "Alice")
             entry = store.list_pending("telegram")[0]
 
             digest = json.loads(
@@ -338,18 +338,18 @@ class TestApprovalFlow:
         """
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1", "Alice")
+            code = store.generate_code("discord", "user1", "Alice")
             stale_id = store.list_pending("telegram")[0]["request_id"]
-            assert store.approve_request("telegram", stale_id) is not None
+            assert store.approve_request("discord", stale_id) is not None
 
             # Re-click the now-approved row well past the lockout threshold.
             for _ in range(MAX_FAILED_ATTEMPTS + 3):
-                assert store.approve_request("telegram", stale_id) is None
+                assert store.approve_request("discord", stale_id) is None
 
-            assert store._is_locked_out("telegram") is False
+            assert store._is_locked_out("discord") is False
             # And the code path is still usable for the next real request.
-            next_code = store.generate_code("telegram", "user2", "Bee")
-            assert store.approve_code("telegram", next_code) is not None
+            next_code = store.generate_code("discord", "user2", "Bee")
+            assert store.approve_code("discord", next_code) is not None
             assert code != next_code
 
 
@@ -371,19 +371,19 @@ class TestLockout:
 
             # One short of the lockout threshold — not locked out yet.
             for _ in range(MAX_FAILED_ATTEMPTS - 1):
-                assert store.approve_code("telegram", "WRONGCODE") is None
-            assert store._is_locked_out("telegram") is False
+                assert store.approve_code("discord", "WRONGCODE") is None
+            assert store._is_locked_out("discord") is False
 
             # A legitimate approval must reset the accumulated failures.
-            code = store.generate_code("telegram", "user1", "Alice")
-            assert store.approve_code("telegram", code) is not None
+            code = store.generate_code("discord", "user1", "Alice")
+            assert store.approve_code("discord", code) is not None
             limits = store._load_json(store._rate_limit_path())
             assert limits.get("_failures:telegram", 0) == 0
 
             # Because the streak was cleared, a single fresh typo afterwards
             # must NOT trip the lockout (it would have with the stale count).
-            assert store.approve_code("telegram", "WRONGCODE") is None
-            assert store._is_locked_out("telegram") is False
+            assert store.approve_code("discord", "WRONGCODE") is None
+            assert store._is_locked_out("discord") is False
 
     def test_lockout_blocks_code_approval(self, tmp_path):
         """Regression guard for #10195: lockout must also gate approve_code.
@@ -396,19 +396,19 @@ class TestLockout:
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
             # Generate a valid code before triggering the lockout.
-            valid_code = store.generate_code("telegram", "attacker", "Attacker")
+            valid_code = store.generate_code("discord", "attacker", "Attacker")
             assert valid_code is not None
 
             # Trigger the lockout with wrong codes.
             for _ in range(MAX_FAILED_ATTEMPTS):
-                assert store.approve_code("telegram", "WRONGCODE") is None
-            assert store._is_locked_out("telegram") is True
+                assert store.approve_code("discord", "WRONGCODE") is None
+            assert store._is_locked_out("discord") is True
 
             # The valid code must be rejected while the lockout is active,
             # and the user must NOT land in the approved list.
-            result = store.approve_code("telegram", valid_code)
+            result = store.approve_code("discord", valid_code)
             assert result is None
-            assert store.is_approved("telegram", "attacker") is False
+            assert store.is_approved("discord", "attacker") is False
 
             # Simulate lockout expiry — the valid code is still in pending
             # (we didn't pop it) and must now approve normally.
@@ -416,10 +416,10 @@ class TestLockout:
             limits["_lockout:telegram"] = time.time() - 1
             store._save_json(store._rate_limit_path(), limits)
 
-            result = store.approve_code("telegram", valid_code)
+            result = store.approve_code("discord", valid_code)
             assert result is not None
             assert result["user_id"] == "attacker"
-            assert store.is_approved("telegram", "attacker") is True
+            assert store.is_approved("discord", "attacker") is True
 
 
 # ---------------------------------------------------------------------------
@@ -431,16 +431,16 @@ class TestCodeExpiry:
     def test_expired_codes_cleaned_up(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1")
+            code = store.generate_code("discord", "user1")
 
             # Manually expire all pending entries
-            pending = store._load_json(store._pending_path("telegram"))
+            pending = store._load_json(store._pending_path("discord"))
             for entry_id in pending:
                 pending[entry_id]["created_at"] = time.time() - CODE_TTL_SECONDS - 1
-            store._save_json(store._pending_path("telegram"), pending)
+            store._save_json(store._pending_path("discord"), pending)
 
             # Cleanup happens on next operation
-            remaining = store.list_pending("telegram")
+            remaining = store.list_pending("discord")
         assert len(remaining) == 0
 
 
@@ -453,14 +453,14 @@ class TestRevoke:
     def test_revoke_approved_user(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1", "Alice")
-            store.approve_code("telegram", code)
-            assert store.is_approved("telegram", "user1") is True
+            code = store.generate_code("discord", "user1", "Alice")
+            store.approve_code("discord", code)
+            assert store.is_approved("discord", "user1") is True
 
-            revoked = store.revoke("telegram", "user1")
+            revoked = store.revoke("discord", "user1")
         assert revoked is True
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
-            assert store.is_approved("telegram", "user1") is False
+            assert store.is_approved("discord", "user1") is False
 
 
 # ---------------------------------------------------------------------------
@@ -472,9 +472,9 @@ class TestListAndClear:
     def test_list_approved(self, tmp_path):
         with patch("gateway.pairing.PAIRING_DIR", tmp_path):
             store = PairingStore()
-            code = store.generate_code("telegram", "user1", "Alice")
-            store.approve_code("telegram", code)
-            approved = store.list_approved("telegram")
+            code = store.generate_code("discord", "user1", "Alice")
+            store.approve_code("discord", code)
+            approved = store.list_approved("discord")
         assert len(approved) == 1
         assert approved[0]["user_id"] == "user1"
         assert approved[0]["platform"] == "telegram"
@@ -609,8 +609,8 @@ class TestProfileScopedStorage:
 
         store = PairingStore(profile="coder")
 
-        assert store.is_approved("telegram", "legacy-user")
-        assert store.is_approved("telegram", "new-user")
+        assert store.is_approved("discord", "legacy-user")
+        assert store.is_approved("discord", "new-user")
 
     def test_profile_approval_does_not_leak_to_global(self, tmp_path, monkeypatch):
         """Approving in a profile-scoped store must not appear in the global

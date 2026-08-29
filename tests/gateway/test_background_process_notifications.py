@@ -52,7 +52,7 @@ def _build_runner(monkeypatch, tmp_path, mode: str) -> GatewayRunner:
 
     runner = GatewayRunner(GatewayConfig())
     adapter = SimpleNamespace(send=AsyncMock(), handle_message=AsyncMock())
-    runner.adapters[Platform.TELEGRAM] = adapter
+    runner.adapters[Platform.DISCORD] = adapter
     return runner
 
 
@@ -60,7 +60,7 @@ def _watcher_dict(session_id="proc_test", thread_id=""):
     d = {
         "session_id": session_id,
         "check_interval": 0,
-        "platform": "telegram",
+        "platform": "discord",
         "chat_id": "123",
     }
     if thread_id:
@@ -139,7 +139,7 @@ async def test_consumed_completion_skips_raw_notification(monkeypatch, tmp_path)
     monkeypatch.setattr(asyncio, "sleep", _instant_sleep)
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
 
     # notify_on_complete=True mirrors the reported scenario: the watcher's
     # agent-notify skip must not fall through to a raw adapter.send().
@@ -172,7 +172,7 @@ async def test_consumed_completion_skips_raw_notification_without_agent_notify(
     monkeypatch.setattr(asyncio, "sleep", _instant_sleep)
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
 
     await runner._run_process_watcher(_watcher_dict())
 
@@ -184,10 +184,10 @@ async def test_inject_watch_notification_routes_from_session_store_origin(monkey
     from gateway.session import SessionSource
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     runner.session_store._entries["agent:main:telegram:group:-100:42"] = SimpleNamespace(
         origin=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-100",
             chat_type="group",
             thread_id="42",
@@ -206,7 +206,7 @@ async def test_inject_watch_notification_routes_from_session_store_origin(monkey
     adapter.handle_message.assert_awaited_once()
     synth_event = adapter.handle_message.await_args.args[0]
     assert synth_event.internal is True
-    assert synth_event.source.platform == Platform.TELEGRAM
+    assert synth_event.source.platform == Platform.DISCORD
     assert synth_event.source.chat_id == "-100"
     assert synth_event.source.chat_type == "group"
     assert synth_event.source.thread_id == "42"
@@ -217,7 +217,7 @@ async def test_inject_watch_notification_routes_from_session_store_origin(monkey
 @pytest.mark.asyncio
 async def test_post_turn_watch_drain_off_consumes_without_injecting(monkeypatch, tmp_path):
     runner = _build_runner(monkeypatch, tmp_path, "off")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     completion_queue = queue.Queue()
     completion_queue.put(_watch_event("proc_one"))
     completion_queue.put(_watch_event("proc_two"))
@@ -236,10 +236,10 @@ async def test_post_turn_watch_drain_all_injects_from_queued_event_origin(monkey
     from gateway.session import SessionSource
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     runner.session_store._entries["agent:main:telegram:dm:123:42"] = SimpleNamespace(
         origin=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="123",
             chat_type="dm",
             thread_id="42",
@@ -267,10 +267,10 @@ async def test_inject_watch_notification_carries_message_id_reply_anchor(monkeyp
     from gateway.session import SessionSource
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     runner.session_store._entries["agent:main:telegram:dm:123:24296"] = SimpleNamespace(
         origin=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="123",
             chat_type="dm",
             thread_id="24296",
@@ -298,10 +298,10 @@ async def test_inject_watch_notification_loads_session_store_off_loop(monkeypatc
     from gateway.session import SessionSource
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     runner.session_store._entries["agent:main:telegram:dm:123:24296"] = SimpleNamespace(
         origin=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="123",
             chat_type="dm",
             thread_id="24296",
@@ -339,12 +339,12 @@ async def test_inject_watch_notification_ignores_foreground_event_source(monkeyp
     from gateway.session import SessionSource
 
     runner = _build_runner(monkeypatch, tmp_path, "all")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
 
     # Session store has the process's original thread (thread 42)
     runner.session_store._entries["agent:main:telegram:group:-100:42"] = SimpleNamespace(
         origin=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-100",
             chat_type="group",
             thread_id="42",
@@ -429,7 +429,7 @@ async def test_concise_mode_sends_pretty_message_not_raw_dump(monkeypatch, tmp_p
     monkeypatch.setattr(asyncio, "sleep", _instant_sleep)
 
     runner = _build_runner(monkeypatch, tmp_path, "concise")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
 
     await runner._run_process_watcher(_watcher_dict())
 
@@ -457,7 +457,7 @@ async def test_concise_mode_failure_includes_tail(monkeypatch, tmp_path):
     monkeypatch.setattr(asyncio, "sleep", _instant_sleep)
 
     runner = _build_runner(monkeypatch, tmp_path, "concise")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
 
     await runner._run_process_watcher(_watcher_dict())
 
@@ -489,7 +489,7 @@ async def test_concise_mode_no_interim_output_updates(monkeypatch, tmp_path):
     monkeypatch.setattr(asyncio, "sleep", _instant_sleep)
 
     runner = _build_runner(monkeypatch, tmp_path, "concise")
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
 
     await runner._run_process_watcher(_watcher_dict())
 

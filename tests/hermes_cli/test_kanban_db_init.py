@@ -131,7 +131,7 @@ def test_unseen_events_for_sub_survives_migrated_db(tmp_path, monkeypatch):
 
     with kb.connect(db_path) as conn:
         cursor, events = kb.unseen_events_for_sub(
-            conn, task_id="task-1", platform="telegram", chat_id="123"
+            conn, task_id="task-1", platform="discord", chat_id="123"
         )
         assert isinstance(cursor, int)
         assert isinstance(events, list)

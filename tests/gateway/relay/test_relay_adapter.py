@@ -12,7 +12,7 @@ from gateway.relay.descriptor import CONTRACT_VERSION, CapabilityDescriptor
 def make_desc(**kw) -> CapabilityDescriptor:
     base = dict(
         contract_version=CONTRACT_VERSION,
-        platform="telegram",
+        platform="discord",
         label="Telegram",
         max_message_length=4096,
         supports_draft_streaming=False,

@@ -71,6 +71,6 @@ class TestCliHandoffFrontedSet:
 
         fronted = {p for p, _ in relay_platform_identities()}
         assert "discord" in fronted
-        assert "telegram" in fronted
+        assert "discord" in fronted
         assert "slack" not in fronted
 

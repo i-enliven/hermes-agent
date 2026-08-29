@@ -11,7 +11,7 @@ from gateway.relay.descriptor import CONTRACT_VERSION, CapabilityDescriptor
 
 def _entry(**overrides) -> PlatformEntry:
     base = dict(
-        name="telegram",
+        name="discord",
         label="Telegram",
         adapter_factory=lambda cfg: None,
         check_fn=lambda: True,
@@ -27,7 +27,7 @@ def _entry(**overrides) -> PlatformEntry:
 def test_projection_carries_platform_entry_fields():
     d = CapabilityDescriptor.from_platform_entry(_entry(), len_unit="utf16")
     assert d.contract_version == CONTRACT_VERSION
-    assert d.platform == "telegram"
+    assert d.platform == "discord"
     assert d.label == "Telegram"
     assert d.max_message_length == 4096
     assert d.emoji == "\u2708\ufe0f"

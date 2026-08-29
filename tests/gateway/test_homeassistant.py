@@ -238,7 +238,7 @@ class TestConfigIntegration:
         monkeypatch.setenv("HASS_TOKEN", "env-token")
         monkeypatch.setenv("HASS_URL", "http://10.0.0.5:8123")
         # Clear other platform tokens
-        for v in ["TELEGRAM_BOT_TOKEN", "DISCORD_BOT_TOKEN", "SLACK_BOT_TOKEN"]:
+        for v in ["DISCORD_BOT_TOKEN", "SLACK_BOT_TOKEN"]:
             monkeypatch.delenv(v, raising=False)
 
         from gateway.config import load_gateway_config

@@ -27,7 +27,7 @@ def db(tmp_path: Path) -> SessionDB:
 
 
 _SESSION_KEY = "agent:main:telegram:dm:8494508720"
-_SOURCE = "telegram"
+_SOURCE = "discord"
 _USER_ID = "8494508720"
 
 

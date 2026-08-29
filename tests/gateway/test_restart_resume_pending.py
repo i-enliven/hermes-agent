@@ -72,7 +72,7 @@ def test_resume_pending_is_cleared_only_after_successful_turn():
     assert _should_clear_resume_pending_after_turn({"error": "boom"}) is False
 
 
-def _make_source(platform=Platform.TELEGRAM, chat_id="123", user_id="u1"):
+def _make_source(platform=Platform.DISCORD, chat_id="123", user_id="u1"):
     return SessionSource(platform=platform, chat_id=chat_id, user_id=user_id)
 
 
@@ -597,7 +597,7 @@ async def test_startup_auto_resume_skips_unauthorized_owner():
         created_at=datetime.now(),
         updated_at=datetime.now(),
         origin=source,
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
         resume_pending=True,
         resume_reason="restart_timeout",
@@ -631,7 +631,7 @@ async def test_reconnect_reschedule_is_platform_scoped():
         created_at=datetime.now(),
         updated_at=datetime.now(),
         origin=tg_source,
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
         resume_pending=True,
         resume_reason="restart_interrupted",
@@ -654,9 +654,9 @@ async def test_reconnect_reschedule_is_platform_scoped():
         discord_entry.session_key: discord_entry,
     }
     adapter.handle_message = AsyncMock()
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
 
-    scheduled = runner._schedule_resume_pending_sessions(platform=Platform.TELEGRAM)
+    scheduled = runner._schedule_resume_pending_sessions(platform=Platform.DISCORD)
     await asyncio.sleep(0)
 
     # Only the telegram session is resumed; the discord session waits for its
@@ -682,7 +682,7 @@ async def test_startup_restore_waits_for_resume_before_draining_inbound():
         created_at=datetime.now(),
         updated_at=datetime.now(),
         origin=source,
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
         resume_pending=True,
         resume_reason="restart_interrupted",
@@ -737,8 +737,8 @@ async def test_startup_restore_waits_for_resume_before_draining_inbound():
 async def test_restart_notifies_home_channel_even_without_active_sessions():
     runner, adapter = make_restart_runner()
     runner._restart_requested = True
-    runner.config.platforms[Platform.TELEGRAM].home_channel = HomeChannel(
-        platform=Platform.TELEGRAM,
+    runner.config.platforms[Platform.DISCORD].home_channel = HomeChannel(
+        platform=Platform.DISCORD,
         chat_id="home-42",
         name="Ops Home",
     )
@@ -758,7 +758,7 @@ async def test_restart_home_channel_notification_not_deduped_across_threads():
     session_key = "agent:main:telegram:group:999"
     runner.session_store._entries[session_key] = MagicMock(
         origin=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="999",
             chat_type="group",
             user_id="u1",
@@ -766,8 +766,8 @@ async def test_restart_home_channel_notification_not_deduped_across_threads():
         )
     )
     runner._running_agents[session_key] = MagicMock()
-    runner.config.platforms[Platform.TELEGRAM].home_channel = HomeChannel(
-        platform=Platform.TELEGRAM,
+    runner.config.platforms[Platform.DISCORD].home_channel = HomeChannel(
+        platform=Platform.DISCORD,
         chat_id="999",
         name="Ops Home",
     )
@@ -842,7 +842,7 @@ async def test_auto_resume_sets_sentinel_before_task_execution():
         created_at=datetime.now(),
         updated_at=datetime.now(),
         origin=source,
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
         resume_pending=True,
         resume_reason="restart_interrupted",
@@ -911,7 +911,7 @@ async def test_auto_resume_runs_agent_exactly_once_through_full_path():
         created_at=datetime.now(),
         updated_at=datetime.now(),
         origin=source,
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
         resume_pending=True,
         resume_reason="restart_interrupted",

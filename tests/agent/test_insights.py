@@ -63,7 +63,7 @@ def populated_db(db):
 
     # Session 2: Telegram, gpt-4o, ended, 5 days ago
     db.create_session(
-        session_id="s2", source="telegram",
+        session_id="s2", source="discord",
         model="gpt-4o", user_id="user1",
     )
     db._conn.execute("UPDATE sessions SET started_at = ? WHERE id = 's2'", (now - 5 * day,))

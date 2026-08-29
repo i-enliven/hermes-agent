@@ -39,7 +39,7 @@ def db(tmp_path):
 
 
 PEER = dict(
-    source="telegram",
+    source="discord",
     user_id="6308981865",
     session_key="agent:main:telegram:dm:6308981865",
     chat_id="6308981865",
@@ -56,7 +56,7 @@ def _mk_session(db, session_id, *, key=True, started_at=None, last_activity_at=N
             session_key=PEER["session_key"], chat_id=PEER["chat_id"],
             chat_type=PEER["chat_type"],
         )
-    db.create_session(session_id, "telegram", **kwargs)
+    db.create_session(session_id, "discord", **kwargs)
     for i in range(msgs):
         db.append_message(session_id, "user" if i % 2 == 0 else "assistant", f"m{i}")
     with db._lock:
@@ -76,7 +76,7 @@ class TestIdentityAtInsert:
     def test_insert_session_row_persists_origin_and_display_name(self, db):
         origin = json.dumps({"platform": "telegram", "chat_id": "6308981865"})
         db.create_session(
-            "s1", "telegram",
+            "s1", "discord",
             session_key=PEER["session_key"], chat_id=PEER["chat_id"],
             chat_type="dm", origin_json=origin, display_name="Teknium",
         )
@@ -108,7 +108,7 @@ class TestPeerRecorderSelfHeal:
         assert db.get_session(sid) is None
         db.record_gateway_session_peer(
             sid,
-            source="telegram",
+            source="discord",
             user_id=PEER["user_id"],
             session_key=PEER["session_key"],
             chat_id=PEER["chat_id"],
@@ -131,7 +131,7 @@ class TestPeerRecorderSelfHeal:
         assert row is not None and row["session_key"] is None  # the orphan
         db.record_gateway_session_peer(
             sid,
-            source="telegram",
+            source="discord",
             user_id=PEER["user_id"],
             session_key=PEER["session_key"],
             chat_id=PEER["chat_id"],
@@ -192,7 +192,7 @@ class TestPeerResolutionRecency:
         assert found["id"] == "zombie2"  # unstamped rows are invisible
         # Self-heal stamps the real row (any later peer refresh):
         db.record_gateway_session_peer(
-            "real", source="telegram", user_id=PEER["user_id"],
+            "real", source="discord", user_id=PEER["user_id"],
             session_key=PEER["session_key"], chat_id=PEER["chat_id"],
             chat_type="dm",
         )
@@ -232,7 +232,7 @@ class TestLoadTranscriptReroutes:
         db.publish_compression_child(
             parent_session_id="p2",
             child_session_id="c2",
-            source="telegram",
+            source="discord",
             messages=[{"role": "user", "content": "compressed history"}],
             require_compression_lease=False,
         )

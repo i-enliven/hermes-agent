@@ -16,7 +16,7 @@ def _event(text: str = "/approvals") -> MessageEvent:
     return MessageEvent(
         text=text,
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             user_id="user-1",
             chat_id="chat-1",
             chat_type="dm",
@@ -41,7 +41,7 @@ async def test_gateway_rejects_non_admin_persistent_approval_change():
     runner = _runner()
     runner.config = SimpleNamespace(
         platforms={
-            Platform.TELEGRAM: SimpleNamespace(
+            Platform.DISCORD: SimpleNamespace(
                 extra={
                     "allow_admin_from": ["admin-1"],
                     "user_allowed_commands": ["approvals"],

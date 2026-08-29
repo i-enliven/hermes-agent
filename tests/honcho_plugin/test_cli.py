@@ -319,7 +319,7 @@ class TestSetupWizardDeploymentShape:
     """
 
     def _run_setup(self, monkeypatch, tmp_path, *, answers, initial_cfg=None,
-                   gateway_platforms=("telegram",)):
+                   gateway_platforms=("discord",)):
         import plugins.memory.honcho.cli as honcho_cli
 
         cfg_path = tmp_path / "config.json"

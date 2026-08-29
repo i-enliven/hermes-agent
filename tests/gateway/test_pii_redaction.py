@@ -37,7 +37,7 @@ def _make_context(
     user_id="user-123",
     user_name=None,
     chat_id="telegram:99999",
-    platform=Platform.TELEGRAM,
+    platform=Platform.DISCORD,
     home_channels=None,
 ):
     source = SessionSource(
@@ -76,8 +76,8 @@ class TestBuildSessionContextPromptRedaction:
 
     def test_home_channel_id_preserved_without_redaction(self):
         hc = {
-            Platform.TELEGRAM: HomeChannel(
-                platform=Platform.TELEGRAM,
+            Platform.DISCORD: HomeChannel(
+                platform=Platform.DISCORD,
                 chat_id="telegram:99999",
                 name="Home Chat",
             )
@@ -100,7 +100,7 @@ class TestBuildSessionContextPromptRedaction:
         assert "123456789" in prompt
 
     def test_signal_ids_redacted(self):
-        ctx = _make_context(user_id="+15551234567", platform=Platform.SIGNAL)
+        ctx = _make_context(user_id="+15551234567", platform=Platform.DISCORD)
         prompt = build_session_context_prompt(ctx, redact_pii=True)
         assert "+15551234567" not in prompt
         assert "user_" in prompt

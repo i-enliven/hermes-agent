@@ -10,13 +10,10 @@ from gateway.session import SessionSource
 
 def _clear_auth_env(monkeypatch) -> None:
     for key in (
-        "TELEGRAM_ALLOWED_USERS",
-        "TELEGRAM_GROUP_ALLOWED_USERS",
         "DISCORD_ALLOWED_USERS",
         "SLACK_ALLOWED_USERS",
-        "SIGNAL_ALLOWED_USERS",
-        "SIGNAL_GROUP_ALLOWED_USERS",
-        "TELEGRAM_GROUP_ALLOWED_CHATS",
+        "DISCORD_ALLOWED_USERS",
+        "DISCORD_GROUP_ALLOWED_USERS",
         "EMAIL_ALLOWED_USERS",
         "SMS_ALLOWED_USERS",
         "MATTERMOST_ALLOWED_USERS",
@@ -24,10 +21,9 @@ def _clear_auth_env(monkeypatch) -> None:
         "DINGTALK_ALLOWED_USERS", "FEISHU_ALLOWED_USERS", "WECOM_ALLOWED_USERS",
         "QQ_ALLOWED_USERS", "QQ_GROUP_ALLOWED_USERS",
         "GATEWAY_ALLOWED_USERS",
-        "TELEGRAM_ALLOW_ALL_USERS",
         "DISCORD_ALLOW_ALL_USERS",
         "SLACK_ALLOW_ALL_USERS",
-        "SIGNAL_ALLOW_ALL_USERS",
+        "DISCORD_ALLOW_ALL_USERS",
         "EMAIL_ALLOW_ALL_USERS",
         "SMS_ALLOW_ALL_USERS",
         "MATTERMOST_ALLOW_ALL_USERS",
@@ -117,75 +113,18 @@ def test_simplex_allowlist_accepts_display_name(monkeypatch):
     assert runner._is_user_authorized(source) is True
 
 
-def test_telegram_group_users_legacy_chat_ids_still_authorize(monkeypatch):
-    """Backward-compat: PR #15027 shipped TELEGRAM_GROUP_ALLOWED_USERS as a
-    chat-ID allowlist. PR #17686 renamed it to sender IDs and added
-    TELEGRAM_GROUP_ALLOWED_CHATS. Users on the old guidance must keep working:
-    chat-ID-shaped values (starting with "-") in the _USERS var are honored as
-    chat IDs with a deprecation warning.
-    """
-    _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("TELEGRAM_GROUP_ALLOWED_USERS", "-1001878443972")
-
-    runner, _adapter = _make_runner(
-        Platform.TELEGRAM,
-        GatewayConfig(platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="t")}),
-    )
-
-    source = SessionSource(
-        platform=Platform.TELEGRAM,
-        user_id="999",
-        chat_id="-1001878443972",
-        user_name="tester",
-        chat_type="forum",
-    )
-
-    assert runner._is_user_authorized(source) is True
-
-
-def test_telegram_group_users_mixed_sender_and_legacy_chat(monkeypatch):
-    """Mixed values: positive user ID gates senders; negative chat ID gates chat."""
-    _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("TELEGRAM_GROUP_ALLOWED_USERS", "999,-1001878443972")
-
-    runner, _adapter = _make_runner(
-        Platform.TELEGRAM,
-        GatewayConfig(platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="t")}),
-    )
-
-    # Legacy chat ID path: any sender in the listed chat is authorized
-    legacy_chat_source = SessionSource(
-        platform=Platform.TELEGRAM,
-        user_id="123",
-        chat_id="-1001878443972",
-        user_name="tester",
-        chat_type="group",
-    )
-    assert runner._is_user_authorized(legacy_chat_source) is True
-
-    # Sender path: listed sender user ID authorized in any group
-    sender_source = SessionSource(
-        platform=Platform.TELEGRAM,
-        user_id="999",
-        chat_id="-1009999999999",
-        user_name="tester",
-        chat_type="group",
-    )
-    assert runner._is_user_authorized(sender_source) is True
-
-
 @pytest.mark.asyncio
 async def test_unauthorized_dm_pairs_by_default(monkeypatch):
     _clear_auth_env(monkeypatch)
     config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True)},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True)},
     )
-    runner, adapter = _make_runner(Platform.TELEGRAM, config)
+    runner, adapter = _make_runner(Platform.DISCORD, config)
     runner.pairing_store.generate_code.return_value = "ABC12DEF"
 
     result = await runner._handle_message(
         _make_event(
-            Platform.TELEGRAM,
+            Platform.DISCORD,
             "123456789",
             "123456789",
         )
@@ -193,7 +132,7 @@ async def test_unauthorized_dm_pairs_by_default(monkeypatch):
 
     assert result is None
     runner.pairing_store.generate_code.assert_called_once_with(
-        "telegram",
+        "discord",
         "123456789",
         "tester",
     )
@@ -206,17 +145,17 @@ async def test_unauthorized_dm_can_be_ignored(monkeypatch):
     _clear_auth_env(monkeypatch)
     config = GatewayConfig(
         platforms={
-            Platform.TELEGRAM: PlatformConfig(
+            Platform.DISCORD: PlatformConfig(
                 enabled=True,
                 extra={"unauthorized_dm_behavior": "ignore"},
             ),
         },
     )
-    runner, adapter = _make_runner(Platform.TELEGRAM, config)
+    runner, adapter = _make_runner(Platform.DISCORD, config)
 
     result = await runner._handle_message(
         _make_event(
-            Platform.TELEGRAM,
+            Platform.DISCORD,
             "123456789",
             "123456789",
         )
@@ -234,22 +173,22 @@ async def test_unauthorized_dm_can_be_ignored(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_signal_with_allowlist_ignores_unauthorized_dm(monkeypatch):
-    """When SIGNAL_ALLOWED_USERS is set, unauthorized DMs are silently dropped.
+    """When DISCORD_ALLOWED_USERS is set, unauthorized DMs are silently dropped.
 
     This is the primary regression test for #9337: before the fix, Signal
     would send pairing codes to ANY sender even when a strict allowlist was
     configured, spamming personal contacts with cryptic bot messages.
     """
     _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("SIGNAL_ALLOWED_USERS", "+15550000001")  # allowlist set
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "+15550000001")  # allowlist set
 
     config = GatewayConfig(
-        platforms={Platform.SIGNAL: PlatformConfig(enabled=True)},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True)},
     )
-    runner, adapter = _make_runner(Platform.SIGNAL, config)
+    runner, adapter = _make_runner(Platform.DISCORD, config)
 
     result = await runner._handle_message(
-        _make_event(Platform.SIGNAL, "+15559999999", "+15559999999")  # not in allowlist
+        _make_event(Platform.DISCORD, "+15559999999", "+15559999999")  # not in allowlist
     )
 
     assert result is None
@@ -258,18 +197,18 @@ async def test_signal_with_allowlist_ignores_unauthorized_dm(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_telegram_with_allowlist_ignores_unauthorized_dm(monkeypatch):
-    """Same behavior for Telegram: allowlist ⟹ ignore unauthorized DMs."""
+async def test_discord_with_allowlist_ignores_unauthorized_dm(monkeypatch):
+    """Same behavior for Discord: allowlist ⟹ ignore unauthorized DMs."""
     _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "111111111")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "111111111")
 
     config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True)},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True)},
     )
-    runner, adapter = _make_runner(Platform.TELEGRAM, config)
+    runner, adapter = _make_runner(Platform.DISCORD, config)
 
     result = await runner._handle_message(
-        _make_event(Platform.TELEGRAM, "999999999", "999999999")
+        _make_event(Platform.DISCORD, "999999999", "999999999")
     )
 
     assert result is None
@@ -284,12 +223,12 @@ async def test_global_allowlist_ignores_unauthorized_dm(monkeypatch):
     monkeypatch.setenv("GATEWAY_ALLOWED_USERS", "111111111")
 
     config = GatewayConfig(
-        platforms={Platform.SIGNAL: PlatformConfig(enabled=True)},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True)},
     )
-    runner, adapter = _make_runner(Platform.SIGNAL, config)
+    runner, adapter = _make_runner(Platform.DISCORD, config)
 
     result = await runner._handle_message(
-        _make_event(Platform.SIGNAL, "+15559999999", "+15559999999")
+        _make_event(Platform.DISCORD, "+15559999999", "+15559999999")
     )
 
     assert result is None
@@ -304,14 +243,14 @@ def test_allowlist_authorized_user_returns_ignore_for_unauthorized(monkeypatch):
     authorized users is covered by the integration tests in this module.
     """
     _clear_auth_env(monkeypatch)
-    monkeypatch.setenv("SIGNAL_ALLOWED_USERS", "+15550000001")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "+15550000001")
 
     config = GatewayConfig(
-        platforms={Platform.SIGNAL: PlatformConfig(enabled=True)},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True)},
     )
-    runner, _adapter = _make_runner(Platform.SIGNAL, config)
+    runner, _adapter = _make_runner(Platform.DISCORD, config)
 
-    behavior = runner._get_unauthorized_dm_behavior(Platform.SIGNAL)
+    behavior = runner._get_unauthorized_dm_behavior(Platform.DISCORD)
     assert behavior == "ignore"
 
 
@@ -320,11 +259,11 @@ def test_get_unauthorized_dm_behavior_no_allowlist_returns_pair(monkeypatch):
     _clear_auth_env(monkeypatch)
 
     config = GatewayConfig(
-        platforms={Platform.SIGNAL: PlatformConfig(enabled=True)},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True)},
     )
-    runner, _adapter = _make_runner(Platform.SIGNAL, config)
+    runner, _adapter = _make_runner(Platform.DISCORD, config)
 
-    behavior = runner._get_unauthorized_dm_behavior(Platform.SIGNAL)
+    behavior = runner._get_unauthorized_dm_behavior(Platform.DISCORD)
     assert behavior == "pair"
 
 

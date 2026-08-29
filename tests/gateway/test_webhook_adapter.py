@@ -689,7 +689,7 @@ class TestWebhookSilenceSuppression:
 
         chat_id = "webhook:helper-events:d-1"
         adapter._delivery_info[chat_id] = {
-            "deliver": "telegram",
+            "deliver": "discord",
             "deliver_extra": {"chat_id": "-100123"},
         }
         adapter._delivery_info_created[chat_id] = time.time()
@@ -826,7 +826,7 @@ class TestDeliverCrossPlatformThreadId:
                 "thread_id": "999",
             }
         }
-        await adapter._deliver_cross_platform("telegram", "hello", delivery)
+        await adapter._deliver_cross_platform("discord", "hello", delivery)
         mock_target.send.assert_awaited_once_with(
             "12345", "hello", metadata={"thread_id": "999"}
         )

@@ -634,7 +634,7 @@ def test_fence_cancelled_compression_leaves_lock_reacquirable(tmp_path: Path) ->
 
     db = SessionDB(db_path=tmp_path / "state.db")
     session_id = "HYGIENE_LOCK_REACQUIRE"
-    db.create_session(session_id, source="telegram")
+    db.create_session(session_id, source="discord")
 
     agent = _build_agent_with_db(db, session_id)
     agent.compression_in_place = True

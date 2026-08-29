@@ -42,7 +42,7 @@ from gateway.stream_consumer import GatewayStreamConsumer, StreamConsumerConfig
 class FinalizeCaptureAdapter(BasePlatformAdapter):
     """Adapter that records every send/edit with its finalize flag."""
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(PlatformConfig(enabled=True, token="***"), platform)
         self.sent = []
         self.edits = []
@@ -192,7 +192,7 @@ async def _run_streaming_turn(monkeypatch, tmp_path, agent_cls, session_id):
     )
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
     )
@@ -319,7 +319,7 @@ async def test_payload_less_split_does_not_suppress_complete_response(
     adapter = FinalizeCaptureAdapter()
     runner = _make_runner(adapter)
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1004492624436",
         chat_type="group",
         thread_id="1",
@@ -438,7 +438,7 @@ class _SplittingAdapter(FinalizeCaptureAdapter):
 
     MAX_MESSAGE_LENGTH = 220
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(platform)
         self.deleted = []
         self.fail_edits = False

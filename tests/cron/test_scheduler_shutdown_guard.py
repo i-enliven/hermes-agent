@@ -59,7 +59,7 @@ class TestStandaloneDeliverySkipsDuringShutdown:
         pconfig = MagicMock()
         pconfig.enabled = True
         mock_cfg = MagicMock()
-        mock_cfg.platforms = {Platform.TELEGRAM: pconfig}
+        mock_cfg.platforms = {Platform.DISCORD: pconfig}
         return mock_cfg
 
     def test_standalone_path_skips_without_scheduling(self):

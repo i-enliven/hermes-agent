@@ -23,7 +23,7 @@ from gateway.session import SessionSource
 
 def _make_event(thread_id=None):
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="208214988",
         user_id="208214988",
         chat_type="dm",
@@ -43,7 +43,7 @@ def _runner_with_adapter(send_voice_mock):
         send_voice=send_voice_mock,
         is_in_voice_channel=lambda *_a, **_k: False,
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     return runner
 
 

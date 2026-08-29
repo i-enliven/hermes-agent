@@ -36,7 +36,7 @@ class RecordingAdapter:
 def _make_runner(adapter):
     runner = GatewayRunner.__new__(GatewayRunner)
     runner._running = True
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._kanban_sub_fail_counts = {}
     return runner
 
@@ -59,7 +59,7 @@ def _create_completed_task(*, subscribe: bool) -> str:
     try:
         tid = kb.create_task(conn, title="owner gate", assignee="worker")
         if subscribe:
-            kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat-1")
+            kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat-1")
         kb.complete_task(conn, tid, summary="done")
         return tid
     finally:

@@ -46,7 +46,7 @@ def test_notify_sub_delivery_mode_persists_and_last_write_wins(kanban_home):
         tid = kb.create_task(conn, title="mode sub task", assignee="worker1")
         # Fresh sub without a mode -> defaults to "notify".
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             notifier_profile="owner-a",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -57,7 +57,7 @@ def test_notify_sub_delivery_mode_persists_and_last_write_wins(kanban_home):
         # Explicit re-subscribe changes the mode (last-write-wins) and must NOT
         # overwrite the existing owner (owner self-heals only when unset).
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             notifier_profile="owner-b", delivery_mode="wake",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -66,13 +66,13 @@ def test_notify_sub_delivery_mode_persists_and_last_write_wins(kanban_home):
         assert subs[0]["notifier_profile"] == "owner-a"
 
         # A None re-subscribe leaves the existing mode untouched.
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat1")
         subs = kb.list_notify_subs(conn, tid)
         assert subs[0]["delivery_mode"] == "wake"
 
         # An unknown mode is ignored (treated like None: no clobber).
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             delivery_mode="bogus",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -89,7 +89,7 @@ def test_child_task_inherits_parent_delivery_mode(kanban_home):
     try:
         parent = kb.create_task(conn, title="root", assignee=None)
         kb.add_notify_sub(
-            conn, task_id=parent, platform="telegram", chat_id="chat1",
+            conn, task_id=parent, platform="discord", chat_id="chat1",
             thread_id="42", user_id="u1", user_id_alt="alt-u1", notifier_profile="default",
             delivery_mode="notify+wake",
         )
@@ -121,13 +121,13 @@ def test_notify_sub_chat_type_persists_and_last_write_wins(kanban_home):
     try:
         tid = kb.create_task(conn, title="chat_type sub", assignee="worker1")
         # Fresh sub without chat_type -> defaults to "dm".
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat1")
         subs = kb.list_notify_subs(conn, tid)
         assert subs[0]["chat_type"] == "dm"
 
         # Explicit re-subscribe corrects the recorded chat_type (last-write-wins).
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             chat_type="group",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -136,7 +136,7 @@ def test_notify_sub_chat_type_persists_and_last_write_wins(kanban_home):
         # A None re-subscribe (here changing only the mode) must NOT clobber
         # the recorded chat_type.
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             delivery_mode="wake",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -155,7 +155,7 @@ def test_notify_sub_user_id_alt_persists_and_backfills_legacy_rows(kanban_home):
     try:
         tid = kb.create_task(conn, title="alt sub", assignee="worker1")
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             user_id="open-id",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -163,7 +163,7 @@ def test_notify_sub_user_id_alt_persists_and_backfills_legacy_rows(kanban_home):
         assert subs[0]["user_id_alt"] is None
 
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             user_id="open-id", user_id_alt="union-id",
         )
         subs = kb.list_notify_subs(conn, tid)
@@ -184,7 +184,7 @@ def test_child_task_inherits_parent_chat_type(kanban_home):
     try:
         parent = kb.create_task(conn, title="root", assignee=None)
         kb.add_notify_sub(
-            conn, task_id=parent, platform="telegram", chat_id="chat1",
+            conn, task_id=parent, platform="discord", chat_id="chat1",
             user_id="u1", user_id_alt="alt-u1", chat_type="group",
             delivery_mode="notify+wake",
         )
@@ -214,9 +214,9 @@ async def test_notifier_notify_plus_wake_sends_and_wakes(kanban_home):
     try:
         passive_tid = kb.create_task(conn, title="passive task", assignee="worker1")
         active_tid = kb.create_task(conn, title="active task", assignee="worker1")
-        kb.add_notify_sub(conn, task_id=passive_tid, platform="telegram", chat_id="chat1")
+        kb.add_notify_sub(conn, task_id=passive_tid, platform="discord", chat_id="chat1")
         kb.add_notify_sub(
-            conn, task_id=active_tid, platform="telegram", chat_id="chat1",
+            conn, task_id=active_tid, platform="discord", chat_id="chat1",
             delivery_mode="notify+wake",
         )
         kb.block_task(conn, passive_tid, reason="passive block")
@@ -236,7 +236,7 @@ async def test_notifier_notify_plus_wake_sends_and_wakes(kanban_home):
         sent_msgs.append(msg)
 
     fake_adapter.send = AsyncMock(side_effect=_send)
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
 
     _orig_sleep = asyncio.sleep
     tick_count = 0
@@ -282,7 +282,7 @@ async def test_notifier_plain_notify_never_wakes_even_with_session_id(kanban_hom
             assignee="worker1",
             session_id="origin-session-id",
         )
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat1")
         kb.block_task(conn, tid, reason="plain notify block")
     finally:
         conn.close()
@@ -294,7 +294,7 @@ async def test_notifier_plain_notify_never_wakes_even_with_session_id(kanban_hom
     fake_adapter = MagicMock()
     fake_adapter.send = AsyncMock()
     fake_adapter.handle_message = AsyncMock()
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
 
     _orig_sleep = asyncio.sleep
     tick_count = 0
@@ -330,7 +330,7 @@ async def test_notifier_notify_wake_does_not_wake_on_status_event(kanban_home):
     try:
         tid = kb.create_task(conn, title="status-only task", assignee="worker1")
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             delivery_mode="notify+wake",
         )
         kb._append_event(conn, tid, kind="status", payload={"status": "review"})
@@ -343,7 +343,7 @@ async def test_notifier_notify_wake_does_not_wake_on_status_event(kanban_home):
     runner._kanban_sub_fail_counts = {}
     fake_adapter = MagicMock()
     fake_adapter.send = AsyncMock()
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
 
     _orig_sleep = asyncio.sleep
     tick_count = 0
@@ -380,7 +380,7 @@ async def test_notifier_wake_forwards_persisted_chat_type_and_user_id(kanban_hom
     try:
         tid = kb.create_task(conn, title="group wake", assignee="worker1")
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="grp1",
+            conn, task_id=tid, platform="discord", chat_id="grp1",
             user_id="op-42", chat_type="group", delivery_mode="wake",
             notifier_profile="owner-profile",
         )
@@ -394,8 +394,8 @@ async def test_notifier_wake_forwards_persisted_chat_type_and_user_id(kanban_hom
     runner._kanban_sub_fail_counts = {}
     fake_adapter = MagicMock()
     fake_adapter.send = AsyncMock()
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
-    runner._profile_adapters = {"owner-profile": {Platform.TELEGRAM: fake_adapter}}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
+    runner._profile_adapters = {"owner-profile": {Platform.DISCORD: fake_adapter}}
     runner._authorization_adapter = lambda platform, profile=None: fake_adapter
 
     _orig_sleep = asyncio.sleep
@@ -435,7 +435,7 @@ async def test_notifier_wake_only_skips_send_and_advances_cursor(kanban_home):
     try:
         tid = kb.create_task(conn, title="wake only task", assignee="worker1")
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat1",
+            conn, task_id=tid, platform="discord", chat_id="chat1",
             delivery_mode="wake",
         )
         kb.block_task(conn, tid, reason="wake only block")
@@ -449,7 +449,7 @@ async def test_notifier_wake_only_skips_send_and_advances_cursor(kanban_home):
 
     fake_adapter = MagicMock()
     fake_adapter.send = AsyncMock()
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
 
     _orig_sleep = asyncio.sleep
     tick_count = 0
@@ -507,7 +507,7 @@ async def test_notifier_unsubs_after_abnormal_events(kind, kanban_home):
 
     try:
         tid = kb.create_task(conn, title=f"test {kind} task", assignee="worker1")
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat1")
         kb._append_event(conn, tid, kind=kind)
     finally:
         conn.close()
@@ -523,7 +523,7 @@ async def test_notifier_unsubs_after_abnormal_events(kind, kanban_home):
         runner._running = False
 
     fake_adapter.send = AsyncMock(side_effect=_send_and_stop)
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
 
     _orig_sleep = asyncio.sleep
 
@@ -597,7 +597,7 @@ async def test_notifier_wakes_origin_for_review_and_keeps_subscription(kanban_ho
         kb.add_notify_sub(
             conn,
             task_id=task_id,
-            platform="telegram",
+            platform="discord",
             chat_id="chat1",
         )
         task = kb.claim_task(conn, task_id, claimer="builder:1")
@@ -624,9 +624,9 @@ async def test_notifier_wakes_origin_for_review_and_keeps_subscription(kanban_ho
         runner._running = False
 
     adapter = MagicMock()
-    adapter.name = "telegram"
+    adapter.name = "discord"
     adapter.send = AsyncMock(side_effect=_send)
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
 
     real_sleep = asyncio.sleep
 
@@ -662,7 +662,7 @@ async def test_gateway_create_autosubscribes_on_explicit_board(kanban_home):
     runner = object.__new__(GatewayRunner)
     runner._owns_kanban_dispatcher_lock = lambda: True
     source = SimpleNamespace(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="chat1",
         chat_type="dm",
         thread_id="20197",
@@ -740,7 +740,7 @@ async def test_gateway_autosubscribe_roundtrips_user_id_alt_for_session_key(
     # user_id != user_id_alt is the whole point: the alt id is the canonical
     # participant, so dropping it silently corrupts the session key.
     source = SimpleNamespace(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="chat1",
         chat_type=chat_type,
         thread_id=thread_id,
@@ -766,7 +766,7 @@ async def test_gateway_autosubscribe_roundtrips_user_id_alt_for_session_key(
     assert row["user_id_alt"] == "union-id"
 
     original = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="chat1",
         chat_type=chat_type,
         thread_id=thread_id,
@@ -816,7 +816,7 @@ async def test_notifier_artifact_delivery_skips_missing_files(kanban_home, tmp_p
     conn = kb.connect()
     try:
         tid = kb.create_task(conn, title="t", assignee="worker1")
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat1")
     finally:
         conn.close()
 
@@ -837,7 +837,7 @@ async def test_notifier_artifact_delivery_skips_missing_files(kanban_home, tmp_p
     runner._kanban_dispatcher_lock_handle = object()
 
     fake_adapter = MagicMock()
-    fake_adapter.name = "telegram"
+    fake_adapter.name = "discord"
 
     documents_uploaded: list = []
 
@@ -853,7 +853,7 @@ async def test_notifier_artifact_delivery_skips_missing_files(kanban_home, tmp_p
     from gateway.platforms.base import BasePlatformAdapter
     fake_adapter.extract_local_files = BasePlatformAdapter.extract_local_files
 
-    runner.adapters = {Platform.TELEGRAM: fake_adapter}
+    runner.adapters = {Platform.DISCORD: fake_adapter}
 
     _orig_sleep = asyncio.sleep
 
@@ -927,7 +927,7 @@ def test_migration_backfill_runs_only_on_first_add(kanban_home):
         kb.add_notify_sub(
             conn,
             task_id=task_id,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-x",
             delivery_mode="notify",
         )
@@ -953,7 +953,7 @@ def test_migration_backfill_runs_only_on_first_add(kanban_home):
 
 def _add_full_parent_sub(kb, conn, parent):
     kb.add_notify_sub(
-        conn, task_id=parent, platform="telegram", chat_id="chat1",
+        conn, task_id=parent, platform="discord", chat_id="chat1",
         thread_id="topic1", user_id="user1", user_id_alt="alt-1",
         chat_type="dm", notifier_profile="default",
         delivery_mode="notify+wake",
@@ -1020,7 +1020,7 @@ def test_create_with_parents_inherits_delivery_metadata(kanban_home):
 def _make_done_task_with_sub(kb, conn, *, title, chat_id):
     tid = kb.create_task(conn, title=title, assignee="worker1")
     kb.add_notify_sub(
-        conn, task_id=tid, platform="telegram", chat_id=chat_id,
+        conn, task_id=tid, platform="discord", chat_id=chat_id,
         notifier_profile="default",
     )
     assert kb.complete_task(conn, tid, summary="done")
@@ -1123,7 +1123,7 @@ def test_gc_archived_rows_already_removed_by_unsub(kanban_home):
         # The notifier removes the sub at archive time; the GC targets only
         # ``done`` tasks, so an archived task contributes nothing to purge.
         kb.remove_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="c-arch",
+            conn, task_id=tid, platform="discord", chat_id="c-arch",
         )
         _backdate_task(kb, conn, tid, days=365)
         assert kb.purge_stale_done_notify_subs(conn, max_age_days=30) == 0

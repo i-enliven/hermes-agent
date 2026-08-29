@@ -49,7 +49,7 @@ class _FakePickerAdapter:
 
 def _make_runner(adapter):
     runner = object.__new__(GatewayRunner)
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner._session_model_overrides = {}
     runner._running_agents = {}
@@ -60,7 +60,7 @@ def _make_event(text):
     return MessageEvent(
         text=text,
         message_type=MessageType.TEXT,
-        source=SessionSource(platform=Platform.TELEGRAM, chat_id="12345", chat_type="dm"),
+        source=SessionSource(platform=Platform.DISCORD, chat_id="12345", chat_type="dm"),
     )
 
 
@@ -124,7 +124,7 @@ def _make_named_runner(monkeypatch, default_adapter, named_adapter, named_home):
     monkeypatch.setattr(
         runner,
         "_profile_adapters",
-        {"named": {Platform.TELEGRAM: named_adapter}},
+        {"named": {Platform.DISCORD: named_adapter}},
         raising=False,
     )
     monkeypatch.setattr(
@@ -138,7 +138,7 @@ def _named_event(args):
         text=f"/model {args}".rstrip(),
         message_type=MessageType.TEXT,
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="named-chat",
             chat_type="dm",
             profile="named",
@@ -151,7 +151,7 @@ async def _drive_picker(runner, event):
     sent = await runner._handle_model_command(event)
     # Bare /model returns None (picker sent); the adapter captured the callback.
     assert sent is None
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     assert adapter.captured_callback is not None, "picker callback was not wired"
     # Simulate the user tapping "gpt-5.5" under the openrouter provider.
     return await adapter.captured_callback("12345", "gpt-5.5", "openrouter")

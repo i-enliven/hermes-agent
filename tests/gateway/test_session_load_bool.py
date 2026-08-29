@@ -49,7 +49,7 @@ class TestSessionLoadBoolCorruption:
             "created_at": "2026-01-01T12:00:00",
             "updated_at": "2026-01-01T12:30:00",
             "origin": {
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_id": "123456",
                 "chat_type": "dm",
             },

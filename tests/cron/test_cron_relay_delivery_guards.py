@@ -145,4 +145,4 @@ class TestPreflightRelayFronted:
                    return_value=_gateway_config({"relay"})):
             ids = {t["id"] for t in cron_delivery_targets()}
         assert "slack" in ids
-        assert "telegram" not in ids
+        assert "discord" not in ids

@@ -193,7 +193,7 @@ class TestAgentCacheLifecycle:
             model="anthropic/claude-sonnet-4", api_key="test",
             base_url="https://openrouter.ai/api/v1", provider="openrouter",
             max_iterations=5, quiet_mode=True, skip_context_files=True,
-            skip_memory=True, platform="telegram",
+            skip_memory=True, platform="discord",
         )
         with runner._agent_cache_lock:
             runner._agent_cache[session_key] = (agent1, sig)
@@ -403,14 +403,14 @@ class TestAgentCacheBoundedGrowth:
         # Give Telegram a 'none' policy via the per-platform override; leave the
         # default policy finite ('both') for the Discord case.
         config.default_reset_policy = SessionResetPolicy(mode="both")
-        config.reset_by_platform[Platform.TELEGRAM] = SessionResetPolicy(mode="none")
+        config.reset_by_platform[Platform.DISCORD] = SessionResetPolicy(mode="none")
 
         with _patch("gateway.session.SessionStore._ensure_loaded"):
             store = SessionStore(sessions_dir=tmp_path, config=config)
         store._db = None
 
         # mode='none' → never finalized by the watcher.
-        assert store.is_session_finalizable(_entry_for(Platform.TELEGRAM)) is False
+        assert store.is_session_finalizable(_entry_for(Platform.DISCORD)) is False
         # default 'both' → finite, will eventually expire.
         assert store.is_session_finalizable(_entry_for(Platform.DISCORD)) is True
 
@@ -536,7 +536,7 @@ class TestAgentCacheSpilloverLive:
             base_url="https://openrouter.ai/api/v1", provider="openrouter",
             max_iterations=5, quiet_mode=True,
             skip_context_files=True, skip_memory=True,
-            platform="telegram",
+            platform="discord",
         )
 
     def test_fill_to_cap_then_spillover(self, monkeypatch):
@@ -900,7 +900,7 @@ class TestAgentCacheMessageCountRebaseline:
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "sessions.db")
-        db.create_session("s1", source="telegram")
+        db.create_session("s1", source="discord")
         runner = self._runner_with_db(db)
         agent = object()
 
@@ -946,7 +946,7 @@ class TestAgentCacheMessageCountRebaseline:
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "sessions.db")
-        db.create_session("s1", source="telegram")
+        db.create_session("s1", source="discord")
         runner = self._runner_with_db(db)
         agent = object()
 

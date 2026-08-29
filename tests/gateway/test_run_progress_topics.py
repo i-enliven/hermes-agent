@@ -16,7 +16,7 @@ from gateway.session import SessionSource
 
 
 class ProgressCaptureAdapter(BasePlatformAdapter):
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(PlatformConfig(enabled=True, token="***"), platform)
         self.sent = []
         self.edits = []
@@ -74,7 +74,7 @@ class DiscordProgressCaptureAdapter(ProgressCaptureAdapter):
 class MediaCaptureProgressAdapter(ProgressCaptureAdapter):
     """Capture native image batches without contacting a platform API."""
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(platform=platform)
         self.image_batches = []
 
@@ -95,7 +95,7 @@ class SmallLimitProgressAdapter(ProgressCaptureAdapter):
 
     MAX_MESSAGE_LENGTH = 180
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(platform=platform)
         self._next_id = 0
         self.oversized_edits = []
@@ -149,7 +149,7 @@ class MetadataEditProgressCaptureAdapter(ProgressCaptureAdapter):
 class RetryableFirstEditProgressCaptureAdapter(ProgressCaptureAdapter):
     """Fail one progress edit transiently, then accept later edits."""
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(platform=platform)
         self.edit_outcomes = []
 
@@ -176,7 +176,7 @@ class RetryableFirstEditProgressCaptureAdapter(ProgressCaptureAdapter):
 class RetryableOverflowEditProgressAdapter(SmallLimitProgressAdapter):
     """Fail the first split edit transiently, then keep editing."""
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(platform=platform)
         self.retryable_edit_failures = 0
 
@@ -708,7 +708,7 @@ def _run_long_preview_helper(monkeypatch, tmp_path, preview_length=0):
     monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="12345",
         chat_type="dm",
         thread_id=None,
@@ -999,7 +999,7 @@ async def _run_with_agent(
     session_id,
     pending_text=None,
     config_data=None,
-    platform=Platform.TELEGRAM,
+    platform=Platform.DISCORD,
     chat_id="-1001",
     chat_type="group",
     thread_id="17585",
@@ -1419,7 +1419,7 @@ async def test_base_processing_releases_post_delivery_callback_after_main_send()
         )
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
         thread_id="17585",
@@ -1465,7 +1465,7 @@ async def test_base_processing_stops_typing_before_hung_post_delivery_callback(
     adapter.stop_typing = _stop_typing
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
         thread_id="17585",
@@ -1713,14 +1713,14 @@ async def test_terminal_progress_renders_fenced_code_block(monkeypatch, tmp_path
     monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
     import tools.terminal_tool  # noqa: F401 - register terminal emoji
 
-    adapter = CodeBlockProgressAdapter(platform=Platform.TELEGRAM)
+    adapter = CodeBlockProgressAdapter(platform=Platform.DISCORD)
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
     monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="12345",
         chat_type="dm",
         thread_id=None,
@@ -1766,14 +1766,14 @@ async def test_terminal_progress_verbose_shows_full_command(monkeypatch, tmp_pat
     monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
     import tools.terminal_tool  # noqa: F401 - register terminal emoji
 
-    adapter = CodeBlockProgressAdapter(platform=Platform.TELEGRAM)
+    adapter = CodeBlockProgressAdapter(platform=Platform.DISCORD)
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
     monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="12345",
         chat_type="dm",
         thread_id=None,
@@ -1814,14 +1814,14 @@ async def test_terminal_progress_no_bash_block_in_verbose_mode(monkeypatch, tmp_
     monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
     import tools.terminal_tool  # noqa: F401 - register terminal emoji
 
-    adapter = CodeBlockProgressAdapter(platform=Platform.TELEGRAM)
+    adapter = CodeBlockProgressAdapter(platform=Platform.DISCORD)
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
     monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="12345",
         chat_type="dm",
         thread_id=None,
@@ -1876,14 +1876,14 @@ async def test_consecutive_terminal_progress_collapses_headers(monkeypatch, tmp_
     monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
     import tools.terminal_tool  # noqa: F401 - register terminal emoji
 
-    adapter = CodeBlockProgressAdapter(platform=Platform.TELEGRAM)
+    adapter = CodeBlockProgressAdapter(platform=Platform.DISCORD)
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
     monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="12345",
         chat_type="dm",
         thread_id=None,

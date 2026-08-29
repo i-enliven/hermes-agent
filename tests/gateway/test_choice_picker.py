@@ -19,7 +19,7 @@ from gateway.platforms.base import MessageEvent, SendResult
 from gateway.session import SessionSource
 
 
-def _make_event(text="/reasoning", platform=Platform.TELEGRAM, user_id="12345", chat_id="67890"):
+def _make_event(text="/reasoning", platform=Platform.DISCORD, user_id="12345", chat_id="67890"):
     source = SessionSource(
         platform=platform,
         user_id=user_id,

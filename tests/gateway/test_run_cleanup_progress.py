@@ -47,7 +47,7 @@ class CleanupCaptureAdapter(BasePlatformAdapter):
 
     _next_mid = 100
 
-    def __init__(self, platform=Platform.TELEGRAM):
+    def __init__(self, platform=Platform.DISCORD):
         super().__init__(PlatformConfig(enabled=True, token="***"), platform)
         self.sent = []
         self.edits = []
@@ -171,7 +171,7 @@ def _install_fakes(
     agent_cls,
     *,
     cleanup_on: bool,
-    cleanup_platform: Platform = Platform.TELEGRAM,
+    cleanup_platform: Platform = Platform.DISCORD,
 ):
     """Wire up the module stubs every _run_agent test needs."""
     monkeypatch.setenv("HERMES_TOOL_PROGRESS_MODE", "all")
@@ -235,7 +235,7 @@ async def test_messaging_agent_forwards_checkpoint_config(monkeypatch, tmp_path)
         },
     )
 
-    source = SessionSource(platform=Platform.TELEGRAM, chat_id="-1001")
+    source = SessionSource(platform=Platform.DISCORD, chat_id="-1001")
     result = await runner._run_agent(
         message="hello",
         context_prompt="",
@@ -261,7 +261,7 @@ async def test_cleanup_chains_with_existing_callback(monkeypatch, tmp_path):
     gateway_run = _install_fakes(monkeypatch, ProgressAgent, cleanup_on=True)
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
 
-    source = SessionSource(platform=Platform.TELEGRAM, chat_id="-1001")
+    source = SessionSource(platform=Platform.DISCORD, chat_id="-1001")
     session_key = "agent:main:telegram:group:-1001"
 
     pre_existing_fired = []

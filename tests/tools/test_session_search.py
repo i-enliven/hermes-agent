@@ -553,7 +553,7 @@ class TestCronDemotion:
         """
         now = int(time.time())
         # Interactive user session — older, so it loses on bare recency too.
-        db.create_session("s_user", source="telegram")
+        db.create_session("s_user", source="discord")
         db._conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?",
                          (now - 90000, "s_user"))
         db.append_message("s_user", role="user", content="how is the venom project going")
@@ -974,13 +974,13 @@ class TestLegacyContinuationPlusDelegation:
 def _seed_gateway_new_reset_chain(db, *, needle="ibuprofen night-dose protocol"):
     """A → B → C gateway /new chain. C is the empty current session."""
     db.create_session(
-        "s_aug12", source="telegram", session_key="tg:user:1",
+        "s_aug12", source="discord", session_key="tg:user:1",
     )
     db.append_message("s_aug12", role="user", content="older unrelated chat")
     db.end_session("s_aug12", "session_reset")
 
     db.create_session(
-        "s_night", source="telegram",
+        "s_night", source="discord",
         parent_session_id="s_aug12",
         session_key="tg:user:1",
         model_config={"_reset_from": "s_aug12"},
@@ -996,7 +996,7 @@ def _seed_gateway_new_reset_chain(db, *, needle="ibuprofen night-dose protocol")
     db.end_session("s_night", "session_reset")
 
     db.create_session(
-        "s_today", source="telegram",
+        "s_today", source="discord",
         parent_session_id="s_night",
         session_key="tg:user:1",
         model_config={"_reset_from": "s_night"},
@@ -1130,13 +1130,13 @@ class TestNewResetLineageBrowse:
         same-key heuristic because its parent ended at a reset boundary on
         the same session_key) must not be re-hidden by a Python re-check.
         Regression guard for the follow-up to #85756."""
-        db.create_session("s_old", source="telegram", session_key="tg:legacy:1")
+        db.create_session("s_old", source="discord", session_key="tg:legacy:1")
         db.append_message("s_old", role="user", content="legacy era chat")
         db.end_session("s_old", "session_reset")
         # Legacy child: parent link + same session_key, NO _reset_from marker,
         # still live (end_reason=None).
         db.create_session(
-            "s_legacy_child", source="telegram",
+            "s_legacy_child", source="discord",
             parent_session_id="s_old", session_key="tg:legacy:1",
         )
         db.append_message("s_legacy_child", role="user", content="current era chat")

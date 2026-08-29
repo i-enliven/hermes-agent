@@ -177,7 +177,7 @@ class TestScanSkillCommands:
             _make_skill(tmp_path, "discord-only")
 
             # First simulated gateway request: telegram handler.
-            tokens = set_session_vars(platform="telegram")
+            tokens = set_session_vars(platform="discord")
             try:
                 telegram_commands = dict(get_skill_commands())
             finally:
@@ -280,7 +280,7 @@ class TestScanSkillCommands:
             _make_skill(tmp_path, "shared")
             _make_skill(tmp_path, "telegram-only")
 
-            monkeypatch.setenv("HERMES_PLATFORM", "telegram")
+            monkeypatch.setenv("HERMES_PLATFORM", "discord")
             telegram_commands = dict(get_skill_commands())
             assert "/telegram-only" not in telegram_commands
 
@@ -509,7 +509,7 @@ class TestBuildSkillInvocationMessage:
         with patch("tools.skills_tool.SKILLS_DIR", tmp_path):
             from gateway.session_context import clear_session_vars, set_session_vars
 
-            tokens = set_session_vars(platform="telegram")
+            tokens = set_session_vars(platform="discord")
             try:
                 _make_skill(
                     tmp_path,

@@ -16,15 +16,15 @@ from gateway.session import SessionSource
 class TestParseTargetPlatformChat:
     def test_explicit_telegram_chat(self):
         target = DeliveryTarget.parse("telegram:12345")
-        assert target.platform == Platform.TELEGRAM
+        assert target.platform == Platform.DISCORD
         assert target.chat_id == "12345"
         assert target.is_explicit is True
 
 
     def test_origin_with_source(self):
-        origin = SessionSource(platform=Platform.TELEGRAM, chat_id="789", thread_id="42")
+        origin = SessionSource(platform=Platform.DISCORD, chat_id="789", thread_id="42")
         target = DeliveryTarget.parse("origin", origin=origin)
-        assert target.platform == Platform.TELEGRAM
+        assert target.platform == Platform.DISCORD
         assert target.chat_id == "789"
         assert target.thread_id == "42"
         assert target.is_origin is True
@@ -32,7 +32,7 @@ class TestParseTargetPlatformChat:
 
 class TestTargetToStringRoundtrip:
     def test_origin_roundtrip(self):
-        origin = SessionSource(platform=Platform.TELEGRAM, chat_id="111", thread_id="42")
+        origin = SessionSource(platform=Platform.DISCORD, chat_id="111", thread_id="42")
         target = DeliveryTarget.parse("origin", origin=origin)
         assert target.to_string() == "origin"
 
@@ -57,7 +57,7 @@ class TestPlatformNameCaseInsensitivity:
     def test_uppercase_platform_name(self):
         """Platform names should be case-insensitive."""
         target = DeliveryTarget.parse("TELEGRAM:12345")
-        assert target.platform == Platform.TELEGRAM
+        assert target.platform == Platform.DISCORD
         assert target.chat_id == "12345"
     
 
@@ -232,7 +232,7 @@ class StaleTopicAdapter:
 async def test_named_telegram_private_topic_is_created_before_delivery(tmp_path, monkeypatch):
     monkeypatch.setattr("gateway.delivery.get_hermes_home", lambda: tmp_path)
     adapter = RecordingAdapter()
-    router = DeliveryRouter(GatewayConfig(), adapters={Platform.TELEGRAM: adapter})
+    router = DeliveryRouter(GatewayConfig(), adapters={Platform.DISCORD: adapter})
     target = DeliveryTarget.parse("telegram:722341991:Hermes API Test")
 
     await router._deliver_to_platform(target, "hello", metadata=None)
@@ -256,7 +256,7 @@ async def test_named_telegram_private_topic_is_created_before_delivery(tmp_path,
 async def test_explicit_telegram_private_thread_uses_reply_fallback_with_anchor(tmp_path, monkeypatch):
     monkeypatch.setattr("gateway.delivery.get_hermes_home", lambda: tmp_path)
     adapter = RecordingAdapter()
-    router = DeliveryRouter(GatewayConfig(), adapters={Platform.TELEGRAM: adapter})
+    router = DeliveryRouter(GatewayConfig(), adapters={Platform.DISCORD: adapter})
     target = DeliveryTarget.parse("telegram:722341991:32344")
 
     await router._deliver_to_platform(
@@ -369,7 +369,7 @@ async def test_oversized_non_ascii_output_is_delivered_on_windows_codepage(tmp_p
     _simulate_windows_codepage_write(monkeypatch)
 
     adapter = RecordingAdapter()
-    router = DeliveryRouter(GatewayConfig(), adapters={Platform.TELEGRAM: adapter})
+    router = DeliveryRouter(GatewayConfig(), adapters={Platform.DISCORD: adapter})
     target = DeliveryTarget.parse("telegram:12345")
 
     result = await router._deliver_to_platform(

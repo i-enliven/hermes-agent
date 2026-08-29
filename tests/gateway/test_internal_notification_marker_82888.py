@@ -65,7 +65,7 @@ def _bootstrap(monkeypatch, tmp_path):
         session_id="sess-82888",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="group",
     )
     runner.session_store.load_transcript.return_value = []
@@ -86,7 +86,7 @@ def _bootstrap(monkeypatch, tmp_path):
 
 def _source():
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
         user_id="12345",

@@ -1,6 +1,6 @@
 """#64674 — multiplex primary gateway must not fail forever without bot tokens.
 
-When gateway.multiplex_profiles is on and TELEGRAM_BOT_TOKEN lives only in a
+When gateway.multiplex_profiles is on and DISCORD_BOT_TOKEN lives only in a
 secondary profile's .env, the default-profile primary adapter used to start
 with an empty token, log "No bot token configured", and queue an infinite
 reconnect loop. Secondary profiles already load under _profile_runtime_scope;
@@ -38,10 +38,10 @@ class TestLoadGatewayConfigForRunner:
 
         home = tmp_path / "home"
         home.mkdir()
-        (home / ".env").write_text("TELEGRAM_BOT_TOKEN=from-default-env\n", encoding="utf-8")
+        (home / ".env").write_text("DISCORD_BOT_TOKEN=from-default-env\n", encoding="utf-8")
         (home / "config.yaml").write_text("gateway:\n  multiplex_profiles: false\n", encoding="utf-8")
         monkeypatch.setenv("HERMES_HOME", str(home))
-        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
 
         # Without multiplex, dotenv is still loaded into os.environ by the
         # normal env loader in real gateways; here we only assert the helper
@@ -67,7 +67,7 @@ class TestLoadGatewayConfigForRunner:
         home.mkdir()
         # Credentials belong in the profile .env; listener settings do not.
         (home / ".env").write_text(
-            "TELEGRAM_BOT_TOKEN=default-profile-token-123\n"
+            "DISCORD_BOT_TOKEN=default-profile-token-123\n"
             "API_SERVER_KEY=profile-scoped-key-0123456789abcdef\n",
             encoding="utf-8",
         )
@@ -80,7 +80,7 @@ class TestLoadGatewayConfigForRunner:
         monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
         monkeypatch.setenv("API_SERVER_PORT", "8642")
         monkeypatch.delenv("API_SERVER_KEY", raising=False)
-        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
         monkeypatch.setattr(run_mod, "get_hermes_home", lambda: home)
         monkeypatch.setattr(run_mod, "_hermes_home", home)
         # Model the real multiplexed gateway: run.py flips the runtime flag
@@ -91,7 +91,7 @@ class TestLoadGatewayConfigForRunner:
 
         assert cfg.multiplex_profiles is True
         # Telegram token from the profile scope (.env)
-        tg = cfg.platforms.get(Platform.TELEGRAM)
+        tg = cfg.platforms.get(Platform.DISCORD)
         assert tg is not None
         assert tg.token == "default-profile-token-123"
         # api_server present: key from the profile scope, listener settings
@@ -113,10 +113,10 @@ class TestPlatformHasBotCredential:
         from gateway.run import _platform_has_bot_credential
 
         assert _platform_has_bot_credential(
-            Platform.TELEGRAM, PlatformConfig(enabled=True, token="")
+            Platform.DISCORD, PlatformConfig(enabled=True, token="")
         ) is False
         assert _platform_has_bot_credential(
-            Platform.TELEGRAM, PlatformConfig(enabled=True, token=None)
+            Platform.DISCORD, PlatformConfig(enabled=True, token=None)
         ) is False
 
 
@@ -126,7 +126,7 @@ class TestPrimaryStartupSkipsEmptyTokenUnderMultiplex:
         from gateway.run import GatewayRunner
 
         cfg = GatewayConfig(multiplex_profiles=True)
-        cfg.platforms[Platform.TELEGRAM] = PlatformConfig(
+        cfg.platforms[Platform.DISCORD] = PlatformConfig(
             enabled=True, token=""  # empty — lives on secondary only
         )
 
@@ -173,7 +173,7 @@ class TestPrimaryStartupSkipsEmptyTokenUnderMultiplex:
                 continue
             created.append(platform)
 
-        assert skipped == [Platform.TELEGRAM]
+        assert skipped == [Platform.DISCORD]
         assert created == []
 
 
@@ -221,7 +221,7 @@ class TestReconnectDropsEmptyToken:
         from gateway.config import Platform, PlatformConfig
 
         # Unit-level: the branch condition the watcher uses.
-        platform = Platform.TELEGRAM
+        platform = Platform.DISCORD
         platform_config = PlatformConfig(enabled=True, token="")
         failed = {
             platform: {

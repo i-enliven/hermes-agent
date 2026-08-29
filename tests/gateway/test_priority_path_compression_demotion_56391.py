@@ -38,7 +38,7 @@ from gateway.session import SessionEntry, SessionSource, build_session_key
 
 def _make_source() -> SessionSource:
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         user_id="u1",
         chat_id="c1",
         user_name="tester",
@@ -62,12 +62,12 @@ def _make_runner(*, compression_in_flight: bool):
 
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="***")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="***")}
     )
     adapter = MagicMock()
     adapter.send = AsyncMock()
     adapter._pending_messages = {}
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
 
@@ -78,7 +78,7 @@ def _make_runner(*, compression_in_flight: bool):
         session_id="sess-1",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
     )
     session_store = MagicMock()
@@ -143,7 +143,7 @@ async def test_priority_path_does_not_interrupt_when_compression_in_flight():
     await runner._handle_message(_make_event("still there?"))
 
     agent_mock.interrupt.assert_not_called()
-    queued = runner.adapters[Platform.TELEGRAM]._pending_messages.get(sk)
+    queued = runner.adapters[Platform.DISCORD]._pending_messages.get(sk)
     assert queued is not None and queued.text == "still there?"
 
 

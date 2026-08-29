@@ -49,7 +49,7 @@ def test_flush_writes_message_event_to_file(tmp_path, monkeypatch):
     event = MagicMock()
     event.text = "user message"
     event.session_id = "20260728_120000_abc"
-    event.platform = "telegram"
+    event.platform = "discord"
     event.sender_id = "456"
     event.sender_name = "Alice"
     event.reply_to = None

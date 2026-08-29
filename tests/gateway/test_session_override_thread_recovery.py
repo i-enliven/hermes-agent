@@ -40,7 +40,7 @@ def _make_runner(recovered_thread_id=None):
 def _topic_dm_source(thread_id):
     """A Telegram DM in topic mode. thread_id="" / "1" == General/lobby."""
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="555",
         chat_name="Forum DM",
         chat_type="dm",

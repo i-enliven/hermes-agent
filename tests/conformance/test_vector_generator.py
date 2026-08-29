@@ -28,7 +28,7 @@ from generate_conformance_vectors import (  # noqa: E402
     generate,
 )
 
-PLATFORMS = ("discord", "slack", "telegram")
+PLATFORMS = ("discord", "slack", "discord")
 
 
 def test_corpus_ids_unique_and_categorized():

@@ -49,7 +49,7 @@ def sample_sessions():
         "agent:main:telegram:dm:123456": {
             "session_key": "agent:main:telegram:dm:123456",
             "session_id": "20260329_120000_abc123",
-            "platform": "telegram",
+            "platform": "discord",
             "chat_type": "dm",
             "display_name": "Alice",
             "created_at": "2026-03-29T12:00:00",
@@ -58,7 +58,7 @@ def sample_sessions():
             "output_tokens": 2000,
             "total_tokens": 52000,
             "origin": {
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_id": "123456",
                 "chat_name": "Alice",
                 "chat_type": "dm",
@@ -1069,7 +1069,7 @@ class TestEdgeCases:
         data = {"agent:main:telegram:dm:111": {
             "session_key": "agent:main:telegram:dm:111",
             "session_id": "20260329_120000_xyz",
-            "platform": "telegram",
+            "platform": "discord",
             "updated_at": "2026-03-29T12:00:00",
         }}
         (sessions_dir / "sessions.json").write_text(json.dumps(data))
@@ -1112,7 +1112,7 @@ class TestEventBridgePollE2E:
             "agent:main:telegram:dm:poll_test": {
                 "session_key": "agent:main:telegram:dm:poll_test",
                 "session_id": session_id,
-                "platform": "telegram",
+                "platform": "discord",
                 "chat_type": "dm",
                 "display_name": "PollTest",
                 "updated_at": "2026-03-29T15:00:05",
@@ -1169,7 +1169,7 @@ class TestEventBridgePollE2E:
             "agent:main:telegram:dm:skip": {
                 "session_key": "agent:main:telegram:dm:skip",
                 "session_id": session_id,
-                "platform": "telegram",
+                "platform": "discord",
                 "updated_at": "2026-03-29T15:00:05",
                 "origin": {"platform": "telegram", "chat_id": "skip"},
             }
@@ -1221,7 +1221,7 @@ class TestEventBridgePollE2E:
             "agent:main:telegram:dm:new": {
                 "session_key": "agent:main:telegram:dm:new",
                 "session_id": session_id,
-                "platform": "telegram",
+                "platform": "discord",
                 "updated_at": "2026-03-29T15:00:05",
                 "origin": {"platform": "telegram", "chat_id": "new"},
             }
@@ -1306,7 +1306,7 @@ class TestEventBridgePollE2E:
             lambda: {
                 "agent:main:telegram:dm:late": {
                     "session_id": session_id,
-                    "platform": "telegram",
+                    "platform": "discord",
                     "origin": {"platform": "telegram", "chat_id": "late"},
                 }
             },
@@ -1348,7 +1348,7 @@ class TestEventBridgePollE2E:
             lambda: {
                 "agent:main:telegram:dm:hist": {
                     "session_id": session_id,
-                    "platform": "telegram",
+                    "platform": "discord",
                     "origin": {"platform": "telegram", "chat_id": "hist"},
                 }
             },
@@ -1405,7 +1405,7 @@ class TestEventBridgePollE2E:
         sid = "20260329_150000_fresh"
         index["agent:main:telegram:dm:fresh"] = {
             "session_id": sid,
-            "platform": "telegram",
+            "platform": "discord",
             "origin": {"platform": "telegram", "chat_id": "fresh"},
         }
         messages[sid] = [{

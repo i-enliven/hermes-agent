@@ -10,7 +10,7 @@ from gateway.run import GatewayRunner
 def _make_runner(with_adapter=False):
     runner = GatewayRunner.__new__(GatewayRunner)
     runner._running = True
-    runner.adapters = {Platform.TELEGRAM: MagicMock()} if with_adapter else {}
+    runner.adapters = {Platform.DISCORD: MagicMock()} if with_adapter else {}
     runner._kanban_sub_fail_counts = {}
     return runner
 

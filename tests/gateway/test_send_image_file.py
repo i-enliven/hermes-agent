@@ -1,5 +1,5 @@
 """
-Tests for send_image_file() on Telegram, Discord, and Slack platforms,
+Tests for send_image_file() on Discord and Slack platforms,
 and MEDIA: .png extraction/routing in the base platform adapter.
 
 Covers: local image file sending, file-not-found handling, fallback on error,
@@ -37,72 +37,6 @@ class TestExtractMediaImages:
         assert media[0][0] == "/home/user/.hermes/browser_screenshots/shot.png"
         assert "MEDIA:" not in cleaned
         assert "Here is the screenshot" in cleaned
-
-
-# ---------------------------------------------------------------------------
-# Telegram send_image_file tests
-# ---------------------------------------------------------------------------
-
-
-def _ensure_telegram_mock():
-    """Install mock telegram modules so TelegramAdapter can be imported."""
-    if "telegram" in sys.modules and hasattr(sys.modules["telegram"], "__file__"):
-        return
-
-    telegram_mod = MagicMock()
-    telegram_mod.ext.ContextTypes.DEFAULT_TYPE = type(None)
-    telegram_mod.constants.ParseMode.MARKDOWN_V2 = "MarkdownV2"
-    telegram_mod.constants.ChatType.GROUP = "group"
-    telegram_mod.constants.ChatType.SUPERGROUP = "supergroup"
-    telegram_mod.constants.ChatType.CHANNEL = "channel"
-    telegram_mod.constants.ChatType.PRIVATE = "private"
-
-    for name in ("telegram", "telegram.ext", "telegram.constants", "telegram.request"):
-        sys.modules.setdefault(name, telegram_mod)
-
-
-_ensure_telegram_mock()
-
-from plugins.platforms.telegram.adapter import TelegramAdapter  # noqa: E402
-
-
-class TestTelegramSendImageFile:
-    @pytest.fixture
-    def adapter(self):
-        config = PlatformConfig(enabled=True, token="fake-token")
-        a = TelegramAdapter(config)
-        a._bot = MagicMock()
-        return a
-
-    def test_sends_local_image_as_photo(self, adapter, tmp_path):
-        """send_image_file should call bot.send_photo with the opened file."""
-        img = tmp_path / "screenshot.png"
-        img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)  # Minimal PNG-like
-
-        mock_msg = MagicMock()
-        mock_msg.message_id = 42
-        adapter._bot.send_photo = AsyncMock(return_value=mock_msg)
-
-        result = _run(
-            adapter.send_image_file(chat_id="12345", image_path=str(img))
-        )
-        assert result.success
-        assert result.message_id == "42"
-        adapter._bot.send_photo.assert_awaited_once()
-
-        # Verify photo arg was a file object (opened in rb mode)
-        call_kwargs = adapter._bot.send_photo.call_args
-        assert call_kwargs.kwargs["chat_id"] == 12345
-
-
-    def test_returns_error_when_not_connected(self, adapter):
-        """send_image_file should return error when bot is None."""
-        adapter._bot = None
-        result = _run(
-            adapter.send_image_file(chat_id="12345", image_path="/tmp/img.png")
-        )
-        assert not result.success
-        assert "Not connected" in result.error
 
 
 # ---------------------------------------------------------------------------

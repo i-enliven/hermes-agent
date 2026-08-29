@@ -202,11 +202,8 @@ class TestProviderEnvBlocklist:
     def test_tool_and_gateway_vars_are_stripped(self):
         """Tool and gateway secrets/config must not leak into subprocess env."""
         leaked_vars = {
-            "TELEGRAM_BOT_TOKEN": "bot-token",
-            "TELEGRAM_HOME_CHANNEL": "12345",
             "DISCORD_HOME_CHANNEL": "67890",
             "SLACK_APP_TOKEN": "xapp-secret",
-            "SIGNAL_ACCOUNT": "+15555550124",
             "HASS_TOKEN": "ha-secret",
             "EMAIL_PASSWORD": "email-secret",
             "FIRECRAWL_API_KEY": "fc-secret",
@@ -1224,8 +1221,6 @@ class TestBlocklistCoverage:
 
     def test_gateway_runtime_vars_are_in_blocklist(self):
         extras = {
-            "TELEGRAM_HOME_CHANNEL",
-            "TELEGRAM_HOME_CHANNEL_NAME",
             "DISCORD_HOME_CHANNEL",
             "DISCORD_HOME_CHANNEL_NAME",
             "DISCORD_REQUIRE_MENTION",
@@ -1234,13 +1229,6 @@ class TestBlocklistCoverage:
             "SLACK_HOME_CHANNEL",
             "SLACK_HOME_CHANNEL_NAME",
             "SLACK_ALLOWED_USERS",
-            "SIGNAL_HTTP_URL",
-            "SIGNAL_ACCOUNT",
-            "SIGNAL_ALLOWED_USERS",
-            "SIGNAL_GROUP_ALLOWED_USERS",
-            "SIGNAL_HOME_CHANNEL",
-            "SIGNAL_HOME_CHANNEL_NAME",
-            "SIGNAL_IGNORE_STORIES",
             "HASS_TOKEN",
             "HASS_URL",
             "EMAIL_ADDRESS",

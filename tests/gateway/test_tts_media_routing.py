@@ -23,7 +23,7 @@ from gateway.session import SessionSource, build_session_key
 
 class _MediaRoutingAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.DISCORD)
 
     async def connect(self, *, is_reconnect: bool = False):
         return True
@@ -40,7 +40,7 @@ class _MediaRoutingAdapter(BasePlatformAdapter):
 
 def _event(thread_id=None):
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="chat-1",
         chat_type="dm",
         thread_id=thread_id,
@@ -456,7 +456,7 @@ class _QueuedMediaCaptureAdapter(BasePlatformAdapter):
     """Adapter that records text + native image delivery for queued-resend tests."""
 
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.DISCORD)
         self.sent = []
         self.images = []
 
@@ -549,7 +549,7 @@ async def test_queued_resend_branch_delivers_media_and_preserves_protected_examp
     monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
 
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="chat-1",
         chat_type="dm",
         thread_id="topic-1",

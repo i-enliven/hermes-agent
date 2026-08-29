@@ -23,7 +23,7 @@ def _attach(lane):
     source = types.SimpleNamespace(platform=Platform.DISCORD, chat_id="chan-1")
 
     runner = types.SimpleNamespace(
-        _is_telegram_topic_lane=lambda src: lane == "telegram",
+        _is_telegram_topic_lane=lambda src: lane == "discord",
         _is_discord_auto_thread_lane=lambda src: lane == "discord",
         _is_relay_discord_channel_lane=lambda src: False,
         _schedule_telegram_topic_title_rename=(

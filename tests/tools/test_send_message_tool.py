@@ -9,29 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# python-telegram-bot is an optional dep — skip the entire module when
-# it isn't installed (e.g. CI bare env). Tests that patch telegram.Bot
-# or call _send_telegram need it; tests for other platforms don't but
-# keeping the whole file consistent is simpler.
-_HAS_TELEGRAM = pytest.importorskip("telegram", reason="python-telegram-bot not installed") is not None
 
-
-@pytest.fixture(autouse=True)
-def _reset_signal_scheduler():
-    """Drop the process-wide attachment scheduler so each test gets a
-    fresh token bucket."""
-    from gateway.platforms.signal_rate_limit import _reset_scheduler
-    _reset_scheduler()
-    yield
-    _reset_scheduler()
 
 from gateway.config import Platform
 from tools.send_message_tool import (
     _parse_target_ref,
     _resolve_slack_user_target,
     _send_matrix_via_adapter,
-    _send_signal,
-    _send_telegram,
     _send_to_platform,
     send_message_tool,
 )
@@ -232,24 +216,11 @@ def _run_async_immediately(coro):
 
 
 def _make_config():
-    telegram_cfg = SimpleNamespace(enabled=True, token="***", extra={})
+    discord_cfg = SimpleNamespace(enabled=True, token="***", extra={})
     return SimpleNamespace(
-        platforms={Platform.TELEGRAM: telegram_cfg},
+        platforms={Platform.DISCORD: discord_cfg},
         get_home_channel=lambda _platform: None,
-    ), telegram_cfg
-
-
-def _install_telegram_mock(monkeypatch, bot):
-    parse_mode = SimpleNamespace(MARKDOWN_V2="MarkdownV2", HTML="HTML")
-    constants_mod = SimpleNamespace(ParseMode=parse_mode)
-    # MessageEntity needed by #27865 mention-detection path; tests don't
-    # inspect it but the import must succeed.
-    _MessageEntity = lambda **_kw: SimpleNamespace(**_kw)
-    telegram_mod = SimpleNamespace(Bot=lambda token: bot, MessageEntity=_MessageEntity, constants=constants_mod)
-    monkeypatch.setitem(sys.modules, "telegram", telegram_mod)
-    monkeypatch.setitem(sys.modules, "telegram.constants", constants_mod)
-
-
+    ), discord_cfg
 def _ensure_slack_mock(monkeypatch):
     if "slack_bolt" in sys.modules and hasattr(sys.modules["slack_bolt"], "__file__"):
         return
@@ -326,7 +297,7 @@ class TestSendMessageTool:
         # in 2026-05; this test pins strict on explicitly.)
         monkeypatch.setenv("HERMES_MEDIA_DELIVERY_STRICT", "1")
         monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_FILES", "0")
-        config, telegram_cfg = _make_config()
+        config, discord_cfg = _make_config()
         secret = tmp_path / "secret.pdf"
         secret.write_bytes(b"%PDF secret")
 
@@ -339,7 +310,7 @@ class TestSendMessageTool:
                 send_message_tool(
                     {
                         "action": "send",
-                        "target": "telegram:12345",
+                        "target": "discord:12345",
                         "message": f"hello\nMEDIA:{secret}",
                     }
                 )
@@ -347,8 +318,8 @@ class TestSendMessageTool:
 
         assert result["success"] is True
         send_mock.assert_awaited_once_with(
-            Platform.TELEGRAM,
-            telegram_cfg,
+            Platform.DISCORD,
+            discord_cfg,
             "12345",
             "hello",
             thread_id=None,
@@ -357,7 +328,7 @@ class TestSendMessageTool:
         )
 
     def test_top_level_send_failure_redacts_query_token(self):
-        config, _telegram_cfg = _make_config()
+        config, _discord_cfg = _make_config()
         leaked = "very-secret-query-token-123456"
 
         def _raise_and_close(coro):
@@ -373,7 +344,7 @@ class TestSendMessageTool:
                 send_message_tool(
                     {
                         "action": "send",
-                        "target": "telegram:-1001",
+                        "target": "discord:-1001",
                         "message": "hello",
                     }
                 )
@@ -382,94 +353,6 @@ class TestSendMessageTool:
         assert "error" in result
         assert leaked not in result["error"]
         assert "access_token=***" in result["error"]
-
-
-class TestSendTelegramMediaDelivery:
-    def test_sends_photo_with_caption_for_media_tag(self, tmp_path, monkeypatch):
-        # A single captionable image + short text now rides as the photo's
-        # native caption (MEDIA:<path> caption), not a separate text message.
-        image_path = tmp_path / "photo.png"
-        image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32)
-
-        bot = MagicMock()
-        bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=1))
-        bot.send_photo = AsyncMock(return_value=SimpleNamespace(message_id=2))
-        bot.send_video = AsyncMock()
-        bot.send_voice = AsyncMock()
-        bot.send_audio = AsyncMock()
-        bot.send_document = AsyncMock()
-        _install_telegram_mock(monkeypatch, bot)
-
-        result = asyncio.run(
-            _send_telegram(
-                "token",
-                "12345",
-                "Hello there",
-                media_files=[(str(image_path), False)],
-            )
-        )
-
-        assert result["success"] is True
-        assert result["message_id"] == "2"
-        # No separate text send — the caption rides the photo bubble.
-        bot.send_message.assert_not_awaited()
-        bot.send_photo.assert_awaited_once()
-        assert bot.send_photo.await_args.kwargs.get("caption") == "Hello there"
-
-    def test_sends_voice_for_ogg_with_voice_directive(self, tmp_path, monkeypatch):
-        voice_path = tmp_path / "voice.ogg"
-        voice_path.write_bytes(b"OggS" + b"\x00" * 32)
-
-        bot = MagicMock()
-        bot.send_message = AsyncMock()
-        bot.send_photo = AsyncMock()
-        bot.send_video = AsyncMock()
-        bot.send_voice = AsyncMock(return_value=SimpleNamespace(message_id=7))
-        bot.send_audio = AsyncMock()
-        bot.send_document = AsyncMock()
-        _install_telegram_mock(monkeypatch, bot)
-
-        result = asyncio.run(
-            _send_telegram(
-                "token",
-                "12345",
-                "",
-                media_files=[(str(voice_path), True)],
-            )
-        )
-
-        assert result["success"] is True
-        bot.send_voice.assert_awaited_once()
-        bot.send_audio.assert_not_awaited()
-        bot.send_message.assert_not_awaited()
-
-    def test_missing_media_returns_error_without_leaking_raw_tag(self, monkeypatch):
-        bot = MagicMock()
-        bot.send_message = AsyncMock()
-        bot.send_photo = AsyncMock()
-        bot.send_video = AsyncMock()
-        bot.send_voice = AsyncMock()
-        bot.send_audio = AsyncMock()
-        bot.send_document = AsyncMock()
-        _install_telegram_mock(monkeypatch, bot)
-
-        result = asyncio.run(
-            _send_telegram(
-                "token",
-                "12345",
-                "",
-                media_files=[("/tmp/does-not-exist.png", False)],
-            )
-        )
-
-        assert "error" in result
-        assert "No deliverable text or media remained" in result["error"]
-        bot.send_message.assert_not_awaited()
-
-
-# ---------------------------------------------------------------------------
-# Regression: long messages are chunked before platform dispatch
-# ---------------------------------------------------------------------------
 
 
 class TestSendToPlatformChunking:
@@ -511,49 +394,6 @@ class TestSendToPlatformChunking:
         assert "&amp;amp;" not in sent_text
         assert "&amp;lt;" not in sent_text
         assert "AT&amp;T" in sent_text
-
-    def test_telegram_markdown_expansion_is_chunked_before_send(self, monkeypatch):
-        """Telegram chunking must account for MarkdownV2 escaping expansion.
-
-        A raw message under 4096 UTF-16 units can inflate past the limit once
-        MarkdownV2-escaped (each `!`/`.`/`-` becomes `\\!`/`\\.`/`\\-`). The
-        send path must chunk the *formatted* text so no single send exceeds
-        4096 (issue #28557).
-        """
-        from gateway.platforms.base import utf16_len
-
-        send_lengths = []
-
-        async def fake_send_message(**kwargs):
-            text = kwargs["text"]
-            send_lengths.append(utf16_len(text))
-            if utf16_len(text) > 4096:
-                raise Exception("Message is too long")
-            return SimpleNamespace(message_id=len(send_lengths))
-
-        bot = MagicMock()
-        bot.send_message = AsyncMock(side_effect=fake_send_message)
-        bot.send_photo = AsyncMock()
-        bot.send_video = AsyncMock()
-        bot.send_voice = AsyncMock()
-        bot.send_audio = AsyncMock()
-        bot.send_document = AsyncMock()
-        _install_telegram_mock(monkeypatch, bot)
-
-        result = asyncio.run(
-            _send_to_platform(
-                Platform.TELEGRAM,
-                SimpleNamespace(enabled=True, token="tok", extra={}),
-                "123",
-                "!" * 4096,  # raw 4096 -> ~8192 after MarkdownV2 escaping
-            )
-        )
-
-        assert result["success"] is True
-        assert bot.send_message.await_count >= 2
-        assert max(send_lengths) <= 4096
-
-
     def test_matrix_media_uses_native_adapter_helper(self, tmp_path):
         doc_path = tmp_path / "test-send-message-matrix.pdf"
         doc_path.write_bytes(b"%PDF-1.4 test")
@@ -678,153 +518,6 @@ class TestMatrixMediaLiveAdapterReuse:
             ("disconnect",),
         ]
 
-# ---------------------------------------------------------------------------
-# HTML auto-detection in Telegram send
-# ---------------------------------------------------------------------------
-
-
-class TestSendTelegramHtmlDetection:
-    """Verify that messages containing HTML tags are sent with parse_mode=HTML
-    and that plain / markdown messages use MarkdownV2."""
-
-    def _make_bot(self):
-        bot = MagicMock()
-        bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=1))
-        bot.send_photo = AsyncMock()
-        bot.send_video = AsyncMock()
-        bot.send_voice = AsyncMock()
-        bot.send_audio = AsyncMock()
-        bot.send_document = AsyncMock()
-        return bot
-
-    def test_html_message_uses_html_parse_mode(self, monkeypatch):
-        bot = self._make_bot()
-        _install_telegram_mock(monkeypatch, bot)
-
-        asyncio.run(
-            _send_telegram("tok", "123", "<b>Hello</b> world")
-        )
-
-        bot.send_message.assert_awaited_once()
-        kwargs = bot.send_message.await_args.kwargs
-        assert kwargs["parse_mode"] == "HTML"
-        assert kwargs["text"] == "<b>Hello</b> world"
-
-
-    def test_transient_bad_gateway_retries_text_send(self, monkeypatch):
-        bot = self._make_bot()
-        bot.send_message = AsyncMock(
-            side_effect=[
-                Exception("502 Bad Gateway"),
-                SimpleNamespace(message_id=2),
-            ]
-        )
-        _install_telegram_mock(monkeypatch, bot)
-
-        with patch("asyncio.sleep", new=AsyncMock()) as sleep_mock:
-            result = asyncio.run(_send_telegram("tok", "123", "hello"))
-
-        assert result["success"] is True
-        assert bot.send_message.await_count == 2
-        sleep_mock.assert_awaited_once()
-
-
-class TestSendTelegramThreadIdMapping:
-    """General-topic mapping in _send_telegram (issue #22267).
-
-    Telegram forum supergroups address the General topic as
-    ``message_thread_id="1"`` on incoming updates, but the Bot API rejects
-    sends with ``message_thread_id=1`` ("Message thread not found"). The
-    gateway adapter's ``_message_thread_id_for_send`` helper maps "1" to
-    ``None`` for that reason; the standalone ``_send_telegram`` helper used
-    by the ``send_message`` tool needs the same mapping.
-    """
-
-    def _make_bot(self):
-        bot = MagicMock()
-        bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=1))
-        return bot
-
-    def test_general_topic_thread_id_omitted(self, monkeypatch):
-        """thread_id="1" must be dropped before calling the Bot API."""
-        bot = self._make_bot()
-        _install_telegram_mock(monkeypatch, bot)
-
-        asyncio.run(_send_telegram("tok", "-1001234567890", "hello", thread_id="1"))
-
-        bot.send_message.assert_awaited_once()
-        kwargs = bot.send_message.await_args.kwargs
-        assert "message_thread_id" not in kwargs
-
-    def test_non_general_topic_thread_id_preserved(self, monkeypatch):
-        """Real forum-topic thread ids (>1) still pass through as ints."""
-        bot = self._make_bot()
-        _install_telegram_mock(monkeypatch, bot)
-
-        asyncio.run(_send_telegram("tok", "-1001234567890", "hello", thread_id="17585"))
-
-        kwargs = bot.send_message.await_args.kwargs
-        assert kwargs["message_thread_id"] == 17585
-
-    def test_thread_not_found_retries_without_message_thread_id(self, monkeypatch):
-        """When send_message raises "thread not found", retry without thread_id (#27012)."""
-        bot = self._make_bot()
-        _install_telegram_mock(monkeypatch, bot)
-
-        # First call raises thread-not-found, second succeeds
-        bot.send_message = AsyncMock(side_effect=[
-            Exception("Bad Request: message thread not found"),
-            SimpleNamespace(message_id=2),
-        ])
-
-        asyncio.run(
-            _send_telegram("tok", "-1001234567890", "hello", thread_id="17585")
-        )
-
-        assert bot.send_message.await_count == 2
-        # First call: should include message_thread_id=17585
-        call1_kwargs = bot.send_message.await_args_list[0].kwargs
-        assert call1_kwargs["message_thread_id"] == 17585
-        # Second call (retry): should NOT include message_thread_id
-        call2_kwargs = bot.send_message.await_args_list[1].kwargs
-        assert "message_thread_id" not in call2_kwargs
-
-    def test_thread_not_found_for_media_retries_without_message_thread_id(self, monkeypatch, tmp_path):
-        """Media send with stale thread_id retries without it (#27012)."""
-        bot = self._make_bot()
-        # Mock send_document to fail with thread-not-found, then succeed
-        bot.send_document = AsyncMock(side_effect=[
-            Exception("Bad Request: message thread not found"),
-            SimpleNamespace(message_id=3),
-        ])
-        _install_telegram_mock(monkeypatch, bot)
-
-        # Create a test file
-        test_file = tmp_path / "doc.txt"
-        test_file.write_text("test content")
-
-        asyncio.run(
-            _send_telegram(
-                "tok", "-1001234567890", "",
-                media_files=[(str(test_file), False)],
-                thread_id="17585",
-            )
-        )
-
-        assert bot.send_document.await_count == 2
-        # First call: should include message_thread_id=17585
-        call1_kwargs = bot.send_document.await_args_list[0].kwargs
-        assert call1_kwargs["message_thread_id"] == 17585
-        # Second call (retry): should NOT include message_thread_id
-        call2_kwargs = bot.send_document.await_args_list[1].kwargs
-        assert "message_thread_id" not in call2_kwargs
-
-
-# ---------------------------------------------------------------------------
-# Tests for Discord thread_id support
-# ---------------------------------------------------------------------------
-
-
 class TestParseTargetRef:
     """_parse_target_ref extracts (chat_id, thread_id, is_explicit) per platform.
 
@@ -848,9 +541,6 @@ class TestParseTargetRef:
             ("matrix", "@hermes:matrix.org", "@hermes:matrix.org", None),
             # Phone platforms: E.164 keeps its '+' for signal-cli; groups and
             # bare digits also resolve.
-            ("signal", "+41791234567", "+41791234567", None),
-            ("signal", "  group:abc123  ", "group:abc123", None),
-            ("signal", "15551234567", "15551234567", None),
             ("sms", "+15551234567", "+15551234567", None),
             ("photon", "+15551234567", "+15551234567", None),
             # Slack: channel/group/DM ids, thread ts, and user targets that the
@@ -878,11 +568,6 @@ class TestParseTargetRef:
     def test_non_explicit_targets_fall_through_to_resolution(self):
         cases = [
             ("matrix", "#general:matrix.org"),   # alias needs resolution
-            ("signal", "  group:  "),            # empty group id
-            ("signal", "+123"),                  # E.164 too short
-            ("signal", "+1234567890123456"),     # E.164 too long
-            ("signal", "+12abc4567890"),         # non-numeric
-            ("signal", "+"),
             ("slack", "W123ABCDEF"),             # workspace id is not sendable
             ("slack", "c0b0qv5434g"),            # lowercase
             ("slack", "C123"),                   # too short
@@ -899,16 +584,10 @@ class TestParseTargetRef:
     def test_prefixes_and_suffixes_are_platform_scoped(self):
         """A form that is explicit on one platform must not leak to another."""
         cases = [
-            ("telegram", "!something"),
             ("discord", "@someone"),
-            ("telegram", "+15551234567"),
             ("discord", "+15551234567"),
             ("matrix", "+15551234567"),
-            ("telegram", "120363408391911677@g.us"),
-            ("signal", "149606612619433@lid"),
             ("discord", "C0B0QV5434G"),
-            ("telegram", "C0B0QV5434G"),
-            ("telegram", "user@example.com"),
             ("discord", "user@example.com"),
             ("slack", "user@example.com"),
         ]
@@ -1449,131 +1128,6 @@ class TestForumProbeCache:
         # (verified by not raising from our side_effect exhaustion)
 
 
-# ---------------------------------------------------------------------------
-# _send_signal — chunking + 429 retry (mirrors gateway adapter behavior)
-# ---------------------------------------------------------------------------
-
-
-class _FakeSignalHttp:
-    """Stand-in for httpx.AsyncClient used as an async context manager.
-
-    Pops a response from the queue per `post` call. Each entry is either
-    a dict (returned from .json()) or an exception instance (raised).
-    Captures (url, payload) per call.
-    """
-
-    def __init__(self, responses):
-        self.responses = list(responses)
-        self.calls = []
-
-    def __call__(self, *_a, **_kw):
-        return self
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_a):
-        return False
-
-    async def post(self, url, json=None):
-        self.calls.append({"url": url, "payload": json})
-        if not self.responses:
-            raise AssertionError("Unexpected extra POST")
-        item = self.responses.pop(0)
-        if isinstance(item, BaseException):
-            raise item
-        resp = SimpleNamespace(
-            raise_for_status=lambda: None,
-            json=lambda data=item: data,
-        )
-        return resp
-
-
-def _install_signal_http(monkeypatch, fake):
-    """Patch httpx.AsyncClient at the module level so the lazy import in
-    _send_signal picks it up.
-    """
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", fake)
-
-
-def _patch_sendmsg_sleep_and_time(monkeypatch, capture: list):
-    """Mock asyncio.sleep + time.monotonic in the signal_rate_limit
-    module so the scheduler's acquire loop sees synthetic time advancing
-    during sleep calls, and report_rpc_duration sees the same clock.
-
-    Zero-second sleeps (event-loop yields from fake HTTP posts) are
-    delegated to the real asyncio.sleep so they don't pollute the
-    capture list.
-    """
-    import asyncio as _aio
-    _real_sleep = _aio.sleep
-    offset = [0.0]
-
-    async def fake_sleep(seconds):
-        if seconds > 0:
-            capture.append(seconds)
-            offset[0] += seconds
-        else:
-            await _real_sleep(0)
-
-    monkeypatch.setattr(
-        "gateway.platforms.signal_rate_limit.asyncio.sleep", fake_sleep
-    )
-    monkeypatch.setattr(
-        "gateway.platforms.signal_rate_limit.time.monotonic", lambda: offset[0]
-    )
-
-
-class TestSendSignalChunking:
-    def test_text_only_single_rpc(self, monkeypatch):
-        fake = _FakeSignalHttp([{"result": {"timestamp": 1}}])
-        _install_signal_http(monkeypatch, fake)
-
-        result = asyncio.run(
-            _send_signal(
-                {"http_url": "http://localhost:8080", "account": "+15551234567"},
-                "+15557654321",
-                "hello",
-            )
-        )
-
-        assert result["success"] is True
-        assert result["platform"] == "signal"
-        assert result["chat_id"].endswith("4321")
-        assert len(fake.calls) == 1
-        params = fake.calls[0]["payload"]["params"]
-        assert params["message"] == "hello"
-        assert "attachments" not in params
-        assert "textStyle" not in params
-        assert "textStyles" not in params
-
-
-    def test_skipped_missing_files_reported_in_warnings(self, tmp_path, monkeypatch):
-        good = tmp_path / "ok.png"
-        good.write_bytes(b"\x89PNG" + b"\x00" * 16)
-
-        fake = _FakeSignalHttp([{"result": {"timestamp": 1}}])
-        _install_signal_http(monkeypatch, fake)
-
-        result = asyncio.run(
-            _send_signal(
-                {"http_url": "http://localhost:8080", "account": "+15551234567"},
-                "+15557654321",
-                "msg",
-                media_files=[(str(good), False), (str(tmp_path / "missing.png"), False)],
-            )
-        )
-
-        assert result["success"] is True
-        assert "warnings" in result
-        # Only the existing file made it into the RPC
-        params = fake.calls[0]["payload"]["params"]
-        assert len(params["attachments"]) == 1
-
-
-# ── _send_via_adapter standalone fallback ────────────────────────────────
-
 
 class _FakePlatform:
     """Stand-in for the gateway.config.Platform enum.  Holds the .value
@@ -1704,84 +1258,3 @@ class TestCheckSendMessage:
                    side_effect=ImportError("simulated")):
             assert _check_send_message() is False
 
-
-class TestSendTelegramThreadNotFoundRetry:
-    """Tests for thread-not-found retry behaviour in _send_telegram (#27012)."""
-
-    def test_text_send_retries_without_thread_id_on_thread_not_found(self):
-        """When thread is not found, the text send should retry without
-        message_thread_id."""
-        call_args = []
-
-        async def fake_retry(bot, *, chat_id, text, parse_mode, **kwargs):
-            call_args.append(dict(kwargs, chat_id=chat_id, text=text))
-            if len(call_args) == 1:
-                raise Exception("Bad Request: message thread not found")
-            return SimpleNamespace(message_id=42)
-
-        async def run_test():
-            with patch(
-                "tools.send_message_tool._send_telegram_message_with_retry",
-                fake_retry,
-            ):
-                # _send_telegram imports Bot locally; we only need to mock
-                # the send path, not Bot itself (Bot import falls through
-                # normally since python-telegram-bot is installed).
-                return await _send_telegram(
-                    "fake-token", "-100123", "hello from topic 17585",
-                    thread_id="17585",
-                )
-
-        result = asyncio.run(run_test())
-        assert result["success"] is True
-        assert result["message_id"] == "42"
-        assert len(call_args) == 2, f"expected 2 calls, got {len(call_args)}"
-        # First call should have message_thread_id
-        assert call_args[0].get("message_thread_id") is not None
-        # Second call (retry) should NOT have message_thread_id
-        assert "message_thread_id" not in call_args[1], \
-            "retry should drop message_thread_id after thread-not-found"
-
-    def test_disable_web_page_preview_not_leaked_to_media_sends(self):
-        """disable_web_page_preview must never leak into a media send.
-
-        A single captionable file + short text now rides as the document's
-        caption (no separate text send), so the invariant to protect is that
-        the captioned send_document does not inherit disable_web_page_preview
-        (valid only for send_message).
-        """
-        media_kwargs_seen = []
-
-        class FakeBot:
-            async def send_message(self, **kwargs):
-                return SimpleNamespace(message_id=1)
-
-            async def send_document(self, **kwargs):
-                media_kwargs_seen.append(kwargs)
-                return SimpleNamespace(message_id=2)
-
-        import tempfile
-        media_path = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-                tf.write(b"%PDF-1.4 test content")
-                media_path = tf.name
-
-            async def run_test():
-                with patch("telegram.Bot", return_value=FakeBot()):
-                    return await _send_telegram(
-                        "fake-token", "-100123", "check preview",
-                        media_files=[(media_path, False)],
-                        disable_link_previews=True,
-                    )
-
-            result = asyncio.run(run_test())
-            assert result["success"] is True
-            # Caption rides the document bubble.
-            assert media_kwargs_seen[0].get("caption") == "check preview"
-            # Media send must NOT carry disable_web_page_preview.
-            assert "disable_web_page_preview" not in media_kwargs_seen[0], \
-                "disable_web_page_preview leaked into send_document kwargs"
-        finally:
-            if media_path and os.path.exists(media_path):
-                os.unlink(media_path)

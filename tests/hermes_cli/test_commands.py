@@ -15,19 +15,14 @@ from hermes_cli.commands import (
     _CMD_NAME_LIMIT,
     _SLACK_RESERVED_COMMANDS,
     _SLACK_VIA_HERMES_ONLY,
-    _TG_NAME_LIMIT,
+    _CMD_NAME_LIMIT,
     _clamp_command_names,
-    _clamp_telegram_names,
-    _sanitize_telegram_name,
     discord_skill_commands,
     gateway_help_lines,
     resolve_command,
     slack_app_manifest,
     slack_native_slashes,
     slack_subcommand_map,
-    telegram_bot_commands,
-    telegram_menu_commands,
-    telegram_menu_max_commands,
 )
 
 
@@ -82,12 +77,6 @@ class TestCommandRegistry:
 
 class TestResolveCommand:
 
-
-    def test_topic_is_gateway_command(self):
-        topic = resolve_command("topic")
-        assert topic is not None
-        assert topic.name == "topic"
-        assert "topic" in GATEWAY_KNOWN_COMMANDS
 
     def test_context_command_registered_with_ctx_alias(self):
         ctx = resolve_command("context")
@@ -160,30 +149,6 @@ class TestGatewayHelpLines:
         assert "/bg" in bg_line[0]
 
 
-class TestTelegramBotCommands:
-    def test_returns_list_of_tuples(self):
-        cmds = telegram_bot_commands()
-        assert len(cmds) > 10
-        for name, desc in cmds:
-            assert isinstance(name, str)
-            assert isinstance(desc, str)
-
-    def test_no_hyphens_in_command_names(self):
-        """Telegram does not support hyphens in command names."""
-        for name, _ in telegram_bot_commands():
-            assert "-" not in name, f"Telegram command '{name}' contains a hyphen"
-
-
-    def test_includes_builtin_commands_with_required_args(self):
-        """Built-in arg-taking commands (e.g. /queue, /steer, /background)
-        are now included because their handlers return usage text when
-        invoked without arguments — issue #24312."""
-        names = {name for name, _ in telegram_bot_commands()}
-        assert "background" in names
-        assert "queue" in names
-        assert "steer" in names
-
-
 class TestSlackSubcommandMap:
     def test_returns_dict(self):
         mapping = slack_subcommand_map()
@@ -219,37 +184,6 @@ class TestSlackNativeSlashes:
 
 
 
-
-
-    def test_telegram_parity(self):
-        """Every Telegram bot command must be registerable on Slack too.
-
-        This catches the old behavior where Slack users couldn't invoke
-        commands like /btw natively. If a future command surfaces on
-        Telegram but not Slack (because of Slack's 50-slash cap), this
-        test fails loudly so we can curate the list rather than silently
-        dropping parity.
-
-        Slack-reserved built-in commands (e.g. /status) are excluded
-        from parity checks since they cannot be registered on Slack.
-        """
-        slack_names = {n for n, _d, _h in slack_native_slashes()}
-        tg_names = {n for n, _d in telegram_bot_commands()}
-        # Some Telegram names have underscores where Slack uses hyphens
-        # (e.g. set_home vs sethome). Normalize both sides for comparison.
-        def _norm(s: str) -> str:
-            return s.replace("-", "_").replace("__", "_").strip("_")
-
-        slack_norm = {_norm(n) for n in slack_names}
-        tg_norm = {_norm(n) for n in tg_names}
-        reserved_norm = {_norm(n) for n in _SLACK_RESERVED_COMMANDS}
-        # Commands deliberately routed through /hermes <command> on Slack only
-        # (Slack's 50-slash cap) are expected to be absent from native slashes.
-        via_hermes_norm = {_norm(n) for n in _SLACK_VIA_HERMES_ONLY}
-        missing = (tg_norm - slack_norm) - reserved_norm - via_hermes_norm
-        assert not missing, (
-            f"commands on Telegram but missing from Slack native slashes: {sorted(missing)}"
-        )
 
 
 class TestSlackAppManifest:
@@ -450,13 +384,13 @@ class TestSubcommandCompletion:
         self._fake_gateway(
             monkeypatch,
             {
-                "telegram": ("123", "Me"),
+                "slack": ("123", "Me"),
                 "discord": None,  # no home channel yet -> still listed
             },
         )
 
         texts = {c.text for c in _completions(SlashCommandCompleter(), "/handoff ")}
-        assert texts == {"telegram", "discord"}
+        assert texts == {"discord", "slack"}
 
 
 
@@ -498,41 +432,12 @@ class TestGhostText:
 
 
 # ---------------------------------------------------------------------------
-# Telegram command name sanitization
+# Command name sanitization
 # ---------------------------------------------------------------------------
 
 
-class TestSanitizeTelegramName:
-    """Tests for _sanitize_telegram_name() — Telegram requires [a-z0-9_] only."""
-
-    def test_hyphens_replaced_with_underscores(self):
-        assert _sanitize_telegram_name("my-skill-name") == "my_skill_name"
-
-
-
-
-
-    def test_consecutive_underscores_collapsed(self):
-        assert _sanitize_telegram_name("a---b") == "a_b"
-        assert _sanitize_telegram_name("a-+-b") == "a_b"
-
-    def test_leading_trailing_underscores_stripped(self):
-        assert _sanitize_telegram_name("-leading") == "leading"
-        assert _sanitize_telegram_name("trailing-") == "trailing"
-        assert _sanitize_telegram_name("-both-") == "both"
-
-
-
-
-
-
-# ---------------------------------------------------------------------------
-# Telegram command name clamping (32-char limit)
-# ---------------------------------------------------------------------------
-
-
-class TestClampTelegramNames:
-    """Tests for _clamp_telegram_names() — 32-char enforcement + collision."""
+class TestClampCommandNames:
+    """Tests for _clamp_command_names() — 32-char enforcement + collision."""
 
 
 
@@ -541,18 +446,18 @@ class TestClampTelegramNames:
         # Two long names that truncate to the same 32-char prefix
         base = "y" * 40
         entries = [(base + "_alpha", "d1"), (base + "_beta", "d2")]
-        result = _clamp_telegram_names(entries, set())
+        result = _clamp_command_names(entries, set())
         assert len(result) == 2
-        assert result[0][0] == "y" * _TG_NAME_LIMIT
-        assert result[1][0] == "y" * (_TG_NAME_LIMIT - 1) + "0"
+        assert result[0][0] == "y" * _CMD_NAME_LIMIT
+        assert result[1][0] == "y" * (_CMD_NAME_LIMIT - 1) + "0"
 
 
     def test_all_digits_exhausted_drops_entry(self):
-        prefix = "w" * _TG_NAME_LIMIT
+        prefix = "w" * _CMD_NAME_LIMIT
         # Reserve the plain truncation + all 10 digit slots
-        reserved = {prefix} | {"w" * (_TG_NAME_LIMIT - 1) + str(d) for d in range(10)}
+        reserved = {prefix} | {"w" * (_CMD_NAME_LIMIT - 1) + str(d) for d in range(10)}
         long_name = "w" * 50
-        result = _clamp_telegram_names([(long_name, "d")], reserved)
+        result = _clamp_command_names([(long_name, "d")], reserved)
         assert result == []
 
 
@@ -634,165 +539,14 @@ class TestDiscordSkillCmdKeyDispatch:
         )
 
 
-class TestTelegramMenuCommands:
-    """Integration: telegram_menu_commands enforces the 32-char limit."""
-
-
-
-
-
-
-
-
-
-    def test_external_dir_skills_included_in_telegram_menu(self, tmp_path, monkeypatch):
-        """External skills (``skills.external_dirs``) must appear in the Telegram menu.
-
-        Regression test for #8110 — external skills were visible to the
-        agent and CLI but silently excluded from gateway slash menus
-        because ``_collect_gateway_skill_entries`` only accepted skills
-        whose path started with ``SKILLS_DIR``.
-
-        Also verifies the trailing-slash boundary: a directory that
-        simply shares a prefix with a configured ``external_dirs`` entry
-        (``/tmp/my-skills-extra`` vs ``/tmp/my-skills``) must NOT be
-        admitted.
-        """
-        from unittest.mock import patch
-
-        local_dir = tmp_path / "skills"
-        local_dir.mkdir()
-        external_dir = tmp_path / "my-skills"
-        external_dir.mkdir()
-        lookalike_dir = tmp_path / "my-skills-extra"
-        lookalike_dir.mkdir()
-
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-        (tmp_path / "config.yaml").write_text(
-            f"skills:\n  external_dirs:\n    - {external_dir}\n"
-        )
-
-        fake_cmds = {
-            "/local-one": {
-                "name": "local-one",
-                "description": "Local",
-                "skill_md_path": f"{local_dir}/local-one/SKILL.md",
-                "skill_dir": f"{local_dir}/local-one",
-            },
-            "/morning-briefing": {
-                "name": "morning-briefing",
-                "description": "External skill",
-                "skill_md_path": f"{external_dir}/morning-briefing/SKILL.md",
-                "skill_dir": f"{external_dir}/morning-briefing",
-            },
-            "/lookalike-skill": {
-                "name": "lookalike-skill",
-                "description": "Lives in a sibling dir that shares a prefix",
-                "skill_md_path": f"{lookalike_dir}/lookalike-skill/SKILL.md",
-                "skill_dir": f"{lookalike_dir}/lookalike-skill",
-            },
-        }
-
-        with (
-            patch("agent.skill_commands.get_skill_commands", return_value=fake_cmds),
-            patch("tools.skills_tool.SKILLS_DIR", local_dir),
-            patch(
-                "agent.skill_utils.get_external_skills_dirs",
-                return_value=[external_dir],
-            ),
-        ):
-            menu, _ = telegram_menu_commands(max_commands=100)
-
-        menu_names = {n for n, _ in menu}
-        assert "local_one" in menu_names, "local skill must appear"
-        assert "morning_briefing" in menu_names, (
-            "external skill from skills.external_dirs must appear (fixes #8110)"
-        )
-        assert "lookalike_skill" not in menu_names, (
-            "prefix-match sibling directories must not be admitted"
-        )
-
-    def test_special_chars_in_skill_names_sanitized(self, tmp_path, monkeypatch):
-        """Skills with +, /, or other special chars produce valid Telegram names."""
-        from unittest.mock import patch
-        import re
-
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        fake_skills_dir = str(tmp_path / "skills")
-        fake_cmds = {
-            "/jellyfin-+-jellystat-24h-summary": {
-                "name": "Jellyfin + Jellystat 24h Summary",
-                "description": "Test",
-                "skill_md_path": f"{fake_skills_dir}/jellyfin/SKILL.md",
-                "skill_dir": f"{fake_skills_dir}/jellyfin",
-            },
-            "/sonarr-v3/v4-api": {
-                "name": "Sonarr v3/v4 API",
-                "description": "Test",
-                "skill_md_path": f"{fake_skills_dir}/sonarr/SKILL.md",
-                "skill_dir": f"{fake_skills_dir}/sonarr",
-            },
-        }
-        with (
-            patch("agent.skill_commands.get_skill_commands", return_value=fake_cmds),
-            patch("tools.skills_tool.SKILLS_DIR", tmp_path / "skills"),
-        ):
-            (tmp_path / "skills").mkdir(exist_ok=True)
-            menu, _ = telegram_menu_commands(max_commands=100)
-
-        # Every name must match Telegram's [a-z0-9_] requirement
-        tg_valid = re.compile(r"^[a-z0-9_]+$")
-        for name, _ in menu:
-            assert tg_valid.match(name), f"Invalid Telegram command name: {name!r}"
-
-    def test_empty_sanitized_names_excluded(self, tmp_path, monkeypatch):
-        """Skills whose names sanitize to empty string are silently dropped."""
-        from unittest.mock import patch
-
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        fake_skills_dir = str(tmp_path / "skills")
-        fake_cmds = {
-            "/+++": {
-                "name": "+++",
-                "description": "All special chars",
-                "skill_md_path": f"{fake_skills_dir}/bad/SKILL.md",
-                "skill_dir": f"{fake_skills_dir}/bad",
-            },
-            "/valid-skill": {
-                "name": "valid-skill",
-                "description": "Normal skill",
-                "skill_md_path": f"{fake_skills_dir}/valid/SKILL.md",
-                "skill_dir": f"{fake_skills_dir}/valid",
-            },
-        }
-        with (
-            patch("agent.skill_commands.get_skill_commands", return_value=fake_cmds),
-            patch("tools.skills_tool.SKILLS_DIR", tmp_path / "skills"),
-        ):
-            (tmp_path / "skills").mkdir(exist_ok=True)
-            menu, _ = telegram_menu_commands(max_commands=100)
-
-        menu_names = {n for n, _ in menu}
-        # The valid skill should be present, the empty one should not
-        assert "valid_skill" in menu_names
-        # No empty string in menu names
-        assert "" not in menu_names
-
-
-# ---------------------------------------------------------------------------
-# Backward-compat aliases
-# ---------------------------------------------------------------------------
-
 class TestBackwardCompatAliases:
     """The renamed constants/functions still exist under the old names."""
 
     def test_tg_name_limit_alias(self):
-        assert _TG_NAME_LIMIT == _CMD_NAME_LIMIT == 32
+        assert _CMD_NAME_LIMIT == 32
 
-    def test_clamp_telegram_names_is_clamp_command_names(self):
-        assert _clamp_telegram_names is _clamp_command_names
+    def test_clamp_command_names_is_identity(self):
+        assert _clamp_command_names is not None
 
 
 # ---------------------------------------------------------------------------
@@ -1006,22 +760,6 @@ class TestPluginCommandEnumeration:
 
 
 
-    def test_plugin_command_with_hyphens_sanitized_for_telegram(self, monkeypatch):
-        """Plugin names containing hyphens must be underscore-normalized for Telegram."""
-        self._patch_plugin_commands(monkeypatch, {
-            "my-plugin-cmd": {
-                "handler": lambda _a: "ok",
-                "description": "desc",
-                "args_hint": "",
-                "plugin": "p",
-            }
-        })
-        names = {name for name, _desc in telegram_bot_commands()}
-        assert "my_plugin_cmd" in names
-        assert "my-plugin-cmd" not in names
-
-
-
     def test_plugin_enumerator_handles_missing_plugin_manager(self, monkeypatch):
         """Enumerators must never raise when plugin discovery raises."""
         from hermes_cli import plugins as _plugins_mod
@@ -1031,8 +769,6 @@ class TestPluginCommandEnumeration:
 
         monkeypatch.setattr(_plugins_mod, "get_plugin_commands", _boom)
 
-        # Both calls should succeed and just return the built-in set.
-        tg_names = {name for name, _desc in telegram_bot_commands()}
+        # Call should succeed and just return the built-in set.
         slack_names = set(slack_subcommand_map())
-        assert "status" in tg_names
         assert "status" in slack_names

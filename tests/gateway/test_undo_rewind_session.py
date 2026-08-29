@@ -27,7 +27,7 @@ def store(tmp_path, monkeypatch):
     return s
 
 
-def _seed(store, sid, source="telegram", turns=3):
+def _seed(store, sid, source="discord", turns=3):
     store._db.create_session(sid, source=source)
     for i in range(1, turns + 1):
         store._db.append_message(sid, "user", f"q{i}")

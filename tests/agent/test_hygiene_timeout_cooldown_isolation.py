@@ -33,7 +33,7 @@ def _bound_compressor(db: SessionDB, session_id: str) -> ContextCompressor:
 def test_hygiene_idle_timeout_does_not_block_in_agent_compressor(tmp_path: Path):
     db = SessionDB(db_path=tmp_path / "state.db")
     session_id = "hyg-timeout-sid"
-    db.create_session(session_id, source="telegram")
+    db.create_session(session_id, source="discord")
     db.record_compression_failure_cooldown(
         session_id,
         time.time() + 300,
@@ -52,7 +52,7 @@ def test_hygiene_idle_timeout_does_not_block_in_agent_compressor(tmp_path: Path)
 def test_aux_model_fault_cooldown_still_blocks_in_agent_compressor(tmp_path: Path):
     db = SessionDB(db_path=tmp_path / "state.db")
     session_id = "aux-fault-sid"
-    db.create_session(session_id, source="telegram")
+    db.create_session(session_id, source="discord")
     db.record_compression_failure_cooldown(
         session_id,
         time.time() + 300,
@@ -71,7 +71,7 @@ def test_hygiene_row_clears_stale_in_memory_aux_cooldown(tmp_path: Path):
     """A later hygiene overwrite must not leave the in-memory aux cooldown armed."""
     db = SessionDB(db_path=tmp_path / "state.db")
     session_id = "hyg-overwrite-sid"
-    db.create_session(session_id, source="telegram")
+    db.create_session(session_id, source="discord")
     db.record_compression_failure_cooldown(
         session_id,
         time.time() + 300,

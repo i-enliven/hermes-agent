@@ -228,7 +228,7 @@ class TestGatewayRuntimeStatus:
         # ownership is exact equality, not clock heuristics.
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
 
-        status.write_runtime_status(platform="telegram", platform_state="connected")
+        status.write_runtime_status(platform="discord", platform_state="connected")
 
         entry = status.read_runtime_status()["platforms"]["telegram"]
         assert entry["writer_pid"] == os.getpid()

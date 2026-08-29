@@ -23,7 +23,7 @@ from tools.environments.local import (
 
 _TIER1_SAMPLE = {
     "GH_TOKEN": "ghp_secret",
-    "TELEGRAM_BOT_TOKEN": "bot-token",
+    "DISCORD_BOT_TOKEN": "bot-token",
     "SLACK_APP_TOKEN": "xapp-secret",
     "MODAL_TOKEN_SECRET": "modal-secret",
     "HERMES_DASHBOARD_SESSION_TOKEN": "dash-secret",
@@ -105,7 +105,7 @@ class TestTierInvariants:
             )
 
     def test_tier1_covers_gateway_bot_token(self):
-        assert "TELEGRAM_BOT_TOKEN" in _ALWAYS_STRIP_KEYS
+        assert "DISCORD_BOT_TOKEN" in _ALWAYS_STRIP_KEYS
 
     def test_tier1_covers_github_auth(self):
         assert {"GH_TOKEN", "GITHUB_TOKEN"} <= _ALWAYS_STRIP_KEYS
@@ -125,7 +125,7 @@ class TestBrowserPassthroughPattern:
             "BROWSERBASE_PROJECT_ID": "bb-proj",
             "FIRECRAWL_API_KEY": "fc-key",
             "ANTHROPIC_API_KEY": "ant-should-go",
-            "TELEGRAM_BOT_TOKEN": "bot-should-go",
+            "DISCORD_BOT_TOKEN": "bot-should-go",
         }
         with patch.dict(os.environ, {**_SAFE_SAMPLE, **leaked}, clear=True):
             env = hermes_subprocess_env(inherit_credentials=False)
@@ -137,7 +137,7 @@ class TestBrowserPassthroughPattern:
         assert env["FIRECRAWL_API_KEY"] == "fc-key"
         # Provider + gateway secrets must NOT come back.
         assert "ANTHROPIC_API_KEY" not in env
-        assert "TELEGRAM_BOT_TOKEN" not in env
+        assert "DISCORD_BOT_TOKEN" not in env
 
 
 class TestDelegatedChildMarker:

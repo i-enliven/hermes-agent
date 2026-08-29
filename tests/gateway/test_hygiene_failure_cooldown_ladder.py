@@ -94,14 +94,14 @@ class TestCooldownLadder:
 
         db = SessionDB(db_path=tmp_path / "state.db")
         try:
-            db.create_session("before-rotation", "telegram", session_key=KEY)
+            db.create_session("before-rotation", "discord", session_key=KEY)
             first_runner = _Runner()
             first_runner._session_db = db
             assert _hygiene_cooldown_for_failure(first_runner, KEY, BASE) == BASE
 
             db.create_session(
                 "after-rotation",
-                "telegram",
+                "discord",
                 session_key=KEY,
                 parent_session_id="before-rotation",
             )

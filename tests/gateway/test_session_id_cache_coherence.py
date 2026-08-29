@@ -109,8 +109,8 @@ class TestSessionIdCacheCoherence:
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "sessions.db")
-        db.create_session("sA", source="telegram")
-        db.create_session("sB", source="telegram")
+        db.create_session("sA", source="discord")
+        db.create_session("sB", source="discord")
         # Make counts differ to make the bug observable.
         db.append_message("sA", role="user", content="hello from A")
         db.append_message("sA", role="assistant", content="hi A")
@@ -141,7 +141,7 @@ class TestSessionIdCacheCoherence:
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "sessions.db")
-        db.create_session("s1", source="telegram")
+        db.create_session("s1", source="discord")
         runner = _make_runner()
         runner._session_db = AsyncSessionDB(db)
         agent = object()
@@ -172,7 +172,7 @@ class TestSessionIdCacheCoherence:
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "sessions.db")
-        db.create_session("s1", source="telegram")
+        db.create_session("s1", source="discord")
         runner = _make_runner()
         runner._session_db = AsyncSessionDB(db)
         agent = object()
@@ -210,7 +210,7 @@ class TestSessionIdCacheCoherence:
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "sessions.db")
-        db.create_session("s1", source="telegram")
+        db.create_session("s1", source="discord")
         db.append_message("s1", role="user", content="x")
         runner = _make_runner()
         runner._session_db = AsyncSessionDB(db)

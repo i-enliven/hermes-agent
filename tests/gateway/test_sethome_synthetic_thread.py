@@ -44,5 +44,5 @@ class TestHomeThreadFromSource:
 
     def test_non_slack_platform_untouched(self):
         """Telegram forum topics legitimately reuse ids; rule is Slack-scoped."""
-        src = _source(platform=Platform.TELEGRAM, thread_id="2203", message_id="2203")
+        src = _source(platform=Platform.DISCORD, thread_id="2203", message_id="2203")
         assert _home_thread_from_source(src) == "2203"

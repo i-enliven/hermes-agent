@@ -136,7 +136,6 @@ class TestEditMessageFinalizeSignature:
     @pytest.mark.parametrize(
         "module_path,class_name",
         [
-            ("plugins.platforms.telegram.adapter", "TelegramAdapter"),
             ("plugins.platforms.discord.adapter", "DiscordAdapter"),
             ("plugins.platforms.slack.adapter", "SlackAdapter"),
             ("plugins.platforms.matrix.adapter", "MatrixAdapter"),
@@ -703,7 +702,7 @@ class TestInitialOverflowRollingEdit:
     @pytest.mark.asyncio
     async def test_initial_overflow_uses_adapter_fence_aware_split(self):
         """Initial rolling sends must preserve the adapter's fence contract."""
-        adapter = TestUtf16OverflowDetection()._make_telegram_like_adapter()
+        adapter = TestUtf16OverflowDetection()._make_split_adapter()
         from gateway.platforms.base import utf16_len
 
         msg_ids = iter(["msg_1", "msg_2", "msg_3"])
@@ -1146,13 +1145,13 @@ class TestUtf16OverflowDetection:
     characters (emoji, CJK in some ranges) can have len()=3000 codepoints
     but utf16_len()=5000+ units, blowing past Telegram's 4096 limit."""
 
-    def _make_telegram_like_adapter(self):
+    def _make_split_adapter(self):
         """Construct a minimal BasePlatformAdapter subclass that overrides
         message_len_fn like Telegram does."""
         from gateway.platforms.base import utf16_len, BasePlatformAdapter
 
-        TelegramLikeAdapter = type(
-            "TelegramLikeAdapter",
+        SplitLikeAdapter = type(
+            "SplitLikeAdapter",
             (BasePlatformAdapter,),
             {
                 "MAX_MESSAGE_LENGTH": 4096,
@@ -1161,8 +1160,8 @@ class TestUtf16OverflowDetection:
         )
         # Defeat ABCMeta abstract-instantiation guard by clearing the cached
         # abstract methods set after class creation.
-        TelegramLikeAdapter.__abstractmethods__ = frozenset()
-        adapter = TelegramLikeAdapter.__new__(TelegramLikeAdapter)
+        SplitLikeAdapter.__abstractmethods__ = frozenset()
+        adapter = SplitLikeAdapter.__new__(SplitLikeAdapter)
         adapter._typing_paused = set()
         adapter._fatal_error_message = None
         return adapter
@@ -1173,7 +1172,7 @@ class TestUtf16OverflowDetection:
         units must trigger the overflow-split path."""
         from gateway.platforms.base import utf16_len
 
-        adapter = self._make_telegram_like_adapter()
+        adapter = self._make_split_adapter()
         # Mock the send/edit methods we actually call
         adapter.send = AsyncMock(
             return_value=SimpleNamespace(success=True, message_id="msg_1"),

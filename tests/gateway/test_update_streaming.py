@@ -20,7 +20,7 @@ from gateway.platforms.base import MessageEvent
 from gateway.session import SessionSource
 
 
-def _make_event(text="/update", platform=Platform.TELEGRAM,
+def _make_event(text="/update", platform=Platform.DISCORD,
                 user_id="12345", chat_id="67890"):
     """Build a MessageEvent for testing."""
     source = SessionSource(
@@ -183,7 +183,7 @@ class TestWatchUpdateProgress:
         (hermes_home / ".update_output.txt").write_text("→ Fetching updates...\n", encoding="utf-8")
 
         mock_adapter = AsyncMock()
-        runner.adapters = {Platform.TELEGRAM: mock_adapter}
+        runner.adapters = {Platform.DISCORD: mock_adapter}
 
         # Write exit code after a brief delay
         async def write_exit_code():
@@ -220,7 +220,7 @@ class TestWatchUpdateProgress:
         (hermes_home / ".update_output.txt").write_text("output\n")
 
         mock_adapter = AsyncMock()
-        runner.adapters = {Platform.TELEGRAM: mock_adapter}
+        runner.adapters = {Platform.DISCORD: mock_adapter}
 
         # Write a prompt, then respond and finish
         async def simulate_prompt_cycle():
@@ -258,7 +258,7 @@ class TestWatchUpdateProgress:
         hermes_home.mkdir()
 
         pending = {
-            "platform": "telegram",
+            "platform": "discord",
             "chat_id": "111",
             "user_id": "222",
             "session_key": "agent:main:telegram:dm:111",
@@ -274,7 +274,7 @@ class TestWatchUpdateProgress:
 
         runner1 = _make_runner()
         adapter1 = AsyncMock()
-        runner1.adapters = {Platform.TELEGRAM: adapter1}
+        runner1.adapters = {Platform.DISCORD: adapter1}
 
         with patch("gateway.run._hermes_home", hermes_home):
             watch1 = asyncio.create_task(
@@ -298,7 +298,7 @@ class TestWatchUpdateProgress:
 
             runner2 = _make_runner()
             adapter2 = AsyncMock()
-            runner2.adapters = {Platform.TELEGRAM: adapter2}
+            runner2.adapters = {Platform.DISCORD: adapter2}
 
             async def respond_and_finish():
                 await asyncio.sleep(0.2)

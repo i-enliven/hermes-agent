@@ -31,7 +31,7 @@ def _make_runner():
 
 def _make_event(chat_id: str) -> MessageEvent:
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         user_id=f"user-{chat_id}",
         chat_id=chat_id,
         user_name="tester",

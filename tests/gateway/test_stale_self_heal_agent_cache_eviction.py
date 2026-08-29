@@ -137,7 +137,7 @@ class TestStaleSelfHealAgentCacheEviction:
         session_id.
         """
         runner, db = _make_runner_with_db(tmp_path)
-        db.create_session("dead_sid", source="telegram")
+        db.create_session("dead_sid", source="discord")
         db.end_session("dead_sid", "user_requested")  # #54878 self-heal target
 
         agent = object()
@@ -163,8 +163,8 @@ class TestStaleSelfHealAgentCacheEviction:
         fire when the cached session_id is not actually ended.
         """
         runner, db = _make_runner_with_db(tmp_path)
-        db.create_session("sA", source="telegram")
-        db.create_session("sB", source="telegram")
+        db.create_session("sA", source="discord")
+        db.create_session("sB", source="discord")
         # sA is NOT ended — a genuine live sibling conversation.
 
         agent = object()
@@ -184,7 +184,7 @@ class TestStaleSelfHealAgentCacheEviction:
         unaffected by the new dead-session check.
         """
         runner, db = _make_runner_with_db(tmp_path)
-        db.create_session("s1", source="telegram")
+        db.create_session("s1", source="discord")
 
         agent = object()
         with runner._agent_cache_lock:

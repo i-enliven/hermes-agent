@@ -55,7 +55,7 @@ async def _run_one_notifier_tick(monkeypatch, runner):
 def _make_runner(adapter):
     runner = GatewayRunner.__new__(GatewayRunner)
     runner._running = True
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._kanban_sub_fail_counts = {}
     runner._kanban_dispatcher_lock_handle = object()
     return runner
@@ -73,7 +73,7 @@ def _make_completed_task(delivery_mode):
         kb.add_notify_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-1",
             chat_type="dm",
             delivery_mode=delivery_mode,
@@ -90,7 +90,7 @@ def _unseen_terminal_events(tid):
         _, events = kb.unseen_events_for_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-1",
             kinds=["completed", "blocked", "gave_up", "crashed", "timed_out"],
         )
@@ -188,7 +188,7 @@ def test_wake_only_failure_cap_drops_subscription(tmp_path, monkeypatch):
     runner = _make_runner(adapter)
     # Simulate 11 prior consecutive failures (MAX_SEND_FAILURES = 12).
     runner._kanban_sub_fail_counts = {
-        (tid, "telegram", "chat-1", ""): 11,
+        (tid, "discord", "chat-1", ""): 11,
     }
     asyncio.run(_run_one_notifier_tick(monkeypatch, runner))
 

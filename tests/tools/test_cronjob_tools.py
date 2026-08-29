@@ -483,7 +483,7 @@ class TestLocalDeliveryNotice:
         # resolves to that chat — nothing to warn about.
         from gateway.session_context import set_session_vars
 
-        set_session_vars(platform="telegram", chat_id="999")
+        set_session_vars(platform="discord", chat_id="999")
         created = json.loads(
             cronjob(action="create", prompt="x", schedule="every 2m")
         )

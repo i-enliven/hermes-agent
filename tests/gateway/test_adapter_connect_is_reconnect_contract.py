@@ -18,7 +18,7 @@ To prevent this class of bug from regressing, we statically parse every
 ``adapter.py`` under ``gateway/platforms/`` and ``plugins/platforms/``
 and assert that its ``connect()`` method accepts an ``is_reconnect``
 keyword. Doing this via AST (rather than importing) avoids pulling every
-platform's optional third-party SDK (aiohttp, slack_sdk, telegram,
+platform's optional third-party SDK (aiohttp, slack_sdk, discord.py,
 matrix-nio, etc.) into the test environment.
 """
 
@@ -63,8 +63,8 @@ def _find_adapter_classes(module: ast.Module) -> list[ast.ClassDef]:
 
     Heuristic: any class whose name ends in ``Adapter`` and that defines
     an ``async def connect`` method. This catches every subclass of
-    ``BasePlatformAdapter`` in the tree today (QQAdapter, TelegramAdapter,
-    SlackAdapter, …) without importing the base class.
+    ``BasePlatformAdapter`` in the tree today (QQAdapter, SlackAdapter,
+    MatrixAdapter, …) without importing the base class.
     """
     hits: list[ast.ClassDef] = []
     for node in ast.walk(module):

@@ -52,7 +52,7 @@ class TestPlatformConfigRoundtrip:
             enabled=True,
             token="tok_123",
             home_channel=HomeChannel(
-                platform=Platform.TELEGRAM,
+                platform=Platform.DISCORD,
                 chat_id="555",
                 name="Home",
             ),
@@ -129,7 +129,7 @@ class TestPlatformConfigMalformedSections:
         restored = PlatformConfig.from_dict(
             {
                 "enabled": True,
-                "home_channel": "telegram:123",
+                "home_channel": "discord:123",
                 "extra": "oops",
             }
         )
@@ -143,14 +143,12 @@ class TestGetConnectedPlatforms:
     def test_returns_enabled_with_token(self):
         config = GatewayConfig(
             platforms={
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="t"),
-                Platform.DISCORD: PlatformConfig(enabled=False, token="d"),
+                Platform.DISCORD: PlatformConfig(enabled=True, token="t"),
                 Platform.SLACK: PlatformConfig(enabled=True),  # no token
             },
         )
         connected = config.get_connected_platforms()
-        assert Platform.TELEGRAM in connected
-        assert Platform.DISCORD not in connected
+        assert Platform.DISCORD in connected
         assert Platform.SLACK not in connected
 
 
@@ -245,7 +243,7 @@ class TestGatewayConfigRoundtrip:
         config = GatewayConfig(
             unauthorized_dm_behavior="ignore",
             platforms={
-                Platform.TELEGRAM: PlatformConfig(
+                Platform.DISCORD: PlatformConfig(
                     enabled=True,
                     extra={"unauthorized_dm_behavior": "pair"},
                 ),
@@ -255,7 +253,7 @@ class TestGatewayConfigRoundtrip:
         restored = GatewayConfig.from_dict(config.to_dict())
 
         assert restored.unauthorized_dm_behavior == "ignore"
-        assert restored.platforms[Platform.TELEGRAM].extra["unauthorized_dm_behavior"] == "pair"
+        assert restored.platforms[Platform.DISCORD].extra["unauthorized_dm_behavior"] == "pair"
 
     def test_email_defaults_to_ignore_for_unauthorized_dm_behavior(self):
         config = GatewayConfig(
@@ -746,13 +744,13 @@ class TestLoadGatewayConfig:
         config_path.write_text(
             "gateway:\n"
             "  platforms:\n"
-            "    telegram:\n"
+            "    discord:\n"
             "      enabled: false\n"
             "      token: nested-token\n"
             "      extra:\n"
             "        reply_prefix: nested\n"
             "platforms:\n"
-            "  telegram:\n"
+            "  discord:\n"
             "    enabled: true\n"
             "    token: top-token\n"
             "    extra:\n"
@@ -764,17 +762,17 @@ class TestLoadGatewayConfig:
 
         config = load_gateway_config()
 
-        telegram = config.platforms[Platform.TELEGRAM]
-        assert telegram.enabled is True
-        assert telegram.token == "top-token"
-        assert telegram.extra["reply_prefix"] == "top"
+        discord = config.platforms[Platform.DISCORD]
+        assert discord.enabled is True
+        assert discord.token == "top-token"
+        assert discord.extra["reply_prefix"] == "top"
 
     def test_shared_key_loop_bridges_allow_from_from_nested_platforms(self, tmp_path, monkeypatch):
         """Regression: shared-key loop must bridge allow_from / require_mention
         into PlatformConfig.extra even when the platform is configured only
-        under ``platforms:`` (no top-level ``telegram:`` block).
+        under ``platforms:`` (no top-level ``discord:`` block).
 
-        Before the fix, ``platform_cfg = yaml_cfg.get('telegram')`` returned
+        Before the fix, ``platform_cfg = yaml_cfg.get('discord')`` returned
         None for nested-only configs, so the loop skipped the platform entirely
         and allow_from was silently ignored.  The apply_yaml_config_fn dispatch
         received the same fix in #44f3e51; the shared-key loop now mirrors it.
@@ -784,7 +782,7 @@ class TestLoadGatewayConfig:
         config_path = hermes_home / "config.yaml"
         config_path.write_text(
             "platforms:\n"
-            "  telegram:\n"
+            "  discord:\n"
             "    allow_from:\n"
             "      - \"111222333\"\n"
             "      - \"444555666\"\n"
@@ -796,13 +794,16 @@ class TestLoadGatewayConfig:
 
         config = load_gateway_config()
 
-        telegram = config.platforms[Platform.TELEGRAM]
-        assert telegram.extra.get("allow_from") == ["111222333", "444555666"], (
-            "allow_from configured under platforms.telegram must be bridged "
+        discord = config.platforms[Platform.DISCORD]
+        allow_from = discord.extra.get("allow_from")
+        # Discord's apply_yaml_config_fn joins the allow_from list into a
+        # comma-separated string (DISCORD_ALLOWED_USERS env format).
+        assert allow_from == "111222333,444555666", (
+            "allow_from configured under platforms.discord must be bridged "
             "into PlatformConfig.extra by the shared-key loop"
         )
-        assert telegram.extra.get("require_mention") is True, (
-            "require_mention configured under platforms.telegram must be "
+        assert discord.extra.get("require_mention") is True, (
+            "require_mention configured under platforms.discord must be "
             "bridged into PlatformConfig.extra by the shared-key loop"
         )
 
@@ -813,7 +814,7 @@ class TestLoadGatewayConfig:
         config_path = hermes_home / "config.yaml"
         config_path.write_text(
             "unauthorized_dm_behavior: ignore\n"
-            "telegram:\n"
+            "discord:\n"
             "  unauthorized_dm_behavior: pair\n",
             encoding="utf-8",
         )
@@ -823,17 +824,17 @@ class TestLoadGatewayConfig:
         config = load_gateway_config()
 
         assert config.unauthorized_dm_behavior == "ignore"
-        assert config.platforms[Platform.TELEGRAM].extra["unauthorized_dm_behavior"] == "pair"
+        assert config.platforms[Platform.DISCORD].extra["unauthorized_dm_behavior"] == "pair"
 
 
-    def test_loads_telegram_rich_messages_from_gateway_platform_extra(self, tmp_path, monkeypatch):
+    def test_loads_rich_messages_from_gateway_platform_extra(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
         config_path.write_text(
             "gateway:\n"
             "  platforms:\n"
-            "    telegram:\n"
+            "    discord:\n"
             "      extra:\n"
             "        rich_messages: false\n",
             encoding="utf-8",
@@ -843,26 +844,26 @@ class TestLoadGatewayConfig:
 
         config = load_gateway_config()
 
-        assert config.platforms[Platform.TELEGRAM].extra["rich_messages"] is False
+        assert config.platforms[Platform.DISCORD].extra["rich_messages"] is False
 
 
-    def test_telegram_proxy_env_takes_precedence_over_config(self, tmp_path, monkeypatch):
+    def test_proxy_env_takes_precedence_over_config(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
         config_path.write_text(
-            "telegram:\n"
+            "discord:\n"
             "  proxy_url: http://from-config:8080\n",
             encoding="utf-8",
         )
 
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-        monkeypatch.setenv("TELEGRAM_PROXY", "socks5://from-env:1080")
+        monkeypatch.setenv("DISCORD_PROXY", "socks5://from-env:1080")
 
         load_gateway_config()
 
         import os
-        assert os.environ.get("TELEGRAM_PROXY") == "socks5://from-env:1080"
+        assert os.environ.get("DISCORD_PROXY") == "socks5://from-env:1080"
 
     def test_profile_scoped_env_overrides_do_not_fall_back_to_default_profile_env(
         self,
@@ -999,12 +1000,12 @@ class TestHomeChannelEnvOverrides:
                 ("C123", "Ops"),
             ),
             (
-                Platform.SIGNAL,
+                Platform.DISCORD,
                 PlatformConfig(
                     enabled=True,
                     extra={"http_url": "http://localhost:9090", "account": "+15551234567"},
                 ),
-                {"SIGNAL_HOME_CHANNEL": "+1555000", "SIGNAL_HOME_CHANNEL_NAME": "Phone"},
+                {"DISCORD_HOME_CHANNEL": "+1555000", "DISCORD_HOME_CHANNEL_NAME": "Phone"},
                 ("+1555000", "Phone"),
             ),
             (

@@ -926,15 +926,15 @@ class TestShouldSendMediaAsAudio:
     def test_unknown_extension_returns_false(self):
         from gateway.platforms.base import should_send_media_as_audio
         assert should_send_media_as_audio(None, ".png") is False
-        assert should_send_media_as_audio("telegram", ".pdf") is False
+        assert should_send_media_as_audio("discord", ".pdf") is False
 
 
     def test_telegram_ogg_opus_only_when_voice_flagged(self):
         from gateway.platforms.base import should_send_media_as_audio
-        assert should_send_media_as_audio("telegram", ".ogg", is_voice=True) is True
-        assert should_send_media_as_audio("telegram", ".opus", is_voice=True) is True
-        assert should_send_media_as_audio("telegram", ".ogg") is False
-        assert should_send_media_as_audio("telegram", ".opus") is False
+        assert should_send_media_as_audio("discord", ".ogg", is_voice=True) is True
+        assert should_send_media_as_audio("discord", ".opus", is_voice=True) is True
+        assert should_send_media_as_audio("discord", ".ogg") is False
+        assert should_send_media_as_audio("discord", ".opus") is False
 
 
 # ---------------------------------------------------------------------------
@@ -962,7 +962,7 @@ class TestTruncateMessage:
         from gateway.config import Platform, PlatformConfig
 
         config = PlatformConfig(enabled=True, token="test")
-        return StubAdapter(config=config, platform=Platform.TELEGRAM)
+        return StubAdapter(config=config, platform=Platform.DISCORD)
 
     def test_short_message_single_chunk(self):
         adapter = self._adapter()
@@ -1188,7 +1188,7 @@ class _CapturingAdapter(BasePlatformAdapter):
 
     def __init__(self):
         from gateway.config import Platform, PlatformConfig
-        super().__init__(PlatformConfig(enabled=True), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True), Platform.DISCORD)
         self.sent: list[dict] = []
 
     async def connect(self) -> bool:  # pragma: no cover - not exercised

@@ -78,13 +78,13 @@ class _DeleteCapableAdapter(BasePlatformAdapter):
 
 def _no_delete_adapter():
     return _NoDeleteAdapter(
-        PlatformConfig(enabled=True, token="t"), Platform.TELEGRAM
+        PlatformConfig(enabled=True, token="t"), Platform.DISCORD
     )
 
 
 def _delete_adapter():
     return _DeleteCapableAdapter(
-        PlatformConfig(enabled=True, token="t"), Platform.TELEGRAM
+        PlatformConfig(enabled=True, token="t"), Platform.DISCORD
     )
 
 
@@ -93,7 +93,7 @@ def _make_event(text="/stop", chat_id="42"):
         text=text,
         message_id="msg-1",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id=chat_id,
             user_id="u-1",
         ),

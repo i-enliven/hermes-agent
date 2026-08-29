@@ -26,7 +26,7 @@ def _make_entry(key: str, session_id: str) -> SessionEntry:
         session_id=session_id,
         created_at=now - timedelta(hours=2),
         updated_at=now - timedelta(hours=1),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
     )
 
@@ -34,7 +34,7 @@ def _make_entry(key: str, session_id: str) -> SessionEntry:
 def _make_entry_with_origin(key: str, session_id: str) -> SessionEntry:
     entry = _make_entry(key, session_id)
     entry.origin = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="5140768830",
         chat_type="dm",
         user_id="5140768830",
@@ -147,9 +147,9 @@ class TestPruneStaleSessionsLocked:
             "chat_id": "5140768830",
             "chat_type": "dm",
         }
-        db.create_session("sid_before_reset", "telegram", **peer)
+        db.create_session("sid_before_reset", "discord", **peer)
         db.append_message("sid_before_reset", "user", "private old context")
-        db.create_session("sid_reset", "telegram", **peer)
+        db.create_session("sid_reset", "discord", **peer)
         db.append_message("sid_reset", "user", "/new")
         db.end_session("sid_reset", "session_reset")
 

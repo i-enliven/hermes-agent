@@ -95,7 +95,7 @@ def _bootstrap(monkeypatch, tmp_path, db):
         session_id=SESSION_ID,
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="group",
     )
     # Empty history → triggers the first-turn ``session_meta`` write path.
@@ -132,7 +132,7 @@ def _event():
     return MessageEvent(
         text="hello world",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1001",
             chat_type="group",
             user_id="12345",
@@ -143,7 +143,7 @@ def _event():
 
 def _source():
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="-1001",
         chat_type="group",
         user_id="12345",
@@ -169,7 +169,7 @@ async def test_first_turn_session_meta_is_captured_by_rebaseline(
     from hermes_state import SessionDB
 
     db = SessionDB(db_path=tmp_path / "sessions.db")
-    db.create_session(SESSION_ID, source="telegram")
+    db.create_session(SESSION_ID, source="discord")
 
     runner = _bootstrap(monkeypatch, tmp_path, db)
 

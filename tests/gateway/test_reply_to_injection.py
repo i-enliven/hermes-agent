@@ -18,7 +18,7 @@ from gateway.session import SessionSource
 def _make_runner() -> GatewayRunner:
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake")},
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake")},
     )
     runner.adapters = {}
     runner._model = "openai/gpt-4.1-mini"
@@ -28,7 +28,7 @@ def _make_runner() -> GatewayRunner:
 
 def _source() -> SessionSource:
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="123",
         chat_name="DM",
         chat_type="private",

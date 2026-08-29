@@ -20,7 +20,7 @@ import gateway.run as gw
 
 
 class _Source:
-    platform = "telegram"
+    platform = "discord"
 
 
 class _Event:

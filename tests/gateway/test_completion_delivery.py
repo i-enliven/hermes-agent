@@ -36,7 +36,7 @@ def isolated_registry(tmp_path, monkeypatch):
 def _runner(adapter, *, origins=None):
     runner = object.__new__(GatewayRunner)
     runner._running = True
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner.session_store = SimpleNamespace(
         _ensure_loaded=lambda: None,
         _entries=origins or {},
@@ -74,7 +74,7 @@ def _completion_event(*, started_at, session_id="proc_reused"):
         "type": "completion",
         "session_id": session_id,
         "session_key": "agent:main:telegram:dm:123",
-        "platform": "telegram",
+        "platform": "discord",
         "chat_type": "dm",
         "chat_id": "123",
         "started_at": started_at,
@@ -238,7 +238,7 @@ def test_explicit_kill_returns_output_before_consuming_notification(monkeypatch)
         "session_id": session.id,
         "check_interval": 0,
         "session_key": "agent:main:telegram:dm:123",
-        "platform": "telegram",
+        "platform": "discord",
         "chat_type": "dm",
         "chat_id": "123",
         "notify_on_complete": True,
@@ -308,7 +308,7 @@ def test_autonomous_completion_redacts_real_command_and_output_secrets(monkeypat
         "session_id": session.id,
         "check_interval": 0,
         "session_key": "agent:main:telegram:dm:123",
-        "platform": "telegram",
+        "platform": "discord",
         "chat_type": "dm",
         "chat_id": "123",
         "notify_on_complete": True,
@@ -341,7 +341,7 @@ def test_concurrent_process_watchers_coalesce_one_session_completion_turn(monkey
             "session_id": session.id,
             "check_interval": 0,
             "session_key": "agent:main:telegram:dm:123",
-            "platform": "telegram",
+            "platform": "discord",
             "chat_type": "dm",
             "chat_id": "123",
             "notify_on_complete": True,

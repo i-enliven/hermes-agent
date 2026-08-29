@@ -65,7 +65,7 @@ def _make_event(text: str = "", message_type=MessageType.TEXT, chat_id="123") ->
         user_id="user1",
         platform=MagicMock(),
     )
-    source.platform.value = "telegram"
+    source.platform.value = "discord"
     source.thread_id = None
     event = MessageEvent(text=text, message_type=message_type, source=source)
     event.message_id = "msg42"
@@ -141,7 +141,7 @@ class TestHandleVoiceCommand:
             _auto_tts_default=False,
             _auto_tts_disabled_chats=set(),
             _auto_tts_enabled_chats=set(),
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
         )
 
         runner._sync_voice_mode_state_to_adapter(adapter)
@@ -162,7 +162,7 @@ class TestHandleVoiceCommand:
             _auto_tts_default=False,
             _auto_tts_disabled_chats=set(),
             _auto_tts_enabled_chats=set(),
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
         )
 
         runner._sync_voice_mode_state_to_adapter(adapter)
@@ -302,7 +302,7 @@ class TestSendVoiceReply:
         mock_adapter = AsyncMock()
         mock_adapter.send_voice = AsyncMock()
         event = _make_event()
-        event.source.platform = Platform.TELEGRAM
+        event.source.platform = Platform.DISCORD
         runner.adapters[event.source.platform] = mock_adapter
 
         tts_result = json.dumps({"success": True, "file_path": "/tmp/test.ogg"})
@@ -327,7 +327,7 @@ class TestSendVoiceReply:
         mock_adapter = AsyncMock()
         mock_adapter.send_voice = AsyncMock()
         event = _make_event()
-        event.source.platform = Platform.TELEGRAM
+        event.source.platform = Platform.DISCORD
         event.source.chat_type = "dm"
         event.source.thread_id = "20197"
         event.message_id = "462"

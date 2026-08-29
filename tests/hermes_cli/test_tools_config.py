@@ -127,7 +127,7 @@ def test_discord_toolsets_do_not_leak_to_other_platforms():
     must never appear on a non-discord platform even when that platform is
     explicitly configured."""
     config = {"platform_toolsets": {"telegram": ["hermes-telegram", "discord"]}}
-    enabled = _get_platform_tools(config, "telegram")
+    enabled = _get_platform_tools(config, "discord")
     assert "discord" not in enabled
     assert "discord_admin" not in enabled
 
@@ -760,12 +760,12 @@ def test_kanban_not_reported_as_removed_in_diff():
     config still keeps kanban (verified separately by _save_platform_tools).
     """
     config = {"platform_toolsets": {"telegram": ["kanban", "web", "terminal"]}}
-    current = _get_platform_tools(config, "telegram", include_default_mcp_servers=False)
+    current = _get_platform_tools(config, "discord", include_default_mcp_servers=False)
     assert "kanban" in current  # resolved as enabled at read time
 
     # The checklist can only return configurable keys it was shown; kanban
     # is never one of them.
-    universe = _checklist_toolset_keys("telegram")
+    universe = _checklist_toolset_keys("discord")
     new_enabled = {t for t in current if t != "kanban"}
 
     # Unscoped (old, buggy) diff would surface kanban.

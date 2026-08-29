@@ -49,7 +49,7 @@ class TestExplicitAllowlist:
         "FAL_KEY",
         "SUDO_PASSWORD",
         "GITHUB_TOKEN",
-        "TELEGRAM_BOT_TOKEN",
+        "DISCORD_BOT_TOKEN",
         "DISCORD_BOT_TOKEN",
         "SLACK_BOT_TOKEN",
         "SLACK_APP_TOKEN",

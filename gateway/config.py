@@ -1919,7 +1919,8 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
             scope_id=existing_home.scope_id if existing_home and same_home else None,
         )
     
-    # Signal
+    mattermost_token = getenv("MATTERMOST_TOKEN")
+    if mattermost_token:
         mattermost_url = getenv("MATTERMOST_URL", "")
         if not mattermost_url:
             logger.warning("MATTERMOST_TOKEN set but MATTERMOST_URL is missing")

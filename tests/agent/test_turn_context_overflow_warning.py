@@ -259,6 +259,6 @@ class TestWarningSurvivesNoiseFilter:
 
         message = self._emitted_warning("cooldown:30")
         assert (
-            _prepare_gateway_status_message(Platform.TELEGRAM, "warn", message)
+            _prepare_gateway_status_message(Platform.DISCORD, "warn", message)
             == message
         )

@@ -28,7 +28,7 @@ def _insert(db, session_id, *, age_days, **overrides):
     """Insert a keyed gateway row directly, defaulting to the junk shape."""
     row = {
         "id": session_id,
-        "source": "telegram",
+        "source": "discord",
         "user_id": "user-1",
         "session_key": f"agent:main:telegram:dm:{session_id}",
         "chat_id": "chat-1",

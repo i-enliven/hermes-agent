@@ -11,18 +11,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Minimal stubs so we can import gateway code without heavy deps
 # ---------------------------------------------------------------------------
-import sys, types
 
-_tg = types.ModuleType("telegram")
-_tg.constants = types.ModuleType("telegram.constants")
-_ct = MagicMock()
-_ct.SUPERGROUP = "supergroup"
-_ct.GROUP = "group"
-_ct.PRIVATE = "private"
-_tg.constants.ChatType = _ct
-sys.modules.setdefault("telegram", _tg)
-sys.modules.setdefault("telegram.constants", _tg.constants)
-sys.modules.setdefault("telegram.ext", types.ModuleType("telegram.ext"))
 
 from gateway.platforms.base import (
     MessageEvent,
@@ -37,7 +26,7 @@ from gateway.platforms.base import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_event(text="hello", chat_id="123", platform_val="telegram"):
+def _make_event(text="hello", chat_id="123", platform_val="discord"):
     """Build a minimal MessageEvent."""
     source = SessionSource(
         platform=MagicMock(value=platform_val),
@@ -78,7 +67,7 @@ def _make_runner():
     return runner, _AGENT_PENDING_SENTINEL
 
 
-def _make_adapter(platform_val="telegram"):
+def _make_adapter(platform_val="discord"):
     """Build a minimal adapter mock."""
     adapter = MagicMock()
     adapter._pending_messages = {}
@@ -98,55 +87,6 @@ def _make_adapter(platform_val="telegram"):
 class TestBusySessionAck:
     """User sends a message while agent is running — should get acknowledgment."""
 
-
-    @pytest.mark.asyncio
-    async def test_telegram_grace_followups_respect_queue_fifo(self, monkeypatch):
-        """Rapid Telegram text follow-ups in queue mode must not merge."""
-        from gateway.run import GatewayRunner
-
-        monkeypatch.setenv("HERMES_TELEGRAM_FOLLOWUP_GRACE_SECONDS", "3.0")
-
-        runner, _sentinel = _make_runner()
-        runner._busy_input_mode = "queue"
-        runner._queued_events = {}
-        adapter = _make_adapter()
-
-        source = SessionSource(
-            platform=Platform.TELEGRAM,
-            chat_id="123",
-            chat_type="dm",
-            user_id="user1",
-        )
-        sk = build_session_key(source)
-        runner.adapters[source.platform] = adapter
-
-        agent = MagicMock()
-        agent.get_activity_summary.return_value = {
-            "seconds_since_activity": 0.0,
-        }
-        runner._running_agents[sk] = agent
-        runner._running_agents_ts[sk] = time.time()
-
-        events = [
-            MessageEvent(
-                text=text,
-                message_type=MessageType.TEXT,
-                source=source,
-                message_id=f"m-{idx}",
-            )
-            for idx, text in enumerate(("first", "second", "third"), start=1)
-        ]
-
-        for event in events:
-            result = await GatewayRunner._handle_message(runner, event)
-            assert result is None
-
-        assert adapter._pending_messages[sk].text == "first"
-        assert [event.text for event in runner._queued_events[sk]] == [
-            "second",
-            "third",
-        ]
-        agent.interrupt.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_sends_ack_when_agent_running(self):
@@ -332,7 +272,7 @@ class TestBusySessionAck:
 
         # Both events must share the SAME platform object so they resolve to
         # the same adapter (a fresh MagicMock per event would not).
-        shared_platform = Platform.TELEGRAM
+        shared_platform = Platform.DISCORD
 
         def _evt(text):
             src = SessionSource(
@@ -372,7 +312,7 @@ class TestBusySessionAck:
         monkeypatch.setattr(
             _gr,
             "_load_gateway_config",
-            lambda: {"display": {"platforms": {"telegram": {"busy_ack_detail": True}}}},
+            lambda: {"display": {"platforms": {"discord": {"busy_ack_detail": True}}}},
         )
         runner, sentinel = _make_runner()
         runner._busy_input_mode = "interrupt"

@@ -47,7 +47,7 @@ def _make_event():
     return MessageEvent(
         text="/model",
         message_type=MessageType.TEXT,
-        source=SessionSource(platform=Platform.TELEGRAM, chat_id="12345", chat_type="dm"),
+        source=SessionSource(platform=Platform.DISCORD, chat_id="12345", chat_type="dm"),
     )
 
 
@@ -123,7 +123,7 @@ async def test_picker_path_offloads_list_picker_providers(_isolated_config, monk
     )
 
     runner = _make_runner()
-    runner.adapters = {Platform.TELEGRAM: _FakePickerAdapter()}
+    runner.adapters = {Platform.DISCORD: _FakePickerAdapter()}
     # Stub the metadata/anchor helpers the picker branch calls before sending.
     monkeypatch.setattr(runner, "_thread_metadata_for_source", lambda *a, **k: None, raising=False)
     monkeypatch.setattr(runner, "_reply_anchor_for_event", lambda *a, **k: None, raising=False)

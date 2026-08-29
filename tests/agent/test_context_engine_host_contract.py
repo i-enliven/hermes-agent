@@ -37,7 +37,7 @@ def _bare_agent() -> AIAgent:
     agent = object.__new__(AIAgent)
     agent.session_id = "test-session"
     agent.model = "fake-model"
-    agent.platform = "telegram"
+    agent.platform = "discord"
     agent._gateway_session_key = "agent:main:telegram:dm:42"
     return agent
 

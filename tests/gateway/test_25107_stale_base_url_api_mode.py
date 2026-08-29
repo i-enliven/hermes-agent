@@ -45,7 +45,7 @@ class _FakePickerAdapter:
 
 def _make_runner(adapter=None):
     runner = object.__new__(GatewayRunner)
-    runner.adapters = {Platform.TELEGRAM: adapter} if adapter else {}
+    runner.adapters = {Platform.DISCORD: adapter} if adapter else {}
     runner._voice_mode = {}
     runner._session_model_overrides = {}
     runner._running_agents = {}
@@ -56,7 +56,7 @@ def _make_event(text):
     return MessageEvent(
         text=text,
         message_type=MessageType.TEXT,
-        source=SessionSource(platform=Platform.TELEGRAM, chat_id="12345", chat_type="dm"),
+        source=SessionSource(platform=Platform.DISCORD, chat_id="12345", chat_type="dm"),
     )
 
 
@@ -149,7 +149,7 @@ async def test_typed_switch_to_custom_clears_stale_base_url_and_api_mode(tmp_pat
 async def _drive_picker(runner, event):
     sent = await runner._handle_model_command(event)
     assert sent is None
-    adapter = runner.adapters[Platform.TELEGRAM]
+    adapter = runner.adapters[Platform.DISCORD]
     assert adapter.captured_callback is not None, "picker callback was not wired"
     return await adapter.captured_callback("12345", "local-llama", "custom")
 

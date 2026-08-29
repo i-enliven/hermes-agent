@@ -112,7 +112,7 @@ async def test_gateway_stop_settles_completion_batch_before_adapter_disconnect()
         "session_id": "shutdown-batch",
         "started_at": 1.0,
         "session_key": "telegram:dm:123456:u1",
-        "platform": "telegram",
+        "platform": "discord",
         "chat_type": "dm",
         "chat_id": "123456",
         "user_id": "u1",
@@ -158,8 +158,8 @@ async def test_in_chat_restart_skips_home_shutdown_even_with_active_session():
     restart_source.message_id = "restart-command"
     runner._restart_requested = True
     runner._restart_command_source = restart_source
-    runner.config.platforms[Platform.TELEGRAM].home_channel = HomeChannel(
-        platform=Platform.TELEGRAM,
+    runner.config.platforms[Platform.DISCORD].home_channel = HomeChannel(
+        platform=Platform.DISCORD,
         chat_id="home-chat",
         name="Telegram Home",
     )

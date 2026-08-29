@@ -16,8 +16,8 @@ def test_truthy_strings_include_on():
 
 def test_env_var_enabled_default_respected():
     with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("SIGNAL_IGNORE_STORIES", None)
-        assert env_var_enabled("SIGNAL_IGNORE_STORIES", "true") is True
-        assert env_var_enabled("SIGNAL_IGNORE_STORIES") is False
+        os.environ.pop("DISCORD_IGNORE_STORIES", None)
+        assert env_var_enabled("DISCORD_IGNORE_STORIES", "true") is True
+        assert env_var_enabled("DISCORD_IGNORE_STORIES") is False
 
 

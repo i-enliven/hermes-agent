@@ -18,7 +18,7 @@ from plugins.teams_pipeline.runtime import (
 
 def test_gateway_runner_skips_wiring_without_msgraph_adapter(monkeypatch):
     runner = GatewayRunner.__new__(GatewayRunner)
-    runner.adapters = {Platform.TELEGRAM: MagicMock()}
+    runner.adapters = {Platform.DISCORD: MagicMock()}
     runner._teams_pipeline_runtime_error = None
 
     called = False

@@ -41,7 +41,7 @@ def _runner_with(adapters: dict):
 
 def _telegram_adapter(connected=True):
     a = MagicMock()
-    a.platform = Platform.TELEGRAM
+    a.platform = Platform.DISCORD
     a.is_connected = connected
     a._set_reaction = AsyncMock(return_value=True)
     a.rename_dm_topic = AsyncMock(return_value=None)
@@ -72,9 +72,9 @@ class TestGateDefaultOff:
         actions = PlatformActions("some-plugin")
         adapter = _telegram_adapter()
 
-        with _grant(False), _runner_with({Platform.TELEGRAM: adapter}):
+        with _grant(False), _runner_with({Platform.DISCORD: adapter}):
             result = asyncio.run(
-                actions.add_reaction("telegram", "123", "456", "\U0001F44D")
+                actions.add_reaction("discord", "123", "456", "\U0001F44D")
             )
 
         assert result["ok"] is False
@@ -88,7 +88,7 @@ class TestGateDefaultOff:
             "hermes_cli.plugin_capabilities._plugin_entry", return_value={}
         ):
             result = asyncio.run(
-                actions.set_thread_title("telegram", "1", "2", "t")
+                actions.set_thread_title("discord", "1", "2", "t")
             )
         assert result == {
             "ok": False,
@@ -102,9 +102,9 @@ class TestGateDefaultOff:
         with patch(
             "hermes_cli.plugin_capabilities._plugin_entry",
             return_value={"allow_platform_actions": True},
-        ), _runner_with({Platform.TELEGRAM: adapter}):
+        ), _runner_with({Platform.DISCORD: adapter}):
             result = asyncio.run(
-                actions.add_reaction("telegram", "123", "456", "\U0001F44D")
+                actions.add_reaction("discord", "123", "456", "\U0001F44D")
             )
         assert result["ok"] is True
 
@@ -114,9 +114,9 @@ class TestGateDefaultOff:
         with patch(
             "hermes_cli.plugin_capabilities._plugin_entry",
             return_value={"granted_capabilities": ["gateway.platform_actions"]},
-        ), _runner_with({Platform.TELEGRAM: adapter}):
+        ), _runner_with({Platform.DISCORD: adapter}):
             result = asyncio.run(
-                actions.add_reaction("telegram", "123", "456", "\U0001F44D")
+                actions.add_reaction("discord", "123", "456", "\U0001F44D")
             )
         assert result["ok"] is True
 
@@ -127,7 +127,7 @@ class TestGateDefaultOff:
             side_effect=RuntimeError("corrupt config"),
         ):
             result = asyncio.run(
-                actions.add_reaction("telegram", "1", "2", "x")
+                actions.add_reaction("discord", "1", "2", "x")
             )
         assert result["error"] == "capability_not_granted"
 
@@ -136,7 +136,7 @@ class TestStructuredErrors:
     def test_no_gateway_runner(self):
         actions = PlatformActions("p")
         with _grant(True), patch("gateway.run._gateway_runner_ref", lambda: None):
-            result = asyncio.run(actions.add_reaction("telegram", "1", "2", "x"))
+            result = asyncio.run(actions.add_reaction("discord", "1", "2", "x"))
         assert result["error"] == "gateway_unavailable"
 
     def test_unknown_platform(self):
@@ -148,14 +148,14 @@ class TestStructuredErrors:
     def test_adapter_not_registered(self):
         actions = PlatformActions("p")
         with _grant(True), _runner_with({}):
-            result = asyncio.run(actions.add_reaction("telegram", "1", "2", "x"))
+            result = asyncio.run(actions.add_reaction("discord", "1", "2", "x"))
         assert result["error"] == "adapter_not_registered"
 
     def test_adapter_disconnected(self):
         actions = PlatformActions("p")
         adapter = _telegram_adapter(connected=False)
-        with _grant(True), _runner_with({Platform.TELEGRAM: adapter}):
-            result = asyncio.run(actions.add_reaction("telegram", "1", "2", "x"))
+        with _grant(True), _runner_with({Platform.DISCORD: adapter}):
+            result = asyncio.run(actions.add_reaction("discord", "1", "2", "x"))
         assert result["error"] == "adapter_disconnected"
         adapter._set_reaction.assert_not_awaited()
 
@@ -163,15 +163,15 @@ class TestStructuredErrors:
     def test_invalid_arguments(self, bad):
         actions = PlatformActions("p")
         with _grant(True):
-            result = asyncio.run(actions.add_reaction("telegram", "1", "2", bad))
+            result = asyncio.run(actions.add_reaction("discord", "1", "2", bad))
         assert result["error"] == "invalid_argument"
 
     def test_adapter_exception_becomes_action_failed(self):
         actions = PlatformActions("p")
         adapter = _telegram_adapter()
         adapter._set_reaction = AsyncMock(side_effect=RuntimeError("api down"))
-        with _grant(True), _runner_with({Platform.TELEGRAM: adapter}):
-            result = asyncio.run(actions.add_reaction("telegram", "1", "2", "x"))
+        with _grant(True), _runner_with({Platform.DISCORD: adapter}):
+            result = asyncio.run(actions.add_reaction("discord", "1", "2", "x"))
         assert result["ok"] is False
         assert result["error"] == "action_failed"
         assert "api down" in result["detail"]
@@ -190,9 +190,9 @@ class TestVerbRouting:
     def test_telegram_add_reaction_routes_to_set_reaction(self):
         actions = PlatformActions("p")
         adapter = _telegram_adapter()
-        with _grant(True), _runner_with({Platform.TELEGRAM: adapter}):
+        with _grant(True), _runner_with({Platform.DISCORD: adapter}):
             result = asyncio.run(
-                actions.add_reaction("telegram", "-100123", "456", "\U0001F44D")
+                actions.add_reaction("discord", "-100123", "456", "\U0001F44D")
             )
         assert result == {"ok": True, "action": "add_reaction"}
         adapter._set_reaction.assert_awaited_once_with("-100123", "456", "\U0001F44D")
@@ -201,16 +201,16 @@ class TestVerbRouting:
         actions = PlatformActions("p")
         adapter = _telegram_adapter()
         adapter._set_reaction = AsyncMock(return_value=False)
-        with _grant(True), _runner_with({Platform.TELEGRAM: adapter}):
-            result = asyncio.run(actions.add_reaction("telegram", "1", "2", "x"))
+        with _grant(True), _runner_with({Platform.DISCORD: adapter}):
+            result = asyncio.run(actions.add_reaction("discord", "1", "2", "x"))
         assert result["error"] == "action_failed"
 
     def test_telegram_set_thread_title_routes_to_rename_dm_topic(self):
         actions = PlatformActions("p")
         adapter = _telegram_adapter()
-        with _grant(True), _runner_with({Platform.TELEGRAM: adapter}):
+        with _grant(True), _runner_with({Platform.DISCORD: adapter}):
             result = asyncio.run(
-                actions.set_thread_title("telegram", "123", "42", "New title")
+                actions.set_thread_title("discord", "123", "42", "New title")
             )
         assert result == {"ok": True, "action": "set_thread_title"}
         adapter.rename_dm_topic.assert_awaited_once_with("123", 42, "New title")

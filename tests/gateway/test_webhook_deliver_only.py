@@ -44,7 +44,7 @@ def _create_app(adapter: WebhookAdapter) -> web.Application:
     return app
 
 
-def _wire_mock_target(adapter: WebhookAdapter, platform_name: str = "telegram"):
+def _wire_mock_target(adapter: WebhookAdapter, platform_name: str = "discord"):
     """Attach a gateway_runner with a mocked target adapter."""
     mock_target = AsyncMock()
     mock_target.send = AsyncMock(return_value=SendResult(success=True))
@@ -69,7 +69,7 @@ class TestDeliverOnlyBypassesAgent:
         routes = {
             "match-alert": {
                 "secret": _INSECURE_NO_AUTH,
-                "deliver": "telegram",
+                "deliver": "discord",
                 "deliver_only": True,
                 "deliver_extra": {"chat_id": "12345"},
                 "prompt": "{payload.user} matched with {payload.other}!",
@@ -132,7 +132,7 @@ class TestDeliverOnlyStatusCodes:
         routes = {
             "r": {
                 "secret": _INSECURE_NO_AUTH,
-                "deliver": "telegram",
+                "deliver": "discord",
                 "deliver_only": True,
                 "deliver_extra": {"chat_id": "c-1"},
                 "prompt": "hi",
@@ -171,7 +171,7 @@ class TestDeliverOnlyStartupValidation:
         routes = {
             "good": {
                 "secret": _INSECURE_NO_AUTH,
-                "deliver": "telegram",
+                "deliver": "discord",
                 "deliver_only": True,
                 "deliver_extra": {"chat_id": "c-1"},
                 "prompt": "hi",
@@ -202,7 +202,7 @@ class TestDeliverOnlySecurityInvariants:
         routes = {
             "r": {
                 "secret": secret,
-                "deliver": "telegram",
+                "deliver": "discord",
                 "deliver_only": True,
                 "deliver_extra": {"chat_id": "c-1"},
                 "prompt": "hi",

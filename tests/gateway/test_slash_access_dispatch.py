@@ -311,14 +311,14 @@ async def test_gating_isolated_per_platform():
                     "user_allowed_commands": [],
                 },
             ),
-            Platform.TELEGRAM: PlatformConfig(
+            Platform.DISCORD: PlatformConfig(
                 enabled=True, token="***", extra={}
             ),
         }
     )
     runner.adapters = {
         Platform.DISCORD: MagicMock(send=AsyncMock()),
-        Platform.TELEGRAM: MagicMock(send=AsyncMock()),
+        Platform.DISCORD: MagicMock(send=AsyncMock()),
     }
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(
@@ -332,7 +332,7 @@ async def test_gating_isolated_per_platform():
         session_id="sess-1",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
         total_tokens=0,
     )
@@ -363,6 +363,6 @@ async def test_gating_isolated_per_platform():
     runner._emit_gateway_run_progress = AsyncMock()
 
     # Same user_id on Telegram → must be unrestricted (Telegram has no admin list).
-    tg_src = _make_source(platform=Platform.TELEGRAM, user_id="999", chat_id="t1")
+    tg_src = _make_source(platform=Platform.DISCORD, user_id="999", chat_id="t1")
     result = await runner._handle_message(_make_event("/whoami", tg_src))
     assert "Tier: unrestricted" in result

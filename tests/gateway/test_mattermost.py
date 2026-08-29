@@ -51,10 +51,10 @@ class TestMattermostDisplayHygiene:
 
         assert _resolve_gateway_display_bool(
             user_config,
-            "telegram",
+            "discord",
             "thinking_progress",
             default=False,
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             require_platform_override_for={Platform.MATTERMOST},
         ) is True
 

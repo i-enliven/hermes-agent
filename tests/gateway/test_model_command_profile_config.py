@@ -24,7 +24,7 @@ def _make_event():
         text="/model",
         message_type=MessageType.TEXT,
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="secondary-chat",
             chat_type="group",
         ),
@@ -63,7 +63,7 @@ async def test_model_picker_reads_routed_profile_config(tmp_path, monkeypatch):
 
     runner = object.__new__(GatewayRunner)
     adapter = _CapturingPickerAdapter()
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner.config = SimpleNamespace(multiplex_profiles=True)
     runner._voice_mode = {}
     runner._session_model_overrides = {}

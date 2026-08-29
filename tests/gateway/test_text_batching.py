@@ -5,7 +5,7 @@ platform's character limit.  Each adapter should buffer rapid successive
 text messages from the same session and aggregate them before dispatching.
 
 Covers: Discord, Matrix, WeCom, and the adaptive delay logic for
-Telegram and Feishu.
+Discord and Feishu.
 """
 
 import asyncio
@@ -203,16 +203,16 @@ class TestWeComTextBatching:
 
 
 # =====================================================================
-# Telegram adaptive delay (PR #6891)
+# Discord adaptive delay (PR #6891)
 # =====================================================================
 
-def _make_telegram_adapter():
-    """Create a minimal TelegramAdapter for testing adaptive delay."""
-    from plugins.platforms.telegram.adapter import TelegramAdapter
+def _make_adaptive_delay_adapter():
+    """Create a minimal DiscordAdapter for testing adaptive delay."""
+    from plugins.platforms.discord.adapter import DiscordAdapter
 
     config = PlatformConfig(enabled=True, token="test-token")
-    adapter = object.__new__(TelegramAdapter)
-    adapter._platform = Platform.TELEGRAM
+    adapter = object.__new__(DiscordAdapter)
+    adapter._platform = Platform.DISCORD
     adapter.config = config
     adapter._pending_text_batches = {}
     adapter._pending_text_batch_tasks = {}
@@ -225,11 +225,11 @@ def _make_telegram_adapter():
     return adapter
 
 
-class TestTelegramAdaptiveDelay:
+class TestAdaptiveDelay:
     @pytest.mark.asyncio
     async def test_short_chunk_uses_normal_delay(self):
-        adapter = _make_telegram_adapter()
-        adapter._enqueue_text_event(_make_event("short msg", Platform.TELEGRAM))
+        adapter = _make_adaptive_delay_adapter()
+        adapter._enqueue_text_event(_make_event("short msg", Platform.DISCORD))
 
         # Should flush after the normal 0.1s delay
         await asyncio.sleep(0.15)

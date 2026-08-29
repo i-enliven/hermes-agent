@@ -60,7 +60,7 @@ class TestGatewayPinningFailsClosed:
             session_id=session_id,
             created_at=datetime.now(),
             updated_at=datetime.now(),
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_type="group",
         )
 
@@ -181,11 +181,11 @@ class TestGatewayPinningFailsClosed:
         from hermes_state import AsyncSessionDB, SessionDB
 
         session_db = SessionDB(db_path=tmp_path / "state.db")
-        session_db.create_session("sess_parent", source="telegram")
+        session_db.create_session("sess_parent", source="discord")
         session_db.end_session("sess_parent", end_reason="compression")
         session_db.create_session(
             "sess_tip",
-            source="telegram",
+            source="discord",
             parent_session_id="sess_parent",
         )
 

@@ -74,7 +74,7 @@ class TestResolveSessionPlatform:
 class TestResolveSessionSource:
     def test_explicit_source_param_wins(self, clean_env):
         _srv = _reload_resolver()
-        assert _srv._resolve_session_source("telegram") == "telegram"
+        assert _srv._resolve_session_source("discord") == "discord"
 
 
     def test_no_env_no_param_defaults_to_tui(self, clean_env):

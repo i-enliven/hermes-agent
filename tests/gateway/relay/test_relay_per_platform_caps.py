@@ -50,7 +50,7 @@ def _descriptor(platform: str, max_len: int, len_unit: str = "chars") -> Capabil
 
 
 DISCORD = _descriptor("discord", 2000)
-TELEGRAM = _descriptor("telegram", 4096, len_unit="utf16")
+TELEGRAM = _descriptor("discord", 4096, len_unit="utf16")
 
 
 class MultiDescriptorStub(StubConnector):
@@ -84,7 +84,7 @@ def _make_transport():
 
     return WebSocketRelayTransport(
         "wss://connector.example/relay",
-        "telegram",
+        "discord",
         "bot-9",
         identities=[("telegram", "bot-9"), ("discord", "app-1")],
     )
@@ -139,7 +139,7 @@ async def test_adapter_resolves_per_chat_limits_from_inbound_platform():
     await adapter.connect()
 
     await _push(stub, Platform.DISCORD, "dc-1")
-    await _push(stub, Platform.TELEGRAM, "tg-1")
+    await _push(stub, Platform.DISCORD, "tg-1")
 
     # Scalar surface still the primary's (back-compat).
     assert adapter.MAX_MESSAGE_LENGTH == 4096

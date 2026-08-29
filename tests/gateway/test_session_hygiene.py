@@ -56,7 +56,7 @@ def _make_large_history_tokens(target_tokens: int) -> list:
 
 class HygieneCaptureAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="fake-token"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="fake-token"), Platform.DISCORD)
         self.sent = []
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:
@@ -252,9 +252,9 @@ async def test_session_hygiene_preserves_transcript_when_no_rotation(monkeypatch
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -263,7 +263,7 @@ async def test_session_hygiene_preserves_transcript_when_no_rotation(monkeypatch
         session_id="sess-1",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="group",
     )
     runner.session_store.load_transcript.return_value = _make_history(6, content_size=400)
@@ -292,12 +292,12 @@ async def test_session_hygiene_preserves_transcript_when_no_rotation(monkeypatch
         "agent.model_metadata.get_model_context_length",
         lambda *_args, **_kwargs: 100,
     )
-    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "795544298")
+    monkeypatch.setenv("DISCORD_HOME_CHANNEL", "795544298")
 
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1001",
             chat_type="group",
             thread_id="17585",
@@ -414,9 +414,9 @@ async def test_session_hygiene_preserves_transcript_when_in_place_configured_but
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -425,7 +425,7 @@ async def test_session_hygiene_preserves_transcript_when_in_place_configured_but
         session_id="sess-1",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="group",
     )
     runner.session_store.load_transcript.return_value = _make_history(6, content_size=400)
@@ -454,12 +454,12 @@ async def test_session_hygiene_preserves_transcript_when_in_place_configured_but
         "agent.model_metadata.get_model_context_length",
         lambda *_args, **_kwargs: 100,
     )
-    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "795544298")
+    monkeypatch.setenv("DISCORD_HOME_CHANNEL", "795544298")
 
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1001",
             chat_type="group",
             thread_id="17585",
@@ -548,9 +548,9 @@ async def test_session_hygiene_timeout_continues_to_agent_and_sets_cooldown(monk
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -559,7 +559,7 @@ async def test_session_hygiene_timeout_continues_to_agent_and_sets_cooldown(monk
         session_id="sess-timeout",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
     )
     runner.session_store.load_transcript.return_value = _make_history(6, content_size=400)
@@ -592,7 +592,7 @@ async def test_session_hygiene_timeout_continues_to_agent_and_sets_cooldown(monk
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="12345",
             chat_type="dm",
             user_id="12345",
@@ -706,9 +706,9 @@ async def test_session_hygiene_forces_in_place_compaction_with_bound_session_db(
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -717,7 +717,7 @@ async def test_session_hygiene_forces_in_place_compaction_with_bound_session_db(
         session_id="sess-1",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="private",
     )
     runner.session_store.load_transcript.return_value = _make_history(12, content_size=400)
@@ -752,7 +752,7 @@ async def test_session_hygiene_forces_in_place_compaction_with_bound_session_db(
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="12345",
             chat_type="private",
             user_id="12345",
@@ -840,9 +840,9 @@ async def test_session_hygiene_honors_configurable_hard_message_limit(
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -851,7 +851,7 @@ async def test_session_hygiene_honors_configurable_hard_message_limit(
         session_id="sess-1",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="private",
     )
     # 12 messages: below default → no compression without override,
@@ -891,7 +891,7 @@ async def test_session_hygiene_honors_configurable_hard_message_limit(
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="12345",
             chat_type="private",
             user_id="12345",
@@ -933,9 +933,9 @@ def _make_progress_runner(monkeypatch, tmp_path, agent_cls, cfg_text):
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -944,7 +944,7 @@ def _make_progress_runner(monkeypatch, tmp_path, agent_cls, cfg_text):
         session_id="sess-progress",
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
     )
     runner.session_store.load_transcript.return_value = _make_history(6, content_size=400)
@@ -977,7 +977,7 @@ def _make_progress_runner(monkeypatch, tmp_path, agent_cls, cfg_text):
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="12345",
             chat_type="dm",
             user_id="12345",
@@ -1021,9 +1021,9 @@ def _make_cooldown_runner(monkeypatch, tmp_path, agent_cls, session_db, session_
     adapter = HygieneCaptureAdapter()
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake-token")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake-token")}
     )
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._voice_mode = {}
     runner.hooks = SimpleNamespace(emit=AsyncMock(), loaded_hooks=False)
     runner.session_store = MagicMock()
@@ -1032,7 +1032,7 @@ def _make_cooldown_runner(monkeypatch, tmp_path, agent_cls, session_db, session_
         session_id=session_id,
         created_at=datetime.now(),
         updated_at=datetime.now(),
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_type="dm",
     )
     runner.session_store.load_transcript.return_value = _make_history(6, content_size=400)
@@ -1068,7 +1068,7 @@ def _make_cooldown_runner(monkeypatch, tmp_path, agent_cls, session_db, session_
     event = MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="12345",
             chat_type="dm",
             user_id="12345",
@@ -1096,7 +1096,7 @@ async def test_hygiene_compression_cooldown_survives_gateway_restart(
     session_id = "sess-restart"
     db = SessionDB(db_path=tmp_path / "state.db")
     try:
-        db.create_session(session_id, "telegram")
+        db.create_session(session_id, "discord")
 
         main_thread = threading.get_ident()
         streak_threads = []

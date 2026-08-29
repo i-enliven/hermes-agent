@@ -15,7 +15,7 @@ from gateway.session import SessionSource
 
 class RestartTestAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="***"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="***"), Platform.DISCORD)
         self.sent: list[str] = []
         self.sent_calls: list[tuple[str, str, object]] = []
 
@@ -43,7 +43,7 @@ def make_restart_source(
     thread_id: str | None = None,
 ) -> SessionSource:
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id=chat_id,
         chat_type=chat_type,
         user_id="u1",
@@ -56,7 +56,7 @@ def make_restart_runner(
 ) -> tuple[GatewayRunner, BasePlatformAdapter]:
     runner = object.__new__(GatewayRunner)
     runner.config = GatewayConfig(
-        platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="***")}
+        platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="***")}
     )
     runner._running = True
     runner._shutdown_event = asyncio.Event()
@@ -163,5 +163,5 @@ def make_restart_runner(
     platform_adapter = adapter or RestartTestAdapter()
     platform_adapter.set_message_handler(AsyncMock(return_value=None))
     platform_adapter.set_busy_session_handler(runner._handle_active_session_busy_message)
-    runner.adapters = {Platform.TELEGRAM: platform_adapter}
+    runner.adapters = {Platform.DISCORD: platform_adapter}
     return runner, platform_adapter

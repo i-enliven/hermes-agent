@@ -108,7 +108,7 @@ def test_notify_sub_crud(kanban_home):
     try:
         tid = kb.create_task(conn, title="x")
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="123", user_id="u1",
+            conn, task_id=tid, platform="discord", chat_id="123", user_id="u1",
             notifier_profile="default",
             delivery_metadata={
                 "chat_type": "dm",
@@ -125,7 +125,7 @@ def test_notify_sub_crud(kanban_home):
         }
         # Duplicate add is a no-op.
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="123",
+            conn, task_id=tid, platform="discord", chat_id="123",
             delivery_metadata={
                 "chat_type": "dm",
                 "telegram_reply_to_message_id": "43",
@@ -137,13 +137,13 @@ def test_notify_sub_crud(kanban_home):
         ] == "43"
         # Distinct thread is a new row.
         kb.add_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="123",
+            conn, task_id=tid, platform="discord", chat_id="123",
             thread_id="5",
         )
         assert len(kb.list_notify_subs(conn, tid)) == 2
         # Remove one.
         ok = kb.remove_notify_sub(
-            conn, task_id=tid, platform="telegram", chat_id="123",
+            conn, task_id=tid, platform="discord", chat_id="123",
         )
         assert ok is True
         assert len(kb.list_notify_subs(conn, tid)) == 1
@@ -156,7 +156,7 @@ def test_notify_claim_is_single_owner_and_rewindable(kanban_home):
     conn2 = kb.connect()
     try:
         tid = kb.create_task(conn1, title="x", assignee="w")
-        kb.add_notify_sub(conn1, task_id=tid, platform="telegram", chat_id="123")
+        kb.add_notify_sub(conn1, task_id=tid, platform="discord", chat_id="123")
         # New subs start caught up at the task's current MAX(task_events.id)
         # (the `created` event) — issue #29905.
         initial_cursor = int(kb.list_notify_subs(conn1, tid)[0]["last_event_id"])
@@ -165,7 +165,7 @@ def test_notify_claim_is_single_owner_and_rewindable(kanban_home):
         old_cursor, claimed_cursor, events = kb.claim_unseen_events_for_sub(
             conn1,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="123",
             kinds=["completed", "blocked"],
         )
@@ -178,7 +178,7 @@ def test_notify_claim_is_single_owner_and_rewindable(kanban_home):
         _, _, duplicate_events = kb.claim_unseen_events_for_sub(
             conn2,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="123",
             kinds=["completed", "blocked"],
         )
@@ -187,7 +187,7 @@ def test_notify_claim_is_single_owner_and_rewindable(kanban_home):
         assert kb.rewind_notify_cursor(
             conn1,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="123",
             claimed_cursor=claimed_cursor,
             old_cursor=old_cursor,
@@ -195,7 +195,7 @@ def test_notify_claim_is_single_owner_and_rewindable(kanban_home):
         _, retried_events = kb.unseen_events_for_sub(
             conn2,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="123",
             kinds=["completed", "blocked"],
         )
@@ -1394,13 +1394,13 @@ def test_notify_sub_starts_caught_up_on_active_task(kanban_home):
         # Historical terminal activity BEFORE anyone subscribes.
         kb.complete_task(conn, tid, result="done long ago")
 
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="123")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="123")
         sub = kb.list_notify_subs(conn, tid)[0]
         assert int(sub["last_event_id"]) > 0, (
             "cursor must snap to MAX(task_events.id) at subscription time"
         )
         _, events = kb.unseen_events_for_sub(
-            conn, task_id=tid, platform="telegram", chat_id="123",
+            conn, task_id=tid, platform="discord", chat_id="123",
             kinds=["completed", "blocked", "gave_up", "crashed", "timed_out"],
         )
         assert events == [], "historical events must not replay to a new sub"

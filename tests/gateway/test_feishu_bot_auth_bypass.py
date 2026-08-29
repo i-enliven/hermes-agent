@@ -21,7 +21,6 @@ def _isolate_feishu_env(monkeypatch):
         "FEISHU_ALLOW_BOTS",
         "FEISHU_ALLOWED_USERS",
         "FEISHU_ALLOW_ALL_USERS",
-        "TELEGRAM_ALLOW_BOTS",
         "GATEWAY_ALLOW_ALL_USERS",
         "GATEWAY_ALLOWED_USERS",
     ):
@@ -74,7 +73,7 @@ def test_feishu_bot_bypass_does_not_leak_to_other_platforms(monkeypatch):
     monkeypatch.setenv("FEISHU_ALLOW_BOTS", "all")
 
     telegram_bot = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="123",
         chat_type="channel",
         user_id="999",

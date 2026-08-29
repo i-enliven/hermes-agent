@@ -385,6 +385,7 @@ def _handle_send(args):
         if home:
             chat_id = home.chat_id
             used_home_channel = True
+        else:
             home_env = _HOME_CHANNEL_ENV_OVERRIDES.get(
                 platform_name, f"{platform_name.upper()}_HOME_CHANNEL"
             )
@@ -886,6 +887,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     max_len = _MAX_LENGTHS.get(platform)
     if max_len:
         chunks = BasePlatformAdapter.truncate_message(message, max_len, len_fn=None)
+    else:
         chunks = [message]
 
     # --- Discord: chunked delivery via the registry's standalone_sender_fn.
@@ -1067,7 +1069,7 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     if media_files and not message.strip():
         return {
             "error": (
-                f"send_message MEDIA delivery is currently only supported for discord, matrix, weixin, signal, yuanbao, feishu and slack; "
+                f"send_message MEDIA delivery is currently only supported for discord, matrix, weixin, yuanbao, feishu and slack; "
                 f"target {platform.value} had only media attachments"
             )
         }
@@ -1075,8 +1077,13 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     if media_files:
         warning = (
             f"MEDIA attachments were omitted for {platform.value}; "
-            "native send_message media delivery is currently only supported for discord, matrix, weixin, signal, yuanbao, feishu and slack"
+            "native send_message media delivery is currently only supported for discord, matrix, weixin, yuanbao, feishu and slack"
         )
+
+    from gateway.platform_registry import platform_registry
+
+    entry = platform_registry.get(platform_name)
+    handler = entry.send_message_handler if entry is not None else None
 
     last_result = None
     for chunk in chunks:
@@ -1309,6 +1316,7 @@ async def _matrix_send_core(adapter, chat_id, message, media_files, metadata):
             last_result = await adapter.send_voice(chat_id, media_path, metadata=metadata)
         elif ext in _AUDIO_EXTS:
             last_result = await adapter.send_voice(chat_id, media_path, metadata=metadata)
+        else:
             last_result = await adapter.send_document(chat_id, media_path, metadata=metadata)
 
         if not last_result.success:

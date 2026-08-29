@@ -47,7 +47,7 @@ async def _run_one_notifier_tick(monkeypatch, runner):
 def _make_runner(adapter):
     runner = GatewayRunner.__new__(GatewayRunner)
     runner._running = True
-    runner.adapters = {Platform.TELEGRAM: adapter}
+    runner.adapters = {Platform.DISCORD: adapter}
     runner._kanban_sub_fail_counts = {}
     # Most tests model the default gateway after its dispatcher acquired the
     # singleton lock. Tests for startup or non-owner gateways clear this.
@@ -59,7 +59,7 @@ def _create_completed_subscription(summary="done once"):
     conn = kb.connect()
     try:
         tid = kb.create_task(conn, title="notify once", assignee="worker")
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat-1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat-1")
         kb.complete_task(conn, tid, summary=summary)
         return tid
     finally:
@@ -72,7 +72,7 @@ def _unseen_terminal_events(tid):
         _, events = kb.unseen_events_for_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-1",
             kinds=["completed", "blocked", "gave_up", "crashed", "timed_out"],
         )
@@ -97,7 +97,7 @@ def test_kanban_notifier_replays_telegram_dm_topic_delivery_metadata(tmp_path, m
         kb.add_notify_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-1",
             thread_id="20197",
             delivery_mode="notify+wake",
@@ -148,7 +148,7 @@ def test_active_named_profile_subscription_is_delivered(tmp_path, monkeypatch):
         kb.add_notify_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-1",
             notifier_profile="main",
         )
@@ -183,7 +183,7 @@ def test_non_dispatch_gateway_claims_only_its_profile_subscriptions(
         kb.add_notify_sub(
             conn,
             task_id=foreign_tid,
-            platform="telegram",
+            platform="discord",
             chat_id="default-chat",
             notifier_profile="default",
         )
@@ -195,7 +195,7 @@ def test_non_dispatch_gateway_claims_only_its_profile_subscriptions(
         kb.add_notify_sub(
             conn,
             task_id=owned_tid,
-            platform="telegram",
+            platform="discord",
             chat_id="writer-chat",
             notifier_profile="writer",
         )
@@ -228,7 +228,7 @@ def test_legacy_subscription_requires_confirmed_dispatcher_lock_owner(
         kb.add_notify_sub(
             conn,
             task_id=task_id,
-            platform="telegram",
+            platform="discord",
             chat_id="legacy-chat",
         )
         kb.complete_task(conn, task_id, summary="legacy done")
@@ -311,7 +311,7 @@ def test_notifier_redelivers_same_kind_on_dispatch_cycle(tmp_path, monkeypatch):
     conn = kb.connect()
     try:
         tid = kb.create_task(conn, title="cycle test", assignee="worker")
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat-1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat-1")
         # First crash — fired by the dispatcher when the worker PID dies.
         kb._append_event(conn, tid, kind="crashed")
     finally:
@@ -373,7 +373,7 @@ def test_notifier_subscription_survives_done_reopen_until_archive(
         kb.add_notify_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="origin-chat",
             thread_id="origin-thread",
             user_id="origin-user",
@@ -474,7 +474,7 @@ def test_notifier_wakeup_uses_subscription_chat_type(tmp_path, monkeypatch):
         kb.add_notify_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id="chat-dm",
             chat_type="dm",
             delivery_mode="notify+wake",
@@ -507,7 +507,7 @@ def _unseen_terminal_events_for(tid, chat_id):
         _, events = kb.unseen_events_for_sub(
             conn,
             task_id=tid,
-            platform="telegram",
+            platform="discord",
             chat_id=chat_id,
             kinds=["completed", "blocked", "gave_up", "crashed", "timed_out"],
         )
@@ -537,11 +537,11 @@ def test_kanban_notifier_isolates_per_subscription_failure(tmp_path, monkeypatch
     conn = kb.connect()
     try:
         tid_bad = kb.create_task(conn, title="bad task", assignee="worker")
-        kb.add_notify_sub(conn, task_id=tid_bad, platform="telegram", chat_id="chat-bad")
+        kb.add_notify_sub(conn, task_id=tid_bad, platform="discord", chat_id="chat-bad")
         kb.complete_task(conn, tid_bad, summary="done")
 
         tid_good = kb.create_task(conn, title="good task", assignee="worker")
-        kb.add_notify_sub(conn, task_id=tid_good, platform="telegram", chat_id="chat-good")
+        kb.add_notify_sub(conn, task_id=tid_good, platform="discord", chat_id="chat-good")
         kb.complete_task(conn, tid_good, summary="done")
     finally:
         conn.close()
@@ -593,7 +593,7 @@ def test_notifier_delivers_block_loop_detected_triage_ping(tmp_path, monkeypatch
     conn = kb.connect()
     try:
         tid = kb.create_task(conn, title="loops forever", assignee="worker")
-        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat-1")
+        kb.add_notify_sub(conn, task_id=tid, platform="discord", chat_id="chat-1")
         kb._append_event(
             conn, tid, "block_loop_detected",
             {"reason": "needs credentials", "kind": "needs_input",
@@ -616,7 +616,7 @@ def test_notifier_delivers_block_loop_detected_triage_ping(tmp_path, monkeypatch
     conn = kb.connect()
     try:
         _, remaining = kb.unseen_events_for_sub(
-            conn, task_id=tid, platform="telegram", chat_id="chat-1",
+            conn, task_id=tid, platform="discord", chat_id="chat-1",
             kinds=["block_loop_detected"],
         )
     finally:

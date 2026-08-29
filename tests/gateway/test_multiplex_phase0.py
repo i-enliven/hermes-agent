@@ -19,7 +19,7 @@ from gateway.session import SessionSource, SessionStore, build_session_key
 
 
 def _src(**kw) -> SessionSource:
-    kw.setdefault("platform", Platform.TELEGRAM)
+    kw.setdefault("platform", Platform.DISCORD)
     kw.setdefault("chat_id", "99")
     kw.setdefault("chat_type", "dm")
     return SessionSource(**kw)

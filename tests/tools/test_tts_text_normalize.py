@@ -5,7 +5,7 @@ from tools.tts_text_normalize import prepare_spoken_text
 
 class _DummyAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="test"), Platform.DISCORD)
 
     async def connect(self):
         return True

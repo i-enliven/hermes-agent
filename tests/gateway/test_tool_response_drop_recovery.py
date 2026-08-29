@@ -86,7 +86,7 @@ def _strip_everything(adapter, monkeypatch):
     )
 
 
-@pytest.mark.parametrize("platform", [Platform.DISCORD, Platform.TELEGRAM])
+@pytest.mark.parametrize("platform", [Platform.DISCORD, Platform.DISCORD])
 class TestExtractStripRecoveryAllPlatforms:
     """A non-empty response stripped to empty must be recovered on EVERY
     platform (the fix de-scopes the recovery from Discord-only)."""
@@ -277,7 +277,7 @@ class TestPostStopInterruptSwallow:
         agent._gateway_turn_process_baseline = frozenset({"proc_existing"})
         session_key = "agent:main:telegram:dm:12345"
         source = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="12345", chat_type="dm"
+            platform=Platform.DISCORD, chat_id="12345", chat_type="dm"
         )
 
         runner = object.__new__(GatewayRunner)

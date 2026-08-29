@@ -277,8 +277,8 @@ async def test_unauthorized_attempt_notifies_telegram(adapter):
     telegram_adapter = SimpleNamespace(send=AsyncMock())
     home = SimpleNamespace(chat_id="987654321")
     runner = SimpleNamespace(
-        adapters={Platform.TELEGRAM: telegram_adapter},
-        config=SimpleNamespace(get_home_channel=lambda p: home if p is Platform.TELEGRAM else None),
+        adapters={Platform.DISCORD: telegram_adapter},
+        config=SimpleNamespace(get_home_channel=lambda p: home if p is Platform.DISCORD else None),
     )
     adapter.gateway_runner = runner
     adapter._allowed_user_ids = {"100200300"}
@@ -393,10 +393,10 @@ async def test_notify_falls_back_to_slack_on_telegram_soft_fail(adapter):
     slack_adapter = SimpleNamespace(send=AsyncMock())
     home_tg = SimpleNamespace(chat_id="987654321")
     home_sl = SimpleNamespace(chat_id="C12345")
-    homes = {Platform.TELEGRAM: home_tg, Platform.SLACK: home_sl}
+    homes = {Platform.DISCORD: home_tg, Platform.SLACK: home_sl}
     runner = SimpleNamespace(
         adapters={
-            Platform.TELEGRAM: telegram_adapter,
+            Platform.DISCORD: telegram_adapter,
             Platform.SLACK: slack_adapter,
         },
         config=SimpleNamespace(get_home_channel=lambda p: homes.get(p)),

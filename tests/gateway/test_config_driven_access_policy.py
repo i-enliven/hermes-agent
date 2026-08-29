@@ -50,7 +50,6 @@ def _clear_auth_env(monkeypatch) -> None:
         "YUANBAO_ALLOWED_USERS",
         "QQ_ALLOWED_USERS",
         "QQ_GROUP_ALLOWED_USERS",
-        "TELEGRAM_ALLOWED_USERS",
         "GATEWAY_ALLOWED_USERS",
         "GATEWAY_ALLOW_ALL_USERS",
         "WECOM_ALLOW_ALL_USERS",

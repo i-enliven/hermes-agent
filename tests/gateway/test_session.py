@@ -21,7 +21,7 @@ from gateway.session import (
 class TestSessionSourceRoundtrip:
     def test_full_roundtrip(self):
         source = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="12345",
             chat_name="My Group",
             chat_type="group",
@@ -32,7 +32,7 @@ class TestSessionSourceRoundtrip:
         d = source.to_dict()
         restored = SessionSource.from_dict(d)
 
-        assert restored.platform == Platform.TELEGRAM
+        assert restored.platform == Platform.DISCORD
         assert restored.chat_id == "12345"
         assert restored.chat_name == "My Group"
         assert restored.chat_type == "group"
@@ -60,7 +60,7 @@ class TestSessionSourceDescription:
 
     def test_dm_with_username(self):
         source = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="123",
+            platform=Platform.DISCORD, chat_id="123",
             chat_type="dm", user_name="bob",
         )
         assert "DM" in source.description
@@ -83,11 +83,11 @@ class TestBuildSessionContextPrompt:
     def test_telegram_prompt_contains_platform_and_chat(self):
         config = GatewayConfig(
             platforms={
-                Platform.TELEGRAM: PlatformConfig(
+                Platform.DISCORD: PlatformConfig(
                     enabled=True,
                     token="fake-token",
                     home_channel=HomeChannel(
-                        platform=Platform.TELEGRAM,
+                        platform=Platform.DISCORD,
                         chat_id="111",
                         name="Home Chat",
                     ),
@@ -95,7 +95,7 @@ class TestBuildSessionContextPrompt:
             },
         )
         source = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="111",
             chat_name="Home Chat",
             chat_type="dm",
@@ -495,7 +495,7 @@ class TestSessionStoreSwitchSession:
         store._loaded = True
 
         destination = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="destination-chat",
             chat_type="dm",
             user_id="destination-user",
@@ -505,12 +505,12 @@ class TestSessionStoreSwitchSession:
         original_key = "agent:main:telegram:dm:original-chat"
 
         db.create_session(
-            "compressed_root", "telegram", session_key=original_key,
+            "compressed_root", "discord", session_key=original_key,
             user_id="original-user", chat_id="original-chat",
         )
         db.end_session("compressed_root", "compression")
         db.create_session(
-            "compressed_tip", "telegram", session_key=original_key,
+            "compressed_tip", "discord", session_key=original_key,
             user_id="original-user", chat_id="original-chat",
             parent_session_id="compressed_root",
         )
@@ -523,14 +523,14 @@ class TestSessionStoreSwitchSession:
         assert db.get_session("compressed_tip")["session_key"] == destination_key
         assert [
             row["id"] for row in db.list_sessions_rich(
-                source="telegram", session_key=destination_key, limit=10
+                source="discord", session_key=destination_key, limit=10
             )
             if row["id"] == "compressed_tip"
         ] == ["compressed_tip"]
         assert not any(
             row["id"] == "compressed_tip"
             for row in db.list_sessions_rich(
-                source="telegram", session_key=original_key, limit=10
+                source="discord", session_key=original_key, limit=10
             )
         )
         db.close()
@@ -561,7 +561,7 @@ class TestSessionStoreLookup:
 
     def test_returns_exact_existing_route(self, store):
         source = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="42",
             chat_type="dm",
             user_id="42",
@@ -663,7 +663,7 @@ class TestWhatsAppSessionKeyConsistency:
     def test_telegram_dm_includes_chat_id(self):
         """Non-WhatsApp DMs should also include chat_id to separate users."""
         source = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="99",
             chat_type="dm",
         )
@@ -672,8 +672,8 @@ class TestWhatsAppSessionKeyConsistency:
 
     def test_distinct_dm_chat_ids_get_distinct_session_keys(self):
         """Different DM chats must not collapse into one shared session."""
-        first = SessionSource(platform=Platform.TELEGRAM, chat_id="99", chat_type="dm")
-        second = SessionSource(platform=Platform.TELEGRAM, chat_id="100", chat_type="dm")
+        first = SessionSource(platform=Platform.DISCORD, chat_id="99", chat_type="dm")
+        second = SessionSource(platform=Platform.DISCORD, chat_id="100", chat_type="dm")
 
         assert build_session_key(first) == "agent:main:telegram:dm:99"
         assert build_session_key(second) == "agent:main:telegram:dm:100"
@@ -684,10 +684,10 @@ class TestWhatsAppSessionKeyConsistency:
         """Two different DM senders without chat_id must not share one
         session (the cross-user history-bleed footgun)."""
         first = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="", chat_type="dm", user_id="jordan"
+            platform=Platform.DISCORD, chat_id="", chat_type="dm", user_id="jordan"
         )
         second = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="", chat_type="dm", user_id="dima"
+            platform=Platform.DISCORD, chat_id="", chat_type="dm", user_id="dima"
         )
         assert build_session_key(first) != build_session_key(second)
         assert build_session_key(first) == "agent:main:telegram:dm:jordan"
@@ -697,14 +697,14 @@ class TestWhatsAppSessionKeyConsistency:
     def test_group_thread_sessions_are_shared_by_default(self):
         """Threads default to shared sessions — user_id is NOT appended."""
         alice = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1002285219667",
             chat_type="group",
             thread_id="17585",
             user_id="alice",
         )
         bob = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1002285219667",
             chat_type="group",
             thread_id="17585",
@@ -802,13 +802,13 @@ class TestWhatsAppSessionKeyConsistency:
     def test_non_thread_group_sessions_still_isolated_per_user(self):
         """Regular group messages (no thread_id) remain per-user by default."""
         alice = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1002285219667",
             chat_type="group",
             user_id="alice",
         )
         bob = SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id="-1002285219667",
             chat_type="group",
             user_id="bob",
@@ -1300,9 +1300,9 @@ class TestGatewaySessionDbRecovery:
         from types import SimpleNamespace
 
         db = SessionDB(db_path=tmp_path / "state.db")
-        db.create_session("parent", source="telegram")
+        db.create_session("parent", source="discord")
         db.end_session("parent", "compression")
-        db.create_session("child", source="telegram", parent_session_id="parent")
+        db.create_session("child", source="discord", parent_session_id="parent")
         db.replace_messages("child", [{"role": "user", "content": "summary"}])
 
         store = object.__new__(SessionStore)
@@ -1337,11 +1337,11 @@ class TestGatewaySessionDbRecovery:
         from types import SimpleNamespace
 
         db = SessionDB(db_path=tmp_path / "state.db")
-        db.create_session("root", source="telegram")
+        db.create_session("root", source="discord")
         db.end_session("root", "compression")
-        db.create_session("mid", source="telegram", parent_session_id="root")
+        db.create_session("mid", source="discord", parent_session_id="root")
         db.end_session("mid", "compression")
-        db.create_session("tip", source="telegram", parent_session_id="mid")
+        db.create_session("tip", source="discord", parent_session_id="mid")
         db.replace_messages("tip", [{"role": "user", "content": "summary"}])
 
         store = object.__new__(SessionStore)
@@ -1375,9 +1375,9 @@ class TestGatewaySessionDbRecovery:
         from types import SimpleNamespace
 
         db = SessionDB(db_path=tmp_path / "state.db")
-        db.create_session("root", source="telegram")
+        db.create_session("root", source="discord")
         db.end_session("root", "compression")
-        db.create_session("stale", source="telegram", parent_session_id="root")
+        db.create_session("stale", source="discord", parent_session_id="root")
         db.end_session("stale", "ws_orphan_reap")
 
         store = object.__new__(SessionStore)
@@ -1529,7 +1529,7 @@ class TestGatewayRoutingTable:
 
     def _source(self, chat_id="chat-1", user_id="user-1"):
         return SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id=chat_id,
             chat_name="Alice",
             chat_type="dm",

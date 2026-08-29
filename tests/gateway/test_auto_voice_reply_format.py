@@ -18,7 +18,7 @@ class TestAutoVoiceReplyFormat:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "platform",
-        [Platform.MATRIX, Platform.FEISHU, Platform.SIGNAL],
+        [Platform.MATRIX, Platform.FEISHU],
     )
     async def test_opus_platform_auto_voice_reply_requests_ogg(self, platform):
         """Every OPUS_VOICE_PLATFORMS member gets an explicit .ogg output path.
@@ -62,11 +62,11 @@ class TestAutoVoiceReplyFormat:
         reply.
         """
         runner = _make_runner()
-        adapter = _make_adapter(Platform.TELEGRAM)
+        adapter = _make_adapter(Platform.DISCORD)
         adapter._should_auto_tts_for_chat = MagicMock(return_value=True)
-        runner.adapters[Platform.TELEGRAM] = adapter
+        runner.adapters[Platform.DISCORD] = adapter
         voice_event = _make_event(
-            Platform.TELEGRAM, chat_id="123", message_type=MessageType.VOICE
+            Platform.DISCORD, chat_id="123", message_type=MessageType.VOICE
         )
 
         assert runner._should_send_voice_reply(
@@ -83,14 +83,14 @@ class TestAutoVoiceReplyFormat:
         """
         runner = _make_runner()
         runner._voice_mode["telegram:123"] = "voice_only"
-        adapter = _make_adapter(Platform.TELEGRAM)
+        adapter = _make_adapter(Platform.DISCORD)
         adapter._should_auto_tts_for_chat = MagicMock(return_value=True)
-        runner.adapters[Platform.TELEGRAM] = adapter
-        event = _make_event(Platform.TELEGRAM, chat_id="123")
+        runner.adapters[Platform.DISCORD] = adapter
+        event = _make_event(Platform.DISCORD, chat_id="123")
 
         assert runner._should_send_voice_reply(event, "hello", []) is False
 
-        voice_event = _make_event(Platform.TELEGRAM, chat_id="123", message_type=MessageType.VOICE)
+        voice_event = _make_event(Platform.DISCORD, chat_id="123", message_type=MessageType.VOICE)
         assert runner._should_send_voice_reply(voice_event, "hello", [], already_sent=True) is True
 
 def _make_runner() -> GatewayRunner:

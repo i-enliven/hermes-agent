@@ -10,7 +10,7 @@ from gateway.status import read_runtime_status
 
 class _RetryableFailureAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="***"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="***"), Platform.DISCORD)
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:
         self._set_fatal_error(
@@ -32,7 +32,7 @@ class _RetryableFailureAdapter(BasePlatformAdapter):
 
 class _DisabledAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=False, token="***"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=False, token="***"), Platform.DISCORD)
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:
         raise AssertionError("connect should not be called for disabled platforms")
@@ -296,7 +296,7 @@ async def test_runner_degrades_gracefully_when_all_adapters_missing(monkeypatch,
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     config = GatewayConfig(
         platforms={
-            Platform.TELEGRAM: PlatformConfig(enabled=True, token="***"),
+            Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
             Platform.DISCORD: PlatformConfig(enabled=True, token="***"),
         },
         sessions_dir=tmp_path / "sessions",

@@ -634,7 +634,7 @@ class TestMessageStorage:
         """Reasoning text is stored for assistant messages and restored by
         get_messages_as_conversation() so providers receive coherent multi-turn
         reasoning context."""
-        db.create_session(session_id="s1", source="telegram")
+        db.create_session(session_id="s1", source="discord")
         db.append_message("s1", role="user", content="create a cron job")
         db.append_message(
             "s1",
@@ -971,7 +971,7 @@ class TestCJKSearchFallback:
 class TestSearchSessions:
     def test_list_all_sessions(self, db):
         db.create_session(session_id="s1", source="cli")
-        db.create_session(session_id="s2", source="telegram")
+        db.create_session(session_id="s2", source="discord")
 
         sessions = db.search_sessions()
         assert len(sessions) == 2
@@ -996,10 +996,10 @@ class TestCounts:
 
     def test_session_count_by_source(self, db):
         db.create_session(session_id="s1", source="cli")
-        db.create_session(session_id="s2", source="telegram")
+        db.create_session(session_id="s2", source="discord")
         db.create_session(session_id="s3", source="cli")
         assert db.session_count(source="cli") == 2
-        assert db.session_count(source="telegram") == 1
+        assert db.session_count(source="discord") == 1
 
 
 
@@ -1017,7 +1017,7 @@ class TestCounts:
         assert db.session_count_ge(1) is True
         assert db.session_count_ge(2) is False
 
-        db.create_session("s2", "telegram")
+        db.create_session("s2", "discord")
         assert db.session_count_ge(1) is True
         assert db.session_count_ge(2) is True
         assert db.session_count_ge(3) is False
@@ -1677,7 +1677,7 @@ class TestSchemaInit:
         db = SessionDB(db_path=tmp_path / "state.db")
         db.create_session(
             session_id="topic-session",
-            source="telegram",
+            source="discord",
             user_id="208214988",
         )
 
@@ -2033,7 +2033,7 @@ class TestListSessionsRich:
     def test_list_gateway_sessions_last_active_uses_activity_heartbeat(self, db):
         db.create_session(
             "gw-1",
-            "telegram",
+            "discord",
             session_key="agent:main:telegram:dm:c1",
             chat_id="c1",
             chat_type="dm",
@@ -2072,11 +2072,11 @@ class TestListSessionsRich:
     def test_rich_list_session_key_filter_precedes_limit(self, db):
         lane_key = "agent:main:telegram:dm:lane"
         db.create_session(
-            "lane_oldest", "telegram", session_key=lane_key,
+            "lane_oldest", "discord", session_key=lane_key,
             user_id="lane-user", chat_id="lane",
         )
         db.create_session(
-            "lane_newest", "telegram", session_key=lane_key,
+            "lane_newest", "discord", session_key=lane_key,
             user_id="lane-user", chat_id="lane",
         )
         for i in range(60):
@@ -2086,11 +2086,11 @@ class TestListSessionsRich:
                 user_id=f"foreign-user-{i}", chat_id=f"foreign-{i}",
             )
         db.create_session(
-            "legacy_null_key", "telegram", user_id="lane-user", chat_id="lane"
+            "legacy_null_key", "discord", user_id="lane-user", chat_id="lane"
         )
 
         sessions = db.list_sessions_rich(
-            source="telegram", session_key=lane_key, limit=2
+            source="discord", session_key=lane_key, limit=2
         )
 
         assert [session["id"] for session in sessions] == [
@@ -2100,26 +2100,26 @@ class TestListSessionsRich:
     def test_rich_list_session_key_scopes_search_and_projects_compression(self, db):
         lane_key = "agent:main:telegram:dm:lane"
         db.create_session(
-            "lane_root", "telegram", session_key=lane_key,
+            "lane_root", "discord", session_key=lane_key,
             user_id="lane-user", chat_id="lane",
         )
         db.set_session_title("lane_root", "Needle root")
         db.end_session("lane_root", "compression")
         db.create_session(
-            "lane_tip", "telegram", session_key=lane_key,
+            "lane_tip", "discord", session_key=lane_key,
             user_id="lane-user", chat_id="lane", parent_session_id="lane_root",
         )
         db.set_session_title("lane_tip", "Needle continuation")
         db.append_message("lane_tip", "user", "latest lane activity")
         db.create_session(
-            "foreign_match", "telegram",
+            "foreign_match", "discord",
             session_key="agent:main:telegram:dm:foreign",
             user_id="foreign-user", chat_id="foreign",
         )
         db.set_session_title("foreign_match", "Needle foreign")
 
         sessions = db.list_sessions_rich(
-            source="telegram",
+            source="discord",
             session_key=lane_key,
             search_query="needle",
             order_by_last_active=True,
@@ -2146,20 +2146,20 @@ class TestListSessionsRich:
         lane_key = "agent:main:telegram:dm:lane"
         parent_id = f"parent_{end_reason}"
         child_id = f"child_{end_reason}"
-        db.create_session(parent_id, "telegram", session_key=lane_key)
+        db.create_session(parent_id, "discord", session_key=lane_key)
         db.end_session(parent_id, end_reason)
         # No _reset_from marker: this is the on-disk shape written before the
         # marker existed. The unchanged routing key proves a reset boundary.
         db.create_session(
             child_id,
-            "telegram",
+            "discord",
             session_key=lane_key,
             parent_session_id=parent_id,
         )
 
-        listed = [row["id"] for row in db.list_sessions_rich(source="telegram")]
+        listed = [row["id"] for row in db.list_sessions_rich(source="discord")]
         assert {parent_id, child_id}.issubset(listed)
-        assert db.session_count(source="telegram", exclude_children=True) == 2
+        assert db.session_count(source="discord", exclude_children=True) == 2
         assert db.session_count_by_source(exclude_children=True)["telegram"] == 2
         ephemeral = db._conn.execute(
             f"SELECT s.id FROM sessions s WHERE {_ephemeral_child_sql('s')}"
@@ -2169,7 +2169,7 @@ class TestListSessionsRich:
     def test_reset_parent_does_not_surface_unrelated_child(self, db):
         db.create_session(
             "reset_parent",
-            "telegram",
+            "discord",
             session_key="agent:main:telegram:dm:lane",
         )
         db.end_session("reset_parent", "session_reset")
@@ -2191,12 +2191,12 @@ class TestListSessionsRich:
         legacy markerless shape."""
         lane_key = "agent:main:telegram:dm:lane"
         # Marker shape (rows written by current gateway code).
-        db.create_session("walk_parent", "telegram", session_key=lane_key)
+        db.create_session("walk_parent", "discord", session_key=lane_key)
         db.append_message("walk_parent", "user", "before reset")
         db.end_session("walk_parent", "session_reset")
         db.create_session(
             "walk_child",
-            "telegram",
+            "discord",
             session_key=lane_key,
             parent_session_id="walk_parent",
             model_config={"_reset_from": "walk_parent"},
@@ -2206,12 +2206,12 @@ class TestListSessionsRich:
 
         # Legacy markerless shape (pre-marker on-disk rows).
         lane2 = "agent:main:telegram:dm:lane2"
-        db.create_session("legacy_parent", "telegram", session_key=lane2)
+        db.create_session("legacy_parent", "discord", session_key=lane2)
         db.append_message("legacy_parent", "user", "before reset")
         db.end_session("legacy_parent", "session_reset")
         db.create_session(
             "legacy_child",
-            "telegram",
+            "discord",
             session_key=lane2,
             parent_session_id="legacy_parent",
         )
@@ -2515,7 +2515,7 @@ class TestExcludeSources:
     def test_list_sessions_rich_excludes_tool_source(self, db):
         db.create_session("s1", "cli")
         db.create_session("s2", "tool")
-        db.create_session("s3", "telegram")
+        db.create_session("s3", "discord")
         sessions = db.list_sessions_rich(exclude_sources=["tool"])
         ids = [s["id"] for s in sessions]
         assert "s1" in ids
@@ -3891,7 +3891,7 @@ class TestListCronJobRuns:
 def test_gateway_session_peer_round_trip_and_recovery(db):
     db.create_session(
         "gw-session",
-        "telegram",
+        "discord",
         user_id="user-1",
         session_key="agent:main:telegram:dm:chat-1",
         chat_id="chat-1",
@@ -3906,7 +3906,7 @@ def test_gateway_session_peer_round_trip_and_recovery(db):
     assert row["chat_type"] == "dm"
 
     recovered = db.find_latest_gateway_session_for_peer(
-        source="telegram",
+        source="discord",
         user_id="user-1",
         session_key="agent:main:telegram:dm:chat-1",
         chat_id="chat-1",
@@ -3935,14 +3935,14 @@ def test_gateway_session_recovery_does_not_cross_newer_reset_boundary(
         "chat_id": "chat-1",
         "chat_type": "dm",
     }
-    db.create_session("gw-before-reset", "telegram", **peer)
+    db.create_session("gw-before-reset", "discord", **peer)
     db.append_message("gw-before-reset", "user", "old context")
-    db.create_session("gw-reset", "telegram", **peer)
+    db.create_session("gw-reset", "discord", **peer)
     db.append_message("gw-reset", "user", "/new")
     db.end_session("gw-reset", "session_reset")
 
     assert db.find_latest_gateway_session_for_peer(
-        source="telegram",
+        source="discord",
         user_id="user-1",
         session_key="agent:main:telegram:dm:chat-1",
         chat_id="chat-1",
@@ -3962,33 +3962,33 @@ def test_gateway_session_recovery_does_not_cross_newer_reset_boundary(
 
 def test_find_session_by_origin_matching_rules(db):
     db.create_session(
-        "gw-o1", "telegram", user_id="u1",
+        "gw-o1", "discord", user_id="u1",
         session_key="agent:main:telegram:group:c9:u1", chat_id="c9", chat_type="group",
     )
     db.create_session(
-        "gw-o2", "telegram", user_id="u2",
+        "gw-o2", "discord", user_id="u2",
         session_key="agent:main:telegram:group:c9:u2", chat_id="c9", chat_type="group",
     )
 
     # Exact user match wins.
     assert db.find_session_by_origin(
-        platform="telegram", chat_id="c9", user_id="u2"
+        platform="discord", chat_id="c9", user_id="u2"
     ) == "gw-o2"
     # Unknown user among multiple distinct users -> None (no contamination).
     assert db.find_session_by_origin(
-        platform="telegram", chat_id="c9", user_id="u3"
+        platform="discord", chat_id="c9", user_id="u3"
     ) is None
     # No user given + multiple distinct users -> None.
-    assert db.find_session_by_origin(platform="telegram", chat_id="c9") is None
+    assert db.find_session_by_origin(platform="discord", chat_id="c9") is None
     # Ended sessions are ignored: only gw-o1 remains as a live candidate.
     # A single remaining candidate is returned even without an exact user
     # match — mirrors the original sessions.json scan semantics.
     db.end_session("gw-o2", "session_reset")
     assert db.find_session_by_origin(
-        platform="telegram", chat_id="c9", user_id="u2"
+        platform="discord", chat_id="c9", user_id="u2"
     ) == "gw-o1"
     # Single remaining candidate resolves without user_id.
-    assert db.find_session_by_origin(platform="telegram", chat_id="c9") == "gw-o1"
+    assert db.find_session_by_origin(platform="discord", chat_id="c9") == "gw-o1"
     # Thread filter.
     db.create_session(
         "gw-th", "discord", user_id="u9",

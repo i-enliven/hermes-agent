@@ -57,7 +57,6 @@ _ALL_ADAPTERS = [
     ("gateway.platforms.mattermost", "MattermostAdapter"),
     ("gateway.platforms.signal", "SignalAdapter"),
     ("plugins.platforms.slack.adapter", "SlackAdapter"),
-    ("plugins.platforms.telegram.adapter", "TelegramAdapter"),
     ("plugins.platforms.wecom.adapter", "WeComAdapter"),
     ("gateway.platforms.weixin", "WeixinAdapter"),
     ("gateway.platforms.yuanbao", "YuanbaoAdapter"),

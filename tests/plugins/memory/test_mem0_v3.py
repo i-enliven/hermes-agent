@@ -307,20 +307,20 @@ class TestMem0UserIdResolution:
     def test_env_override_beats_gateway_native_id(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MEM0_USER_ID", "ryan@example.com")
         provider = self._provider(monkeypatch, tmp_path)
-        provider.initialize("test", user_id="123456789", platform="telegram")
+        provider.initialize("test", user_id="123456789", platform="discord")
         assert provider._user_id == "ryan@example.com"
 
     def test_file_override_beats_gateway_native_id(self, monkeypatch, tmp_path):
         monkeypatch.delenv("MEM0_USER_ID", raising=False)
         (tmp_path / "mem0.json").write_text('{"user_id": "ryan@example.com"}')
         provider = self._provider(monkeypatch, tmp_path)
-        provider.initialize("test", user_id="123456789", platform="telegram")
+        provider.initialize("test", user_id="123456789", platform="discord")
         assert provider._user_id == "ryan@example.com"
 
     def test_unset_falls_back_to_gateway_native_id(self, monkeypatch, tmp_path):
         monkeypatch.delenv("MEM0_USER_ID", raising=False)
         provider = self._provider(monkeypatch, tmp_path)
-        provider.initialize("test", user_id="123456789", platform="telegram")
+        provider.initialize("test", user_id="123456789", platform="discord")
         assert provider._user_id == "123456789"
 
 
@@ -331,7 +331,7 @@ class TestMem0UserIdResolution:
         monkeypatch.delenv("MEM0_USER_ID", raising=False)
         (tmp_path / "mem0.json").write_text('{"user_id": "hermes-user"}')
         provider = self._provider(monkeypatch, tmp_path)
-        provider.initialize("test", user_id="123456789", platform="telegram")
+        provider.initialize("test", user_id="123456789", platform="discord")
         assert provider._user_id == "123456789"
 
 

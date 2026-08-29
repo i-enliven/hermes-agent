@@ -12,9 +12,9 @@ from gateway.platforms.base import BasePlatformAdapter, MessageEvent, MessageTyp
 from gateway.session import SessionSource, build_session_key
 
 
-class DummyTelegramAdapter(BasePlatformAdapter):
+class DummyAdapter(BasePlatformAdapter):
     def __init__(self):
-        super().__init__(PlatformConfig(enabled=True, token="fake-token"), Platform.TELEGRAM)
+        super().__init__(PlatformConfig(enabled=True, token="fake-token"), Platform.DISCORD)
         self._busy_text_mode = ""
         self.sent = []
         self.typing = []
@@ -58,7 +58,7 @@ def _make_event(chat_id: str, thread_id: str, message_id: str = "1") -> MessageE
     return MessageEvent(
         text="hello",
         source=SessionSource(
-            platform=Platform.TELEGRAM,
+            platform=Platform.DISCORD,
             chat_id=chat_id,
             chat_type="group",
             thread_id=thread_id,
@@ -71,7 +71,7 @@ class TestBasePlatformTopicSessions:
 
     @pytest.mark.asyncio
     async def test_handle_message_interrupts_same_topic(self, monkeypatch):
-        adapter = DummyTelegramAdapter()
+        adapter = DummyAdapter()
         adapter.set_message_handler(lambda event: asyncio.sleep(0, result=None))
 
         active_event = _make_event("-1001", "10")
@@ -94,7 +94,7 @@ class TestBasePlatformTopicSessions:
 
     @pytest.mark.asyncio
     async def test_process_message_background_replies_in_same_topic(self):
-        adapter = DummyTelegramAdapter()
+        adapter = DummyAdapter()
         typing_calls = []
 
         async def handler(_event):
@@ -136,14 +136,14 @@ class TestBasePlatformTopicSessions:
         ]
 
 
-class TestTelegramAutoTtsCaptionDelivery:
+class TestAutoTtsCaptionDelivery:
     @staticmethod
     def _make_voice_event(chat_id: str = "-1001", thread_id: str = "17585") -> MessageEvent:
         return MessageEvent(
             text="hello",
             message_type=MessageType.VOICE,
             source=SessionSource(
-                platform=Platform.TELEGRAM,
+                platform=Platform.DISCORD,
                 chat_id=chat_id,
                 chat_type="group",
                 thread_id=thread_id,
@@ -161,7 +161,7 @@ class TestTelegramAutoTtsCaptionDelivery:
 
     @pytest.mark.asyncio
     async def test_long_original_with_short_spoken_script_still_sends_full_reply(self, tmp_path):
-        adapter = DummyTelegramAdapter()
+        adapter = DummyAdapter()
         adapter._keep_typing = self._hold_typing()
         adapter._should_auto_tts_for_chat = lambda _chat_id: True
         adapter.play_tts = AsyncMock(return_value=SendResult(success=True, message_id="tts-1"))

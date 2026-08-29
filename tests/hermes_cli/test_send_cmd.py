@@ -191,7 +191,7 @@ def test_register_send_subparser_is_reusable():
     assert send_parser is not None
     args = parser.parse_args(["send", "--to", "telegram", "hi"])
     assert args.func is send_cmd.cmd_send
-    assert args.to == "telegram"
+    assert args.to == "discord"
     assert args.message == "hi"
 
 
@@ -205,7 +205,7 @@ def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
 
     This mirrors the gateway/run.py bootstrap behavior: without this, running
     ``hermes send`` from a fresh shell cannot resolve the home channel
-    because ``TELEGRAM_HOME_CHANNEL`` (saved by ``hermes config set``) lives
+    because ``DISCORD_HOME_CHANNEL`` (saved by ``hermes config set``) lives
     in config.yaml, not in .env — and the gateway's config loader reads via
     ``os.getenv(...)``.
     """
@@ -215,11 +215,11 @@ def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
     hermes_home.mkdir()
     (hermes_home / ".env").write_text("SOME_TOKEN=abc123\n")
     (hermes_home / "config.yaml").write_text(
-        "TELEGRAM_HOME_CHANNEL: '5550001111'\nnested:\n  ignored: true\n"
+        "DISCORD_HOME_CHANNEL: '5550001111'\nnested:\n  ignored: true\n"
     )
 
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-    monkeypatch.delenv("TELEGRAM_HOME_CHANNEL", raising=False)
+    monkeypatch.delenv("DISCORD_HOME_CHANNEL", raising=False)
     monkeypatch.delenv("SOME_TOKEN", raising=False)
 
     # Force get_hermes_home() to re-resolve under the patched env.
@@ -231,7 +231,7 @@ def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
     send_cmd._load_hermes_env()
 
     assert os.environ.get("SOME_TOKEN") == "abc123"
-    assert os.environ.get("TELEGRAM_HOME_CHANNEL") == "5550001111"
+    assert os.environ.get("DISCORD_HOME_CHANNEL") == "5550001111"
 
 
 def test_load_hermes_env_utf8_bom_preserves_first_key(tmp_path, monkeypatch):

@@ -24,10 +24,8 @@ from gateway.session import Platform, SessionSource
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch):
     for var in (
-        "TELEGRAM_ALLOWED_USERS",
-        "TELEGRAM_ALLOW_ALL_USERS",
-        "TELEGRAM_GROUP_ALLOWED_USERS",
-        "TELEGRAM_GROUP_ALLOWED_CHATS",
+        "DISCORD_ALLOWED_USERS",
+        "DISCORD_ALLOW_ALL_USERS",
         "GATEWAY_ALLOW_ALL_USERS",
         "GATEWAY_ALLOWED_USERS",
     ):
@@ -48,7 +46,7 @@ def _make_runner(*, paired: bool):
 
 def _make_source(user_id: str = "pairme", chat_type: str = "dm"):
     return SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id="123",
         chat_type=chat_type,
         user_id=user_id,
@@ -60,14 +58,14 @@ def _make_source(user_id: str = "pairme", chat_type: str = "dm"):
 def test_paired_user_authorized_even_when_not_in_allowlist(monkeypatch):
     """Union semantics: pairing is a grant, honored alongside the allowlist."""
     runner = _make_runner(paired=True)
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "owner1,owner2")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "owner1,owner2")
 
     assert runner._is_user_authorized(_make_source("pairme")) is True
 
 
 def test_unpaired_user_in_allowlist_still_authorized(monkeypatch):
     runner = _make_runner(paired=False)
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "owner1")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "owner1")
 
     assert runner._is_user_authorized(_make_source("owner1")) is True
 
@@ -96,7 +94,7 @@ def _approve_new_user(store, platform, user_id, user_name=""):
 
 def test_approval_adds_to_configured_allowlist(store, monkeypatch):
     """When an allowlist exists, approval appends the user to it (option i)."""
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "owner1")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "owner1")
     # save_env_value writes to .env under HERMES_HOME; patch it to capture.
     captured = {}
     import hermes_cli.config as cfg
@@ -105,13 +103,13 @@ def test_approval_adds_to_configured_allowlist(store, monkeypatch):
                         lambda k, v: (captured.__setitem__(k, v),
                                       os.environ.__setitem__(k, v)))
 
-    _approve_new_user(store, "telegram", "newuser99")
+    _approve_new_user(store, "discord", "newuser99")
 
-    assert captured.get("TELEGRAM_ALLOWED_USERS") == "owner1,newuser99"
+    assert captured.get("DISCORD_ALLOWED_USERS") == "owner1,newuser99"
 
 
 def test_revoke_removes_from_allowlist(store, monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "owner1,newuser99")
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "owner1,newuser99")
     saved = {}
     removed = []
     import hermes_cli.config as cfg
@@ -121,4 +119,4 @@ def test_revoke_removes_from_allowlist(store, monkeypatch):
                                       os.environ.__setitem__(k, v)))
     monkeypatch.setattr(cfg, "remove_env_value", lambda k: removed.append(k))
     # Seed the approved list directly so revoke has something to remove.
-    store._approve_user("telegram", "newuser99", "")
+    store._approve_user("discord", "newuser99", "")

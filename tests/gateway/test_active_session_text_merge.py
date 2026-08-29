@@ -10,24 +10,9 @@ hands off the next turn.
 from __future__ import annotations
 
 import asyncio
-import sys
-import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-# Minimal telegram stub so importing gateway.platforms.base does not pull
-# in the real python-telegram-bot dependency.
-_tg = sys.modules.get("telegram") or types.ModuleType("telegram")
-_tg.constants = sys.modules.get("telegram.constants") or types.ModuleType("telegram.constants")
-_ct = MagicMock()
-_ct.PRIVATE = "private"
-_ct.GROUP = "group"
-_ct.SUPERGROUP = "supergroup"
-_tg.constants.ChatType = _ct
-sys.modules.setdefault("telegram", _tg)
-sys.modules.setdefault("telegram.constants", _tg.constants)
-sys.modules.setdefault("telegram.ext", types.ModuleType("telegram.ext"))
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
@@ -49,7 +34,7 @@ def _make_event(
     thread_id: str | None = None,
 ) -> MessageEvent:
     source = SessionSource(
-        platform=Platform.TELEGRAM,
+        platform=Platform.DISCORD,
         chat_id=chat_id,
         chat_type=chat_type,
         user_id=user_id,
@@ -79,14 +64,14 @@ class _DummyAdapter(BasePlatformAdapter):  # type: ignore[misc]
 
 
 def _make_initialized_adapter() -> BasePlatformAdapter:
-    return _DummyAdapter(PlatformConfig(enabled=True, token="***"), Platform.TELEGRAM)
+    return _DummyAdapter(PlatformConfig(enabled=True, token="***"), Platform.DISCORD)
 
 
 def _make_adapter() -> BasePlatformAdapter:
     """Build a BasePlatformAdapter without running its heavy __init__."""
     adapter = object.__new__(_DummyAdapter)
     adapter.config = PlatformConfig(enabled=True, token="***")
-    adapter.platform = Platform.TELEGRAM
+    adapter.platform = Platform.DISCORD
     adapter._message_handler = AsyncMock(return_value=None)
     adapter._busy_session_handler = None
     adapter._active_sessions = {}
@@ -119,7 +104,7 @@ def _debounced_event(adapter: BasePlatformAdapter, session_key: str) -> MessageE
 async def test_non_dm_message_does_not_wait_for_topic_recovery_executor(monkeypatch):
     """Group messages must not queue behind the shared thread pool.
 
-    Topic recovery only applies to Telegram DM topic mode. Offloading that
+    Topic recovery only applies to DM topic mode. Offloading that
     no-op check for every group message makes ingress wait behind unrelated
     blocking jobs when the default executor is saturated.
     """
@@ -148,7 +133,7 @@ async def test_non_dm_message_does_not_wait_for_topic_recovery_executor(monkeypa
 
 @pytest.mark.asyncio
 async def test_dm_topic_recovery_stays_offloaded(monkeypatch):
-    """Real Telegram DM topic recovery must still run outside the event loop."""
+    """Real DM topic recovery must still run outside the event loop."""
     adapter = _make_adapter()
     recovery = MagicMock(return_value="topic-222")
     adapter.set_topic_recovery_fn(recovery)

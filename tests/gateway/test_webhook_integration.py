@@ -219,7 +219,7 @@ class TestCrossPlatformDelivery:
             "alerts": {
                 "secret": _INSECURE_NO_AUTH,
                 "prompt": "Alert: {message}",
-                "deliver": "telegram",
+                "deliver": "discord",
                 "deliver_extra": {"chat_id": "12345"},
             }
         }
@@ -231,9 +231,9 @@ class TestCrossPlatformDelivery:
         mock_tg_adapter.send = AsyncMock(return_value=SendResult(success=True))
 
         mock_runner = MagicMock()
-        mock_runner.adapters = {Platform.TELEGRAM: mock_tg_adapter}
+        mock_runner.adapters = {Platform.DISCORD: mock_tg_adapter}
         mock_runner.config = GatewayConfig(
-            platforms={Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake")}
+            platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="fake")}
         )
         adapter.gateway_runner = mock_runner
 

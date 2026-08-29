@@ -74,7 +74,7 @@ def _create(deliver=None):
 
 class TestCronContextDeliveryResolution:
     def test_omitted_deliver_resolves_to_creator_target(self, temp_cron_home):
-        tokens, extra = _enter_cron_context("telegram", "-100123456", "17")
+        tokens, extra = _enter_cron_context("discord", "-100123456", "17")
         try:
             result = _create()
         finally:
@@ -83,7 +83,7 @@ class TestCronContextDeliveryResolution:
         assert result["deliver"] == "telegram:-100123456:17"
 
     def test_literal_origin_resolves_to_creator_target(self, temp_cron_home):
-        tokens, extra = _enter_cron_context("telegram", "-100123456", "17")
+        tokens, extra = _enter_cron_context("discord", "-100123456", "17")
         try:
             result = _create(deliver="origin")
         finally:
@@ -109,7 +109,7 @@ class TestCronContextDeliveryResolution:
         assert result["deliver"] == "local"
 
     def test_comma_list_resolves_only_origin_element(self, temp_cron_home):
-        tokens, extra = _enter_cron_context("telegram", "-100123456", "17")
+        tokens, extra = _enter_cron_context("discord", "-100123456", "17")
         try:
             result = _create(deliver="origin,all")
         finally:
@@ -117,7 +117,7 @@ class TestCronContextDeliveryResolution:
         assert result["deliver"] == "telegram:-100123456:17,all"
 
     def test_explicit_target_passes_through_verbatim(self, temp_cron_home):
-        tokens, extra = _enter_cron_context("telegram", "-100999", "3")
+        tokens, extra = _enter_cron_context("discord", "-100999", "3")
         try:
             result = _create(deliver="discord:#engineering")
         finally:
@@ -125,7 +125,7 @@ class TestCronContextDeliveryResolution:
         assert result["deliver"] == "discord:#engineering"
 
     def test_local_passes_through(self, temp_cron_home):
-        tokens, extra = _enter_cron_context("telegram", "-100999")
+        tokens, extra = _enter_cron_context("discord", "-100999")
         try:
             result = _create(deliver="local")
         finally:
@@ -135,7 +135,7 @@ class TestCronContextDeliveryResolution:
     def test_stored_deliver_never_literal_origin_in_cron_context(self, temp_cron_home):
         from cron.jobs import get_job
 
-        tokens, extra = _enter_cron_context("telegram", "-100123456")
+        tokens, extra = _enter_cron_context("discord", "-100123456")
         try:
             result = _create(deliver="origin")
         finally:
@@ -153,7 +153,7 @@ class TestCronContextUpdatePath:
         from tools.cronjob_tools import cronjob
         from cron.jobs import get_job
 
-        tokens, extra = _enter_cron_context("telegram", "-100123456", "17")
+        tokens, extra = _enter_cron_context("discord", "-100123456", "17")
         try:
             created = _create(deliver="local")
             result = json.loads(

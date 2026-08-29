@@ -148,7 +148,7 @@ class TestSearch:
         assert results[0].name == "hermes-media-studio"
 
     def test_matches_tags(self):
-        results = search_index(self.entries, "telegram")
+        results = search_index(self.entries, "discord")
         assert results and results[0].name == "hermes-telegram-business"
 
     def test_matches_description(self):
@@ -292,7 +292,7 @@ class TestResolveName:
         assert entry is not None
 
     def test_unique_partial(self):
-        entry, _ = resolve_name(self.entries, "telegram")
+        entry, _ = resolve_name(self.entries, "discord")
         assert entry is not None and entry.name == "hermes-telegram-business"
 
     def test_ambiguous_partial(self):
@@ -425,7 +425,7 @@ class TestCmdSearch:
         monkeypatch.setattr(
             plugin_index, "load_index", lambda **kw: (_parse_entries(SAMPLE), "seed")
         )
-        plugins_cmd.cmd_search("telegram", json_output=True)
+        plugins_cmd.cmd_search("discord", json_output=True)
         payload = json.loads(capsys.readouterr().out)
         assert payload["source"] == "seed"
         assert payload["query"] == "telegram"

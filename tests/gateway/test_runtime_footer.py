@@ -103,7 +103,7 @@ def test_resolve_platform_can_add_fields_only():
             },
         },
     }
-    tg = resolve_footer_config(user, "telegram")
+    tg = resolve_footer_config(user, "discord")
     assert tg["enabled"] is True
     assert tg["fields"] == ["model", "context_pct", "cwd"]
     dc = resolve_footer_config(user, "discord")

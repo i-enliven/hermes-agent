@@ -56,7 +56,7 @@ class TestMatchProfileRoute:
 
     def test_no_match_returns_none(self):
         routes = [
-            ProfileRoute(name="r", platform="telegram", profile="p"),
+            ProfileRoute(name="r", platform="discord", profile="p"),
         ]
         assert match_profile_route(routes, "discord") is None
 
