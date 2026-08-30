@@ -72,6 +72,7 @@ _HERMES_CORE_TOOLS = [
     "clarify",
     # Code execution + delegation
     "execute_code", "delegate_task",
+    "jupyter_execute",
     # Cronjob management
     "cronjob",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
@@ -295,6 +296,12 @@ TOOLSETS = {
         "tools": ["execute_code"],
         "includes": []
     },
+    "jupyter": {
+        "description": "Execute Python code in a persistent Jupyter kernel (preserves variables across cells)",
+        "tools": ["jupyter_execute"],
+        "includes": []
+    },
+    
     
     "delegation": {
         "description": "Spawn subagents with isolated context for complex subtasks",
