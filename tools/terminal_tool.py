@@ -3464,7 +3464,8 @@ def terminal_tool(
                 omitted = len(output) - head_chars - tail_chars
                 truncated_notice = (
                     f"\n\n... [OUTPUT TRUNCATED - {omitted} chars omitted "
-                    f"out of {len(output)} total] ...\n\n"
+                    f"out of {len(output)} total. Do NOT re-run the exact same command. "
+                    "Use search_files/grep on the spill file or narrow command filters/flags.] ...\n\n"
                 )
                 output = output[:head_chars] + truncated_notice + output[-tail_chars:]
 

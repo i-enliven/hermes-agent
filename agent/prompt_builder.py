@@ -430,6 +430,20 @@ PARALLEL_TOOL_CALL_GUIDANCE = (
     "in doubt and the calls are independent, batch them."
 )
 
+TOOL_OUTPUT_TRUNCATION_GUIDANCE = (
+    "# Tool Output Truncation\n"
+    "When a tool result indicates output was truncated (e.g. '[OUTPUT TRUNCATED]' "
+    "or '[Hint: Results truncated]'), DO NOT re-run the exact same command or tool call "
+    "expecting full output. Instead:\n"
+    "1. For terminal commands that save full output to a spill file (full_output_path), "
+    "search the spill file using search_files or grep, or read targeted sections with "
+    "read_file(offset=..., limit=...).\n"
+    "2. For file operations or searches, supply specific offset/limit parameters or "
+    "narrow your search query.\n"
+    "3. Narrow shell commands using targeted filters or flags (e.g. pytest -k, git log -n) "
+    "rather than re-running broad commands."
+)
+
 # OpenAI GPT/Codex-specific execution guidance.  Addresses known failure modes
 # where GPT models abandon work on partial results, skip prerequisite lookups,
 # hallucinate instead of using tools, and declare "done" without verification.

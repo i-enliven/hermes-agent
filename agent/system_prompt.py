@@ -45,6 +45,7 @@ from agent.prompt_builder import (
     STEER_CHANNEL_NOTE,
     TASK_COMPLETION_GUIDANCE,
     TELEGRAM_RICH_MESSAGES_HINT,
+    TOOL_OUTPUT_TRUNCATION_GUIDANCE,
     TOOL_USE_ENFORCEMENT_GUIDANCE,
     TOOL_USE_ENFORCEMENT_MODELS,
     drain_truncation_warnings,
@@ -411,6 +412,8 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # (default True) and only injected when tools are actually loaded.
     if getattr(agent, "_parallel_tool_call_guidance", True) and agent.valid_tool_names:
         stable_parts.append(PARALLEL_TOOL_CALL_GUIDANCE)
+    if agent.valid_tool_names:
+        stable_parts.append(TOOL_OUTPUT_TRUNCATION_GUIDANCE)
 
     # Tool-aware behavioral guidance: only inject when the tools are loaded
     tool_guidance = []
