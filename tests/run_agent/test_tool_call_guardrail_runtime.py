@@ -423,3 +423,56 @@ def test_guardrail_halt_emits_final_response_through_stream_delta_callback():
     assert halt_text in text_deltas, (
         f"halt message was never streamed; callback only saw {deltas!r}"
     )
+
+
+def test_sequence_loop_warns_on_successful_repeated_commands():
+    cfg = {"tool_loop_guardrails": {"warn_after": {"sequence_repeat": 2}}}
+    agent = _make_agent("terminal", config=cfg)
+    guardrails = getattr(agent, "_tool_guardrails")
+
+    # First call - clean execution
+    d1 = guardrails.after_call("terminal", {"command": "git status"}, json.dumps({"exit_code": 0, "stdout": "clean"}), failed=False)
+    assert d1.action == "allow"
+
+    # Second call - same clean execution
+    d2 = guardrails.after_call("terminal", {"command": "git status"}, json.dumps({"exit_code": 0, "stdout": "clean"}), failed=False)
+    assert d2.action == "warn"
+    assert d2.code == "sequence_repeat_warning"
+    assert "Tool sequence loop detected" in d2.message
+
+
+def test_sequence_loop_ping_pong_detection():
+    cfg = {"tool_loop_guardrails": {"warn_after": {"sequence_repeat": 2}}}
+    agent = _make_agent("terminal", "read_file", config=cfg)
+    guardrails = getattr(agent, "_tool_guardrails")
+
+    # Sequence: terminal -> read_file -> terminal -> read_file
+    guardrails.after_call("terminal", {"command": "ls"}, "ok", failed=False)
+    guardrails.after_call("read_file", {"path": "a.txt"}, "content", failed=False)
+    guardrails.after_call("terminal", {"command": "ls"}, "ok", failed=False)
+    d4 = guardrails.after_call("read_file", {"path": "a.txt"}, "content", failed=False)
+
+    assert d4.action == "warn"
+    assert d4.code == "sequence_repeat_warning"
+    assert "2-step tool call pattern" in d4.message
+
+def test_sequence_loop_hard_stop_blocks_execution():
+    config = _hard_stop_config(
+        hard_stop_after={
+            "exact_failure": 2,
+            "same_tool_failure": 8,
+            "idempotent_no_progress": 5,
+            "sequence_repeat": 3,
+        }
+    )
+    agent = _make_agent("terminal", config=config)
+    guardrails = getattr(agent, "_tool_guardrails")
+
+    # Simulate 2 repeats of terminal command
+    guardrails.after_call("terminal", {"command": "check"}, "ok", failed=False)
+    guardrails.after_call("terminal", {"command": "check"}, "ok", failed=False)
+
+    # 3rd repeat in before_call should block
+    d_before = guardrails.before_call("terminal", {"command": "check"})
+    assert d_before.action == "block"
+    assert d_before.code == "sequence_repeat_block"

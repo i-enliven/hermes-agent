@@ -121,9 +121,12 @@ def test_hard_stop_enabled_blocks_repeated_exact_failure_before_next_execution()
 
 def test_mutating_or_unknown_tools_are_not_blocked_for_repeated_identical_success_output_by_default():
     controller = ToolCallGuardrailController(
-        ToolCallGuardrailConfig(no_progress_warn_after=2, no_progress_block_after=2)
+        ToolCallGuardrailConfig(
+            no_progress_warn_after=2,
+            no_progress_block_after=2,
+            sequence_repeat_warn_after=99,
+        )
     )
-
     for _ in range(3):
         assert controller.before_call("write_file", {"path": "/tmp/x", "content": "x"}).action == "allow"
         assert controller.after_call("write_file", {"path": "/tmp/x", "content": "x"}, "ok", failed=False).action == "allow"

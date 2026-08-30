@@ -77,6 +77,9 @@ class ToolCallGuardrailConfig:
     same_tool_failure_halt_after: int = 8
     no_progress_warn_after: int = 2
     no_progress_block_after: int = 5
+    sequence_repeat_warn_after: int = 3
+    sequence_repeat_block_after: int = 5
+    sliding_window_size: int = 10
     idempotent_tools: frozenset[str] = field(default_factory=lambda: IDEMPOTENT_TOOL_NAMES)
     mutating_tools: frozenset[str] = field(default_factory=lambda: MUTATING_TOOL_NAMES)
     loop_caps: "LoopCapConfig" = field(default_factory=lambda: LoopCapConfig())
@@ -110,6 +113,10 @@ class ToolCallGuardrailConfig:
                 warn_after.get("idempotent_no_progress", data.get("no_progress_warn_after")),
                 defaults.no_progress_warn_after,
             ),
+            sequence_repeat_warn_after=_positive_int(
+                warn_after.get("sequence_repeat", data.get("sequence_repeat_warn_after")),
+                defaults.sequence_repeat_warn_after,
+            ),
             exact_failure_block_after=_positive_int(
                 hard_stop_after.get("exact_failure", data.get("exact_failure_block_after")),
                 defaults.exact_failure_block_after,
@@ -121,6 +128,14 @@ class ToolCallGuardrailConfig:
             no_progress_block_after=_positive_int(
                 hard_stop_after.get("idempotent_no_progress", data.get("no_progress_block_after")),
                 defaults.no_progress_block_after,
+            ),
+            sequence_repeat_block_after=_positive_int(
+                hard_stop_after.get("sequence_repeat", data.get("sequence_repeat_block_after")),
+                defaults.sequence_repeat_block_after,
+            ),
+            sliding_window_size=_positive_int(
+                data.get("sliding_window_size"),
+                defaults.sliding_window_size,
             ),
             loop_caps=LoopCapConfig.from_mapping(data.get("loop_caps")),
         )
@@ -270,6 +285,28 @@ def classify_tool_failure(tool_name: str, result: str | None) -> tuple[bool, str
     return False, ""
 
 
+def _count_sequence_repeats(signatures: list[ToolCallSignature]) -> tuple[int, int]:
+    """Return (max_repeats, pattern_len) for the trailing sequence in signatures."""
+    if not signatures:
+        return 0, 0
+    max_k = 1
+    best_pattern_len = 1
+    n = len(signatures)
+    for pattern_len in (1, 2, 3):
+        if n < pattern_len:
+            continue
+        pattern = signatures[-pattern_len:]
+        k = 1
+        idx = n - 2 * pattern_len
+        while idx >= 0 and signatures[idx : idx + pattern_len] == pattern:
+            k += 1
+            idx -= pattern_len
+        if k > max_k or (k == max_k and pattern_len > best_pattern_len):
+            max_k = k
+            best_pattern_len = pattern_len
+    return max_k, best_pattern_len
+
+
 class ToolCallGuardrailController:
     """Per-turn controller for repeated failed/non-progressing tool calls."""
 
@@ -281,6 +318,7 @@ class ToolCallGuardrailController:
         self._exact_failure_counts: dict[ToolCallSignature, int] = {}
         self._same_tool_failure_counts: dict[str, int] = {}
         self._no_progress: dict[ToolCallSignature, tuple[str, int]] = {}
+        self._history_window: list[ToolCallSignature] = []
         self._halt_decision: ToolGuardrailDecision | None = None
         # Per-turn runaway-loop cap counters. Reset every turn (this method
         # runs at the start of each run_conversation), so the caps bound a
@@ -291,6 +329,11 @@ class ToolCallGuardrailController:
     @property
     def halt_decision(self) -> ToolGuardrailDecision | None:
         return self._halt_decision
+
+    def _record_signature(self, signature: ToolCallSignature) -> None:
+        self._history_window.append(signature)
+        if len(self._history_window) > self.config.sliding_window_size:
+            self._history_window.pop(0)
 
     def before_call(self, tool_name: str, args: Mapping[str, Any] | None) -> ToolGuardrailDecision:
         signature = ToolCallSignature.from_call(tool_name, _coerce_args(args))
@@ -345,6 +388,24 @@ class ToolCallGuardrailController:
                     self._halt_decision = decision
                     return decision
 
+        test_history = self._history_window + [signature]
+        seq_repeats, seq_pattern_len = _count_sequence_repeats(test_history)
+        if seq_repeats >= self.config.sequence_repeat_block_after:
+            decision = ToolGuardrailDecision(
+                action="block",
+                code="sequence_repeat_block",
+                message=(
+                    f"Blocked {tool_name}: detected a repeating {seq_pattern_len}-step tool call sequence "
+                    f"that has repeated {seq_repeats} times. Stop repeating this command loop; "
+                    "change strategy or explain the blocker."
+                ),
+                tool_name=tool_name,
+                count=seq_repeats,
+                signature=signature,
+            )
+            self._halt_decision = decision
+            return decision
+
         return ToolGuardrailDecision(tool_name=tool_name, signature=signature)
 
     def after_call(
@@ -359,6 +420,9 @@ class ToolCallGuardrailController:
         signature = ToolCallSignature.from_call(tool_name, args)
         if failed is None:
             failed, _ = classify_tool_failure(tool_name, result)
+
+        self._record_signature(signature)
+        seq_repeats, seq_pattern_len = _count_sequence_repeats(self._history_window)
 
         if failed:
             exact_count = self._exact_failure_counts.get(signature, 0) + 1
@@ -412,6 +476,35 @@ class ToolCallGuardrailController:
         self._exact_failure_counts.pop(signature, None)
         self._same_tool_failure_counts.pop(tool_name, None)
 
+        if self.config.hard_stop_enabled and seq_repeats >= self.config.sequence_repeat_block_after:
+            decision = ToolGuardrailDecision(
+                action="halt",
+                code="sequence_repeat_halt",
+                message=(
+                    f"Stopped {tool_name}: detected a repeating {seq_pattern_len}-step tool call sequence "
+                    f"that has repeated {seq_repeats} times. Stop repeating this command loop."
+                ),
+                tool_name=tool_name,
+                count=seq_repeats,
+                signature=signature,
+            )
+            self._halt_decision = decision
+            return decision
+
+        if self.config.warnings_enabled and seq_repeats >= self.config.sequence_repeat_warn_after:
+            return ToolGuardrailDecision(
+                action="warn",
+                code="sequence_repeat_warning",
+                message=(
+                    f"Tool sequence loop detected: a {seq_pattern_len}-step tool call pattern has "
+                    f"repeated {seq_repeats} times. Change your approach or vary your strategy instead "
+                    "of repeating this sequence."
+                ),
+                tool_name=tool_name,
+                count=seq_repeats,
+                signature=signature,
+            )
+
         if not self._is_idempotent(tool_name):
             self._no_progress.pop(signature, None)
             return ToolGuardrailDecision(tool_name=tool_name, signature=signature)
@@ -438,7 +531,6 @@ class ToolCallGuardrailController:
             )
 
         return ToolGuardrailDecision(tool_name=tool_name, count=repeat_count, signature=signature)
-
     def _is_idempotent(self, tool_name: str) -> bool:
         if tool_name in self.config.mutating_tools:
             return False
