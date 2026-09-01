@@ -87,8 +87,8 @@ class TestNeedsDeepSeekToolReasoning:
 class TestCopyReasoningContentForApi:
     """_copy_reasoning_content_for_api pads reasoning_content for DeepSeek tool-calls."""
 
-    def test_deepseek_tool_call_poisoned_history_gets_space_placeholder(self) -> None:
-        """Already-poisoned history (no reasoning_content, no reasoning) gets ' '."""
+    def test_deepseek_tool_call_poisoned_history_gets_empty_string_placeholder(self) -> None:
+        """Already-poisoned history (no reasoning_content, no reasoning) gets ''."""
         agent = _make_agent(provider="deepseek", model="deepseek-v4-flash")
         source = {
             "role": "assistant",
@@ -97,8 +97,7 @@ class TestCopyReasoningContentForApi:
         }
         api_msg: dict = {}
         agent._copy_reasoning_content_for_api(source, api_msg)
-        assert api_msg.get("reasoning_content") == " "
-
+        assert api_msg.get("reasoning_content") == ""
 
 
 
@@ -179,22 +178,22 @@ class TestBuildAssistantMessagePadsStrictProviders:
         [
             pytest.param(
                 "deepseek", "deepseek-v4-pro", "",
-                None, " ",
+                None, "",
                 id="deepseek-attr-none",
             ),
             pytest.param(
                 "deepseek", "deepseek-v4-pro", "",
-                _ATTR_ABSENT, " ",
+                _ATTR_ABSENT, "",
                 id="deepseek-attr-absent",
             ),
             pytest.param(
                 "kimi-coding", "kimi-k2.6", "",
-                None, " ",
+                None, "",
                 id="kimi-attr-none",
             ),
             pytest.param(
                 "custom", "kimi-k2", "https://api.moonshot.ai/v1",
-                _ATTR_ABSENT, " ",
+                _ATTR_ABSENT, "",
                 id="moonshot-base-url",
             ),
             pytest.param(
@@ -300,17 +299,17 @@ class TestReapplyReasoningEchoForProviderSwitch:
         msgs = self._codex_built_history()
         padded = reapply_reasoning_echo_for_provider(agent, msgs)
         assert padded == 1
-        bare = [m for m in msgs if m.get("role") == "assistant" and not m.get("reasoning_content")]
+        bare = [m for m in msgs if m.get("role") == "assistant" and "reasoning_content" not in m]
         assert bare == []
         # existing summary preserved verbatim, not clobbered with the pad
         assert msgs[2]["reasoning_content"] == "summary from codex"
-        assert msgs[4]["reasoning_content"] == " "
+        assert msgs[4]["reasoning_content"] == ""
 
     def test_strips_stale_pad_under_strict_provider(self) -> None:
         """Switching TO a strict provider (Codex/Mistral/Cerebras) must STRIP
         stale reasoning_content baked in under a reasoning primary, otherwise
         the fallback request 400/422s ("Extra inputs are not permitted").
-        Refs #45655 — DeepSeek primary → Mistral fallback 422 on the " " pad.
+        Refs #45655.
         """
         from agent.agent_runtime_helpers import reapply_reasoning_echo_for_provider
 
@@ -334,11 +333,11 @@ class TestReasoningPrimaryToStrictFallback:
     """Regression: reasoning primary → strict fallback must not 422.
 
     User report (HTTP 422): a DeepSeek V4 Pro primary pads tool-call turns
-    with ``reasoning_content=" "``; a mid-session fallback to Mistral
+    with ``reasoning_content=""``; a mid-session fallback to Mistral
     (mistral-small) replays those pads and Mistral rejects them with::
 
         body.messages.2.assistant.reasoning_content: Extra inputs are not
-        permitted  (input: ' ')
+        permitted  (input: '')
 
     api_messages is built once under the primary, so the stale pad survives
     into the fallback request. reapply_reasoning_echo_for_provider() must
@@ -348,16 +347,16 @@ class TestReasoningPrimaryToStrictFallback:
     @staticmethod
     def _deepseek_built_history() -> list[dict]:
         """Multi-turn history as built under a DeepSeek primary — tool-call
-        turns padded with " " at indices 2 and 6 (matching the report)."""
+        turns padded with "" at indices 2 and 6 (matching the report)."""
         return [
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "u1"},
-            {"role": "assistant", "reasoning_content": " ",
+            {"role": "assistant", "reasoning_content": "",
              "tool_calls": [{"id": "a", "function": {"name": "terminal"}}]},
             {"role": "tool", "tool_call_id": "a", "content": "ok"},
             {"role": "assistant", "content": "done"},
             {"role": "user", "content": "u2"},
-            {"role": "assistant", "reasoning_content": " ",
+            {"role": "assistant", "reasoning_content": "",
              "tool_calls": [{"id": "b", "function": {"name": "terminal"}}]},
             {"role": "tool", "tool_call_id": "b", "content": "ok"},
         ]
@@ -389,17 +388,17 @@ class TestReasoningPrimaryToStrictFallback:
         reapply_reasoning_echo_for_provider(mistral, msgs)
         deepseek = _make_agent(provider="deepseek", model="deepseek-v4-pro")
         reapply_reasoning_echo_for_provider(deepseek, msgs)
-        assert msgs[2]["reasoning_content"] == " "
-        assert msgs[6]["reasoning_content"] == " "
+        assert msgs[2]["reasoning_content"] == ""
+        assert msgs[6]["reasoning_content"] == ""
 
     def test_copy_strips_space_pad_for_mistral(self) -> None:
-        """copy_reasoning_content_for_api strips the " " pad on the rebuild
+        """copy_reasoning_content_for_api strips the "" pad on the rebuild
         path too (covers fresh api_messages built under the strict provider)."""
         mistral = _make_agent(
             provider="mistral", model="mistral-small-latest",
             base_url="https://api.mistral.ai/v1",
         )
-        source = {"role": "assistant", "reasoning_content": " ",
+        source = {"role": "assistant", "reasoning_content": "",
                   "tool_calls": [{"id": "a"}]}
         api_msg: dict = {"role": "assistant", "tool_calls": [{"id": "a"}]}
         mistral._copy_reasoning_content_for_api(source, api_msg)

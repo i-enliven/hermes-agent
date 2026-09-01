@@ -2219,7 +2219,7 @@ def build_assistant_message(agent, assistant_message, finish_reason: str) -> dic
         # be passed back to the API"). A space satisfies non-empty
         # checks everywhere without leaking fabricated reasoning.
         # Refs #15250, #17400, #17341.
-        msg["reasoning_content"] = reasoning_text or " "
+        msg["reasoning_content"] = reasoning_text or ""
 
     # Additive fallback (refs #16844, #16884). Streaming-only providers
     # (glm, MiniMax, gpt-5.x via aigw, Anthropic via openai-compat shims)
