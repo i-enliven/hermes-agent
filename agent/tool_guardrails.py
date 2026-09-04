@@ -217,7 +217,7 @@ class ToolCallSignature:
 
     @classmethod
     def from_call(cls, tool_name: str, args: Mapping[str, Any] | None) -> "ToolCallSignature":
-        canonical = canonical_tool_args(args or {})
+        canonical = canonical_tool_args(args or {}, tool_name=tool_name)
         return cls(tool_name=tool_name, args_hash=_sha256(canonical))
 
     def to_metadata(self) -> dict[str, str]:
@@ -257,12 +257,22 @@ class ToolGuardrailDecision:
         return data
 
 
-def canonical_tool_args(args: Mapping[str, Any]) -> str:
+_PATH_KEYS = frozenset({"path", "file_path", "filepath", "target_file"})
+
+
+def canonical_tool_args(args: Mapping[str, Any], tool_name: str | None = None) -> str:
     """Return sorted compact JSON for parsed tool arguments."""
     if not isinstance(args, Mapping):
         raise TypeError(f"tool args must be a mapping, got {type(args).__name__}")
+
+    normalized: dict[str, Any] = dict(args)
+    for key in _PATH_KEYS:
+        val = normalized.get(key)
+        if isinstance(val, str) and val.strip():
+            normalized[key] = os.path.normpath(val.strip())
+
     return json.dumps(
-        args,
+        normalized,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

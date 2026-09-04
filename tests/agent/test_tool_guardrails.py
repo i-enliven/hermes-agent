@@ -318,3 +318,50 @@ def test_paging_loop_halt_and_block_when_hard_stop_enabled():
     assert d5.action == "block"
     assert d5.code == "semantic_paging_loop_block"
     assert d5.allows_execution is False
+
+
+def test_tool_call_signature_canonicalizes_file_paths():
+    # Relative path vs dot-slash
+    sig_relative = ToolCallSignature.from_call("read_file", {"path": "foo.py"})
+    sig_dot_slash = ToolCallSignature.from_call("read_file", {"path": "./foo.py"})
+    assert sig_relative == sig_dot_slash
+
+    # Redundant slashes and parent traversal
+    sig_nested = ToolCallSignature.from_call("read_file", {"path": "dir//sub/../foo.py"})
+    sig_clean = ToolCallSignature.from_call("read_file", {"path": "dir/foo.py"})
+    assert sig_nested == sig_clean
+
+    # Whitespace stripping
+    sig_padded = ToolCallSignature.from_call("read_file", {"path": "  foo.py  \n"})
+    assert sig_padded == sig_relative
+
+    # Alternate path keys
+    assert ToolCallSignature.from_call("edit", {"file_path": "./a.py"}) == ToolCallSignature.from_call("edit", {"file_path": "a.py"})
+    assert ToolCallSignature.from_call("write", {"filepath": "./a.py"}) == ToolCallSignature.from_call("write", {"filepath": "a.py"})
+    assert ToolCallSignature.from_call("patch", {"target_file": "./a.py"}) == ToolCallSignature.from_call("patch", {"target_file": "a.py"})
+
+    # Non-string or empty values are preserved safely
+    assert canonical_tool_args({"path": ""}) == '{"path":""}'
+    assert canonical_tool_args({"path": None}) == '{"path":null}'
+
+
+def test_idempotent_no_progress_catches_aliased_file_paths():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(
+            warnings_enabled=True,
+            no_progress_warn_after=2,
+        )
+    )
+
+    # First call: ./foo.py
+    d1_before = controller.before_call("read_file", {"path": "./foo.py"})
+    assert d1_before.action == "allow"
+    d1_after = controller.after_call("read_file", {"path": "./foo.py"}, "content of foo.py", failed=False)
+    assert d1_after.action == "allow"
+
+    # Second call: foo.py (aliased path, identical content returned)
+    d2_before = controller.before_call("read_file", {"path": "foo.py"})
+    assert d2_before.action == "allow"
+    d2_after = controller.after_call("read_file", {"path": "foo.py"}, "content of foo.py", failed=False)
+    assert d2_after.action == "warn"
+    assert d2_after.code == "idempotent_no_progress_warning"
