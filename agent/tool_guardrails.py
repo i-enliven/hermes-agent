@@ -10,11 +10,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from utils import safe_json_loads
 from agent.tool_result_classification import file_mutation_result_landed
+
+
+_PAGING_TOOL_NAMES = frozenset(
+    {
+        "read_file",
+        "mcp_filesystem_read_file",
+        "mcp_filesystem_read_text_file",
+    }
+)
 
 
 IDEMPOTENT_TOOL_NAMES = frozenset(
@@ -79,6 +89,8 @@ class ToolCallGuardrailConfig:
     no_progress_block_after: int = 5
     sequence_repeat_warn_after: int = 3
     sequence_repeat_block_after: int = 5
+    paging_loop_warn_after: int = 4
+    paging_loop_block_after: int = 8
     sliding_window_size: int = 10
     idempotent_tools: frozenset[str] = field(default_factory=lambda: IDEMPOTENT_TOOL_NAMES)
     mutating_tools: frozenset[str] = field(default_factory=lambda: MUTATING_TOOL_NAMES)
@@ -132,6 +144,14 @@ class ToolCallGuardrailConfig:
             sequence_repeat_block_after=_positive_int(
                 hard_stop_after.get("sequence_repeat", data.get("sequence_repeat_block_after")),
                 defaults.sequence_repeat_block_after,
+            ),
+            paging_loop_warn_after=_positive_int(
+                warn_after.get("semantic_paging", data.get("paging_loop_warn_after")),
+                defaults.paging_loop_warn_after,
+            ),
+            paging_loop_block_after=_positive_int(
+                hard_stop_after.get("semantic_paging", data.get("paging_loop_block_after")),
+                defaults.paging_loop_block_after,
             ),
             sliding_window_size=_positive_int(
                 data.get("sliding_window_size"),
@@ -325,6 +345,9 @@ class ToolCallGuardrailController:
         # single agent loop rather than accumulating across the session.
         self._turn_web_search_count = 0
         self._turn_subagent_count = 0
+        self._last_read_path: str | None = None
+        self._last_read_offset: int = 0
+        self._consecutive_paging_count: int = 0
 
     @property
     def halt_decision(self) -> ToolGuardrailDecision | None:
@@ -405,6 +428,31 @@ class ToolCallGuardrailController:
             )
             self._halt_decision = decision
             return decision
+
+        if tool_name in _PAGING_TOOL_NAMES:
+            norm_path = _normalize_read_path(_coerce_args(args))
+            offset = _extract_read_offset(_coerce_args(args))
+            if (
+                self._last_read_path
+                and self._last_read_path == norm_path
+                and offset > self._last_read_offset
+                and self._consecutive_paging_count >= self.config.paging_loop_block_after
+            ):
+                decision = ToolGuardrailDecision(
+                    action="block",
+                    code="semantic_paging_loop_block",
+                    message=(
+                        f"Blocked {tool_name}: detected {self._consecutive_paging_count} consecutive "
+                        f"offset-increment reads on '{norm_path}'. Stop reading this file line-by-line. "
+                        "Use 'search_files' to locate the specific function, class, or symbol, "
+                        "or read the needed range with a larger limit."
+                    ),
+                    tool_name=tool_name,
+                    count=self._consecutive_paging_count,
+                    signature=signature,
+                )
+                self._halt_decision = decision
+                return decision
 
         return ToolGuardrailDecision(tool_name=tool_name, signature=signature)
 
@@ -504,6 +552,57 @@ class ToolCallGuardrailController:
                 count=seq_repeats,
                 signature=signature,
             )
+
+        if tool_name not in _PAGING_TOOL_NAMES:
+            self._last_read_path = None
+            self._last_read_offset = 0
+            self._consecutive_paging_count = 0
+        else:
+            norm_path = _normalize_read_path(args)
+            offset = _extract_read_offset(args)
+            if self._last_read_path == norm_path and offset > self._last_read_offset:
+                self._consecutive_paging_count += 1
+            else:
+                self._last_read_path = norm_path
+                self._consecutive_paging_count = 1
+            self._last_read_offset = offset
+
+            if (
+                self.config.hard_stop_enabled
+                and self._consecutive_paging_count >= self.config.paging_loop_block_after
+            ):
+                decision = ToolGuardrailDecision(
+                    action="halt",
+                    code="semantic_paging_loop_halt",
+                    message=(
+                        f"Stopped {tool_name}: detected {self._consecutive_paging_count} consecutive "
+                        f"offset-increment reads on '{norm_path}'. Stop reading this file line-by-line. "
+                        "Use 'search_files' to locate the specific function, class, or symbol."
+                    ),
+                    tool_name=tool_name,
+                    count=self._consecutive_paging_count,
+                    signature=signature,
+                )
+                self._halt_decision = decision
+                return decision
+
+            if (
+                self.config.warnings_enabled
+                and self._consecutive_paging_count >= self.config.paging_loop_warn_after
+            ):
+                return ToolGuardrailDecision(
+                    action="warn",
+                    code="semantic_paging_loop_warning",
+                    message=(
+                        f"Semantic paging loop detected: {self._consecutive_paging_count} consecutive "
+                        f"offset-increment reads on '{norm_path}'. Stop reading this file line-by-line. "
+                        "Use 'search_files' to locate the specific function, class, or symbol, "
+                        "or read the needed range with a larger limit."
+                    ),
+                    tool_name=tool_name,
+                    count=self._consecutive_paging_count,
+                    signature=signature,
+                )
 
         if not self._is_idempotent(tool_name):
             self._no_progress.pop(signature, None)
@@ -732,3 +831,19 @@ def _sha256(value: str) -> str:
     # encode raises and takes down the whole conversation loop. The hash only
     # needs deterministic bytes, not valid UTF-8.
     return hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _normalize_read_path(args: Mapping[str, Any]) -> str:
+    path = str(args.get("path") or args.get("file_path") or args.get("target_file") or "").strip()
+    return os.path.normpath(path) if path else ""
+
+
+def _extract_read_offset(args: Mapping[str, Any]) -> int:
+    for key in ("offset", "start_line", "line_number"):
+        val = args.get(key)
+        if val is not None:
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                pass
+    return 1

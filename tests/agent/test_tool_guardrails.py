@@ -172,11 +172,149 @@ def test_web_search_cap_blocks_after_limit_regardless_of_hard_stop():
     assert decision.should_halt is True
 
 
+# ── Semantic paging loop tests ──────────────────────────────────────────────
 
 
+def test_config_parses_semantic_paging_thresholds():
+    cfg = ToolCallGuardrailConfig.from_mapping(
+        {
+            "warn_after": {
+                "semantic_paging": 3,
+            },
+            "hard_stop_after": {
+                "semantic_paging": 6,
+            },
+        }
+    )
+    assert cfg.paging_loop_warn_after == 3
+    assert cfg.paging_loop_block_after == 6
 
 
+def test_consecutive_offset_reads_trigger_paging_warning():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(paging_loop_warn_after=4)
+    )
+    path = "gateway/run.py"
+    offsets = [1, 51, 101, 151]
+
+    for i, offset in enumerate(offsets):
+        args = {"path": path, "offset": offset, "limit": 50}
+        assert controller.before_call("read_file", args).action == "allow"
+        decision = controller.after_call(
+            "read_file", args, f"content for chunk {i}", failed=False
+        )
+        if i < 3:
+            assert decision.action == "allow", f"Call {i+1} should be allowed"
+        else:
+            assert decision.action == "warn"
+            assert decision.code == "semantic_paging_loop_warning"
+            assert "Semantic paging loop detected" in decision.message
+            assert "4 consecutive offset-increment reads" in decision.message
+            assert "search_files" in decision.message
 
 
+def test_interleaved_non_read_tool_resets_paging_streak():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(paging_loop_warn_after=3)
+    )
+    path = "gateway/run.py"
+
+    # Read 1
+    controller.after_call("read_file", {"path": path, "offset": 1}, "c1", failed=False)
+    # Read 2
+    controller.after_call("read_file", {"path": path, "offset": 51}, "c2", failed=False)
+
+    # Interleaved diagnostic tool call (search_files)
+    controller.after_call(
+        "search_files", {"path": path, "pattern": "def foo"}, "match", failed=False
+    )
+
+    # Read 3 (offset advances, but streak was reset)
+    decision = controller.after_call(
+        "read_file", {"path": path, "offset": 101}, "c3", failed=False
+    )
+    assert decision.action == "allow"
+
+    # Read 4 (streak is now 2)
+    decision = controller.after_call(
+        "read_file", {"path": path, "offset": 151}, "c4", failed=False
+    )
+    assert decision.action == "allow"
+
+    # Read 5 (streak is now 3 -> triggers warning)
+    decision = controller.after_call(
+        "read_file", {"path": path, "offset": 201}, "c5", failed=False
+    )
+    assert decision.action == "warn"
+    assert decision.code == "semantic_paging_loop_warning"
 
 
+def test_switching_target_file_resets_paging_streak():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(paging_loop_warn_after=3)
+    )
+    # 2 reads on file A
+    controller.after_call("read_file", {"path": "a.py", "offset": 1}, "c1", failed=False)
+    controller.after_call("read_file", {"path": "a.py", "offset": 51}, "c2", failed=False)
+
+    # Switch to file B
+    controller.after_call("read_file", {"path": "b.py", "offset": 1}, "c3", failed=False)
+    decision = controller.after_call("read_file", {"path": "b.py", "offset": 51}, "c4", failed=False)
+    assert decision.action == "allow"
+
+
+def test_backward_offset_jump_resets_paging_streak():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(paging_loop_warn_after=3)
+    )
+    path = "a.py"
+    controller.after_call("read_file", {"path": path, "offset": 1}, "c1", failed=False)
+    controller.after_call("read_file", {"path": path, "offset": 51}, "c2", failed=False)
+
+    # Jump backwards to offset 10 -> resets streak to 1
+    decision = controller.after_call("read_file", {"path": path, "offset": 10}, "c3", failed=False)
+    assert decision.action == "allow"
+
+    # Advance from 10 to 30 -> streak is 2
+    decision = controller.after_call("read_file", {"path": path, "offset": 30}, "c4", failed=False)
+    assert decision.action == "allow"
+
+
+def test_paging_loop_halt_and_block_when_hard_stop_enabled():
+    controller = ToolCallGuardrailController(
+        ToolCallGuardrailConfig(
+            hard_stop_enabled=True,
+            paging_loop_warn_after=2,
+            paging_loop_block_after=4,
+        )
+    )
+    path = "large.py"
+
+    # Read 1: allow
+    assert controller.before_call("read_file", {"path": path, "offset": 1}).action == "allow"
+    d1 = controller.after_call("read_file", {"path": path, "offset": 1}, "c1", failed=False)
+    assert d1.action == "allow"
+
+    # Read 2: warn
+    assert controller.before_call("read_file", {"path": path, "offset": 51}).action == "allow"
+    d2 = controller.after_call("read_file", {"path": path, "offset": 51}, "c2", failed=False)
+    assert d2.action == "warn"
+    assert d2.code == "semantic_paging_loop_warning"
+
+    # Read 3: warn
+    assert controller.before_call("read_file", {"path": path, "offset": 101}).action == "allow"
+    d3 = controller.after_call("read_file", {"path": path, "offset": 101}, "c3", failed=False)
+    assert d3.action == "warn"
+
+    # Read 4: halt
+    assert controller.before_call("read_file", {"path": path, "offset": 151}).action == "allow"
+    d4 = controller.after_call("read_file", {"path": path, "offset": 151}, "c4", failed=False)
+    assert d4.action == "halt"
+    assert d4.code == "semantic_paging_loop_halt"
+    assert d4.should_halt is True
+
+    # Read 5: before_call blocks execution
+    d5 = controller.before_call("read_file", {"path": path, "offset": 201})
+    assert d5.action == "block"
+    assert d5.code == "semantic_paging_loop_block"
+    assert d5.allows_execution is False
