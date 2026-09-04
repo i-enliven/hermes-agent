@@ -452,3 +452,40 @@ def test_prologue_does_not_title_machine_driven_runs(platform):
     overwritten or never read.
     """
     assert not _title_turn(platform).called
+
+
+def test_guardrail_halt_resumption_injects_strategy_shift_instruction():
+    from agent.tool_guardrails import ToolGuardrailDecision
+    agent = _FakeAgent()
+    agent._pending_guardrail_halt_resumption = ToolGuardrailDecision(
+        action="halt",
+        code="sequence_repeat_halt",
+        tool_name="terminal",
+    )
+    ctx = _build(agent, user_message="what should we do next?")
+    user_msg = ctx.messages[-1]
+    assert "api_content" in user_msg
+    api_content = user_msg["api_content"]
+    assert "MANDATORY STRATEGY SHIFT: Do NOT immediately emit another inspection or tool call." in api_content
+    assert "summarize what you have learned so far" in api_content
+    # One-shot: cleared after consumption
+    assert agent._pending_guardrail_halt_resumption is None
+
+
+def test_guardrail_halt_resumption_history_fallback_and_one_shot():
+    agent = _FakeAgent()
+    # Simulate history ending in guardrail halt assistant message
+    history = [
+        {"role": "user", "content": "run tests"},
+        {"role": "assistant", "content": "I stopped retrying terminal because it hit the tool-call guardrail (sequence_repeat_halt)."},
+    ]
+    ctx1 = _build(agent, conversation_history=history, user_message="continue")
+    assert "api_content" in ctx1.messages[-1]
+    assert "MANDATORY STRATEGY SHIFT" in ctx1.messages[-1]["api_content"]
+
+    # Next normal turn does NOT have the instruction
+    history2 = list(ctx1.messages)
+    history2.append({"role": "assistant", "content": "Here is the summary of what happened..."})
+    ctx2 = _build(agent, conversation_history=history2, user_message="sounds good, try option B")
+    user_msg2 = ctx2.messages[-1]
+    assert "MANDATORY STRATEGY SHIFT" not in (user_msg2.get("api_content") or "")
