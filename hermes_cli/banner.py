@@ -138,9 +138,11 @@ _UPDATE_CHECK_CACHE_SECONDS = 6 * 3600
 # (e.g. nix-built hermes — no local git history to count against).
 UPDATE_AVAILABLE_NO_COUNT = -1
 
-_UPSTREAM_REPO_URL = "https://github.com/NousResearch/hermes-agent.git"
-_OFFICIAL_REPO_CANONICAL = "github.com/nousresearch/hermes-agent"
-
+_UPSTREAM_REPO_URL = "https://github.com/i-enliven/hermes-agent.git"
+_OFFICIAL_REPO_CANONICAL = {
+    "github.com/nousresearch/hermes-agent",
+    "github.com/i-enliven/hermes-agent",
+}
 
 def _canonical_github_remote(url: str | None) -> str:
     """Return ``host/owner/repo`` for common GitHub remote URL forms."""
@@ -169,7 +171,7 @@ def _is_ssh_remote(url: str | None) -> bool:
 
 
 def _is_official_ssh_remote(url: str | None) -> bool:
-    return _is_ssh_remote(url) and _canonical_github_remote(url) == _OFFICIAL_REPO_CANONICAL
+    return _is_ssh_remote(url) and _canonical_github_remote(url) in _OFFICIAL_REPO_CANONICAL
 
 
 def _git_stdout(args: list[str], *, cwd: Path, timeout: int = 5) -> Optional[str]:
@@ -207,7 +209,7 @@ def _github_compare_behind(current_rev: str, target_rev: str) -> Optional[int]:
     if not (_is_full_sha(current_rev) and _is_full_sha(target_rev)):
         return None
     url = (
-        "https://api.github.com/repos/nousresearch/hermes-agent/"
+        "https://api.github.com/repos/i-enliven/hermes-agent/"
         f"compare/{current_rev}...{target_rev}"
     )
     try:

@@ -745,8 +745,6 @@ def apply_reasoning_content_policy(
     if isinstance(existing, str):
         if not needs_thinking_pad:
             api_msg.pop("reasoning_content", None)
-        elif existing == "":
-            api_msg["reasoning_content"] = " "
         else:
             api_msg["reasoning_content"] = existing
         return
@@ -758,10 +756,8 @@ def apply_reasoning_content_policy(
     # pins reasoning_content at creation time for tool-call turns, so the
     # shape (reasoning set, reasoning_content absent, tool_calls present)
     # is unreachable from same-provider DeepSeek history after this fix.
-    # Inject a single space to satisfy the API without leaking another
-    # provider's chain of thought to DeepSeek/Kimi. Space (not "")
-    # because DeepSeek V4 Pro rejects empty-string reasoning_content
-    # in thinking mode (refs #17341).
+    # Inject empty string to satisfy the API without leaking another
+    # provider's chain of thought to DeepSeek/Kimi.
     normalized_reasoning = source_msg.get("reasoning")
     if (
         needs_thinking_pad
@@ -769,7 +765,7 @@ def apply_reasoning_content_policy(
         and isinstance(normalized_reasoning, str)
         and normalized_reasoning
     ):
-        api_msg["reasoning_content"] = " "
+        api_msg["reasoning_content"] = ""
         return
 
     # 3. Healthy session: promote 'reasoning' field to 'reasoning_content'
@@ -786,17 +782,13 @@ def apply_reasoning_content_policy(
         return
 
     # 4. DeepSeek / Kimi thinking mode: all assistant messages need
-    # reasoning_content. Inject a single space to satisfy the provider's
+    # reasoning_content. Inject empty string to satisfy the provider's
     # requirement when no explicit reasoning content is present. Covers
     # both tool-call turns (already-poisoned history with no reasoning
-    # at all) and plain text turns. Space (not "") because DeepSeek V4
-    # Pro tightened validation and rejects empty string with HTTP 400
-    # ("The reasoning content in the thinking mode must be passed back
-    # to the API"). Refs #17341.
+    # at all) and plain text turns.
     if needs_thinking_pad:
-        api_msg["reasoning_content"] = " "
+        api_msg["reasoning_content"] = ""
         return
-
     # 5. reasoning_content was present but not a string (e.g. None after
     # context compaction).  Don't pass null to the API.
     api_msg.pop("reasoning_content", None)
@@ -836,10 +828,10 @@ def reapply_reasoning_echo(api_messages: list, needs_thinking_pad: bool) -> int:
         if api_msg.get("role") != "assistant":
             continue
         if needs_thinking_pad:
-            if api_msg.get("reasoning_content"):
+            if "reasoning_content" in api_msg:
                 continue
             apply_reasoning_content_policy(api_msg, api_msg, needs_thinking_pad)
-            if api_msg.get("reasoning_content"):
+            if "reasoning_content" in api_msg:
                 changed += 1
         else:
             # Strict provider — strip any stale reasoning_content pad left
@@ -849,7 +841,6 @@ def reapply_reasoning_echo(api_messages: list, needs_thinking_pad: bool) -> int:
                 api_msg.pop("reasoning_content", None)
                 changed += 1
     return changed
-
 
 # ---------------------------------------------------------------------------
 # Image / multimodal parts — evaluated, NOT consolidated (verdict: syntax)

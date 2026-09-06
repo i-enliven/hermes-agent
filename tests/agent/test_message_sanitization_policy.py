@@ -221,24 +221,24 @@ class TestApplyReasoningContentPolicy:
             api, True)
         assert api["reasoning_content"] == "thoughts"
 
-    def test_require_side_upgrades_empty_string_to_space(self):
+    def test_require_side_preserves_empty_string(self):
         api = {"role": "assistant", "content": "x", "reasoning_content": ""}
         apply_reasoning_content_policy(
             {"role": "assistant", "content": "x", "reasoning_content": ""}, api, True)
-        assert api["reasoning_content"] == " "
+        assert api["reasoning_content"] == ""
 
     def test_strict_side_strips_existing(self):
-        api = {"role": "assistant", "content": "x", "reasoning_content": " "}
+        api = {"role": "assistant", "content": "x", "reasoning_content": ""}
         apply_reasoning_content_policy(
-            {"role": "assistant", "content": "x", "reasoning_content": " "}, api, False)
+            {"role": "assistant", "content": "x", "reasoning_content": ""}, api, False)
         assert "reasoning_content" not in api
 
-    def test_cross_provider_poisoned_history_pads_with_space(self):
+    def test_cross_provider_poisoned_history_pads_with_empty_string(self):
         src = {"role": "assistant", "content": "x", "reasoning": "other-provider CoT",
                "tool_calls": [{"id": "c", "function": {"name": "t", "arguments": "{}"}}]}
         api = {"role": "assistant", "content": "x"}
         apply_reasoning_content_policy(src, api, True)
-        assert api["reasoning_content"] == " "  # pad, never the foreign CoT
+        assert api["reasoning_content"] == ""  # pad, never the foreign CoT
 
     def test_reasoning_promoted_only_on_require_side(self):
         src = {"role": "assistant", "content": "x", "reasoning": "healthy"}
@@ -252,7 +252,7 @@ class TestApplyReasoningContentPolicy:
     def test_require_side_pads_bare_assistant_turn(self):
         api = {"role": "assistant", "content": "x"}
         apply_reasoning_content_policy({"role": "assistant", "content": "x"}, api, True)
-        assert api["reasoning_content"] == " "
+        assert api["reasoning_content"] == ""
 
     def test_non_string_reasoning_content_removed(self):
         api = {"role": "assistant", "content": "x", "reasoning_content": None}
@@ -267,7 +267,7 @@ class TestApplyReasoningContentPolicy:
 
 class TestReapplyReasoningEcho:
     MSGS = [
-        {"role": "assistant", "content": "a1", "reasoning_content": " "},
+        {"role": "assistant", "content": "a1", "reasoning_content": ""},
         {"role": "assistant", "content": "a2"},
         {"role": "user", "content": "u"},
         {"role": "tool", "content": "t", "tool_call_id": "c"},
@@ -277,8 +277,8 @@ class TestReapplyReasoningEcho:
         import copy
         msgs = copy.deepcopy(self.MSGS)
         assert reapply_reasoning_echo(msgs, True) == 1
-        assert msgs[0]["reasoning_content"] == " "  # untouched
-        assert msgs[1]["reasoning_content"] == " "  # padded
+        assert msgs[0]["reasoning_content"] == ""  # untouched
+        assert msgs[1]["reasoning_content"] == ""  # padded
         assert "reasoning_content" not in msgs[2]
 
     def test_strict_side_strips_all(self):
@@ -286,7 +286,6 @@ class TestReapplyReasoningEcho:
         msgs = copy.deepcopy(self.MSGS)
         assert reapply_reasoning_echo(msgs, False) == 1
         assert all("reasoning_content" not in m for m in msgs)
-
     def test_idempotent(self):
         import copy
         msgs = copy.deepcopy(self.MSGS)

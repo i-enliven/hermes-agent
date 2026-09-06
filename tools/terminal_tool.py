@@ -1074,6 +1074,8 @@ from tools.managed_tool_gateway import is_managed_tool_gateway_ready
 import sys
 
 
+TERMINAL_EMPTY_OUTPUT_HINT = "(empty output / 0 lines)"
+
 # Tool description for LLM
 TERMINAL_TOOL_DESCRIPTION = """Execute shell commands on a Linux environment. Filesystem, current working directory, and exported environment variables persist between calls.
 
@@ -1081,7 +1083,7 @@ Do NOT use cat/head/tail (use read_file), grep/rg/find/ls (use search_files), se
 NEVER pipe a build/test command through tail/head/cat to shorten output (e.g. `cargo build | tail -20`): output is auto-truncated with the full text saved to a file, and the pipe makes exit_code report the LAST pipeline command's status (tail's 0), masking real failures. Run the command bare; the same applies to `cmd || echo failed`, which also masks the exit code.
 Environment state persists: activate a virtualenv or export variables once per session, not before every command.
 
-Foreground (default): returns INSTANTLY when the command finishes, even with a high timeout — set timeout generously for long builds.
+Foreground (default): returns INSTANTLY when the command finishes, even with a high timeout — set timeout generously for long builds. When a command succeeds with no output, 'output' returns "(empty output / 0 lines)" to confirm completion with 0 lines.
 Background: set background=true (returns a session_id). Pair with notify_on_complete=true for bounded tasks; leave silent only for servers/daemons that never exit. Never use nohup/setsid/trailing '&' — use background=true so Hermes tracks the process. After starting a server, verify readiness with a health check, then act in a separate call; no blind sleep loops. Manage with process(action="poll"/"wait").
 Working directory: use 'workdir' for per-command cwd. When a command changes the session cwd (cd, pushd), the result includes a "cwd" field — trust it instead of prefixing every command with 'cd'.
 PTY: set pty=true for interactive CLIs (they hang without it). Pipe git output to cat if it might page.
@@ -2629,7 +2631,7 @@ def terminal_tool(
         watch_patterns: List of strings to watch for in background output. HARD rate limit: 1 notification per 15s per process. After 3 strike windows in a row, watch_patterns is disabled and the session is auto-promoted to notify_on_complete. Use ONLY for rare, one-shot mid-process signals on long-lived processes (server readiness, migration-done markers). NEVER use in loops/batch jobs — error patterns there will hit the strike limit and get disabled. MUTUALLY EXCLUSIVE with notify_on_complete — set one, not both.
 
     Returns:
-        str: JSON string with output, exit_code, and error fields
+        str: JSON string with output, exit_code, and error fields. When a command succeeds with no output, 'output' contains '(empty output / 0 lines)' to signal clean EOF.
 
     Examples:
         # Execute a simple command
@@ -3515,6 +3517,9 @@ def terminal_tool(
                     failure_hint = annotate_masked_success(command, output)
                 except Exception:
                     failure_hint = None
+
+            if returncode == 0 and not output:
+                output = TERMINAL_EMPTY_OUTPUT_HINT
 
             result_dict = {
                 "output": output,

@@ -476,3 +476,53 @@ def test_sequence_loop_hard_stop_blocks_execution():
     d_before = guardrails.before_call("terminal", {"command": "check"})
     assert d_before.action == "block"
     assert d_before.code == "sequence_repeat_block"
+
+
+def test_turn_resumption_after_guardrail_halt_injects_strategy_shift():
+    agent = _make_agent("web_search", max_iterations=10, config=_hard_stop_config())
+    same_args = {"query": "same"}
+    # Turn 1: tool calls repeat and trigger guardrail halt
+    responses_t1 = [
+        _mock_response(
+            content="",
+            finish_reason="tool_calls",
+            tool_calls=[_mock_tool_call("web_search", json.dumps(same_args), f"c{i}")],
+        )
+        for i in range(1, 10)
+    ]
+    agent.client.chat.completions.create.side_effect = responses_t1
+    agent._disable_streaming = True
+
+    with (
+        patch("run_agent.handle_function_call", return_value=json.dumps({"error": "boom"})),
+        patch.object(agent, "_persist_session"),
+        patch.object(agent, "_save_trajectory"),
+        patch.object(agent, "_cleanup_task_resources"),
+    ):
+        result1 = agent.run_conversation("search repeatedly")
+
+    assert result1["turn_exit_reason"] == "guardrail_halt"
+    assert agent._pending_guardrail_halt_resumption is not None
+
+    # Turn 2: user replies "what should we do next?"
+    captured_messages = []
+
+    def _capture_call(**kwargs):
+        msgs = kwargs.get("messages", [])
+        captured_messages.extend(msgs)
+        return _mock_response(content="I will summarize what I learned.", finish_reason="stop")
+
+    agent.client.chat.completions.create.side_effect = _capture_call
+
+    with (
+        patch.object(agent, "_persist_session"),
+        patch.object(agent, "_save_trajectory"),
+        patch.object(agent, "_cleanup_task_resources"),
+    ):
+        result2 = agent.run_conversation("what should we do next?")
+
+    user_msgs = [m for m in captured_messages if m.get("role") == "user"]
+    assert len(user_msgs) >= 1
+    last_user_content = user_msgs[-1].get("content", "")
+    assert "MANDATORY STRATEGY SHIFT: Do NOT immediately emit another inspection or tool call." in last_user_content
+    assert "summarize what you have learned so far" in last_user_content

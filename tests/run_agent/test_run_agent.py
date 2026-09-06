@@ -6412,7 +6412,7 @@ class TestReasoningReplayForStrictProviders:
         assert replayed_assistant["role"] == "assistant"
         assert replayed_assistant["tool_calls"][0]["function"]["name"] == "terminal"
         assert "reasoning_content" in replayed_assistant
-        assert replayed_assistant["reasoning_content"] == " "
+        assert replayed_assistant["reasoning_content"] == ""
 
     def test_explicit_reasoning_content_beats_normalized_reasoning_on_replay(self, agent):
         self._setup_agent(agent)

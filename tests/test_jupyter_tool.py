@@ -39,20 +39,26 @@ def test_jupyter_execute_empty_code():
     assert "[TOOL_ERROR]" in res or "Empty code block" in res
 
 
+@patch("tools.jupyter_tool.requests.get")
 @patch("tools.jupyter_tool.requests.post")
 @patch("tools.jupyter_tool.requests.delete")
-def test_kernel_manager_lifecycle(mock_delete, mock_post):
+def test_kernel_manager_lifecycle(mock_delete, mock_post, mock_get):
     mock_post_resp = MagicMock()
     mock_post_resp.json.return_value = {"id": "mock-kernel-123"}
     mock_post_resp.raise_for_status = MagicMock()
     mock_post.return_value = mock_post_resp
+
+    mock_get_resp = MagicMock()
+    mock_get_resp.status_code = 200
+    mock_get_resp.json.return_value = {"id": "mock-kernel-123", "execution_state": "idle"}
+    mock_get.return_value = mock_get_resp
 
     mgr = JupyterKernelManager()
     kernel_id = mgr.get_or_create_kernel("session-1")
     assert kernel_id == "mock-kernel-123"
     assert mock_post.called
 
-    # Second call returns cached kernel_id
+    # Second call returns cached kernel_id when alive
     mock_post.reset_mock()
     kernel_id_cached = mgr.get_or_create_kernel("session-1")
     assert kernel_id_cached == "mock-kernel-123"
@@ -66,6 +72,34 @@ def test_kernel_manager_lifecycle(mock_delete, mock_post):
     mgr.close_session("session-1")
     assert mock_delete.called
 
+
+@patch("tools.jupyter_tool.requests.get")
+@patch("tools.jupyter_tool.requests.post")
+def test_kernel_manager_dead_kernel_auto_eviction(mock_post, mock_get):
+    """When cached kernel is dead on server, manager evicts and spawns a new one."""
+    mock_post_resp1 = MagicMock()
+    mock_post_resp1.json.return_value = {"id": "dead-kernel-1"}
+    mock_post_resp1.raise_for_status = MagicMock()
+
+    mock_post_resp2 = MagicMock()
+    mock_post_resp2.json.return_value = {"id": "fresh-kernel-2"}
+    mock_post_resp2.raise_for_status = MagicMock()
+
+    mock_post.side_effect = [mock_post_resp1, mock_post_resp2]
+
+    # Probe returns 404 when testing if cached dead-kernel-1 is alive
+    mock_get_dead = MagicMock()
+    mock_get_dead.status_code = 404
+    mock_get_dead.json.return_value = {}
+    mock_get.return_value = mock_get_dead
+    mgr = JupyterKernelManager()
+    k1 = mgr.get_or_create_kernel("session-rebound")
+    assert k1 == "dead-kernel-1"
+
+    # Kernel dies on server; next get_or_create_kernel must auto-evict and return fresh kernel
+    k2 = mgr.get_or_create_kernel("session-rebound")
+    assert k2 == "fresh-kernel-2"
+    assert mock_post.call_count == 2
 
 @pytest.mark.integration
 def test_jupyter_execute_live_statefulness():
