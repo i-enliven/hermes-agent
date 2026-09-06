@@ -123,6 +123,24 @@ class JupyterKernelManager:
                 with self._lock:
                     self._kernels.pop(session_key, None)
 
+    def _is_kernel_alive(self, kernel_id: str, cfg: Dict[str, Any]) -> bool:
+        """Verify kernel is still active and registered on the Jupyter server."""
+        base_url = cfg["url"]
+        token = cfg.get("token", "")
+        endpoint = urljoin(base_url, f"api/kernels/{kernel_id}")
+        headers = {}
+        if token:
+            headers["Authorization"] = f"token {token}"
+        try:
+            resp = requests.get(endpoint, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("execution_state") != "dead"
+            return False
+        except Exception as exc:
+            logger.debug("Liveness check failed for kernel %s: %s", kernel_id, exc)
+            return False
+
     def get_or_create_kernel(self, session_key: str, force_reset: bool = False) -> str:
         """Get an existing active kernel_id or create a new kernel."""
         self._ensure_cleanup_thread()
@@ -131,8 +149,12 @@ class JupyterKernelManager:
         with self._lock:
             if not force_reset and session_key in self._kernels:
                 info = self._kernels[session_key]
-                info["last_used"] = time.monotonic()
-                return info["kernel_id"]
+                kernel_id = info["kernel_id"]
+                if self._is_kernel_alive(kernel_id, cfg):
+                    info["last_used"] = time.monotonic()
+                    return kernel_id
+                logger.warning("Kernel %s for session %s is dead or missing. Evicting.", kernel_id, session_key)
+                self._kernels.pop(session_key, None)
 
         if force_reset:
             self.close_session(session_key)
@@ -234,14 +256,14 @@ async def _execute_code_async(kernel_id: str, code: str, cfg: Dict[str, Any]) ->
     output_chunks = []
     has_error = False
 
-    async with ws_connect(ws_url) as ws:
+    async with ws_connect(ws_url, open_timeout=15) as ws:
         await ws.send(json.dumps(req_payload))
         deadline = time.monotonic() + timeout
 
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                output_chunks.append("\n[Execution timed out after {timeout} seconds]")
+                output_chunks.append(f"\n[Execution timed out after {timeout} seconds]")
                 has_error = True
                 break
 
@@ -263,7 +285,7 @@ async def _execute_code_async(kernel_id: str, code: str, cfg: Dict[str, Any]) ->
             if msg_type == "stream":
                 text = content.get("text", "")
                 output_chunks.append(text)
-            elif msg_type == "execute_result":
+            elif msg_type in ("execute_result", "display_data"):
                 res_data = content.get("data", {})
                 if "text/plain" in res_data:
                     output_chunks.append(str(res_data["text/plain"]) + "\n")
@@ -324,13 +346,15 @@ def jupyter_execute(
         return output
     except Exception as exc:
         logger.error("jupyter_execute error for session %s: %s", session_key, exc, exc_info=True)
+        # Invalidate dead or unresponsive kernel session so subsequent calls are not trapped in a 404/timeout loop
+        _kernel_manager.close_session(session_key)
         return tool_error(f"Jupyter Kernel execution error: {exc}")
 
 
 JUPYTER_EXECUTE_SCHEMA = {
     "name": "jupyter_execute",
     "description": (
-        "Execute Python code inside a persistent Jupyter/IPython kernel session. "
+        "Execute Python code inside a persistent Jupyter/IPython kernel session on the configured Jupyter server. "
         "Variables, functions, imported modules, and loaded data frames persist across cells. "
         "Use this for data analysis, iterative coding, model training, or stateful Python operations."
     ),
