@@ -1,68 +1,107 @@
 ---
 name: jupyter-notebook-analysis
-description: Perform stateful Python data analysis, machine learning, and iterative coding using the jupyter_execute tool.
+description: Stateful Python data analysis in a live Jupyter kernel.
+version: 1.0.0
+author: Nous Research
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [jupyter, notebook, data-science, analysis, machine-learning, repl]
+    category: data-science
+    related_skills: [jupyter-notebook, xlsx]
 ---
 
-# Jupyter Notebook Analysis & Stateful Python Skill
+# Jupyter Notebook Analysis Skill
 
-Use this skill when performing data science, machine learning, data processing, database inspection, or complex multi-step Python tasks with the `jupyter_execute` tool.
+Run data science, machine learning, and multi-step Python work cell-by-cell in a
+persistent kernel via the `jupyter_execute` tool. Kernel state survives across calls
+in a session, so you import once, load once, and build up results incrementally.
+Not for shipping reusable scripts (use `terminal` for those) or for editing real
+notebook files on disk.
 
-## Runtime Environment & Filesystem
+## When to Use
 
-1. **Host-Aligned Paths & Working Directory**:
-   - The Jupyter kernel runs with `HOME=/home/ienliven` and the working directory set to `/home/ienliven`.
-   - Host files, user databases, and repository checkouts located under `/home/ienliven/` (e.g. `Projects/`, `.local/share/`, datasets) are directly accessible with standard filesystem paths.
-   - Relative file paths resolve relative to `/home/ienliven/`.
+- Exploring a dataset: schema, distributions, nulls, quick aggregates.
+- Iterative model work: train, inspect metrics, tweak, retrain without restarting.
+- Inspecting databases: list tables, run queries, page through results.
+- Any Python task where each step depends on objects produced by earlier steps.
 
-2. **Output Handling**:
-   - Standard stdout (`print(...)`), expressions evaluated on the last line of a cell, and rich display objects (`display(...)`, `df.head()`, matplotlib figures) are captured and returned in the tool response.
+## Prerequisites
 
-## Core Guiding Principles
+- A reachable Jupyter server, configured under the `jupyter` section of
+  `config.yaml` (`url`, `token`, `kernel_name`, `timeout`, `idle_ttl_secs`).
+- The `jupyter` toolset enabled; the tool is gated on a configured server URL, so
+  it is absent from the schema until one is set.
 
-1. **Leverage Stateful Execution**:
-   - Variables, imported packages, functions, and loaded DataFrames persist across cells for the duration of the agent session.
-   - Do NOT re-import libraries or re-read datasets in subsequent cells if they were loaded in earlier cells.
+## How to Use
 
-2. **Cell-by-Cell Execution Structure**:
-   - **Cell 1: Environment & Setup**: Import libraries (`pandas`, `numpy`, `sqlite3`, `torch`, etc.) and load datasets or establish connections.
-   - **Cell 2+: Incremental Operations**: Perform data transformations, database queries, model training, or analysis step-by-step.
-   - **Inspection**: Evaluate expressions on the last line of a cell or use `print()`, `df.info()`, and `df.head()` to verify state before moving to the next step.
+Call `jupyter_execute` with a `code` block per logical step:
 
-3. **Inline Shell & Package Management**:
-   - If a required Python package is missing in the kernel, install it directly inside a cell using `%pip install <package_name>`.
-
-4. **Kernel Management & Resilience**:
-   - **Automatic Recovery**: If a kernel terminates or becomes unresponsive, the tool automatically re-provisions a fresh kernel on the next call.
-   - **Explicit Reset**: When switching to a completely unrelated sub-task, or if memory usage becomes excessive, set `reset_kernel=True` in `jupyter_execute` to clear in-memory state.
-
-## Workflow Example
-
-### Step 1: Initialize Environment and Load Data / Connect DB
-```python
-import pandas as pd
-import sqlite3
-import os
-
-# Connect to database or read file from /home/ienliven
-db_path = "/home/ienliven/.local/share/opencode/opencode.db"
-con = sqlite3.connect(db_path)
-tables = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table'", con)
-print("Available tables:", tables["name"].tolist())
-```
-
-### Step 2: Incremental Analysis (No re-connecting needed)
-```python
-# con and pd are already in memory from Step 1
-df_sessions = pd.read_sql_query("SELECT * FROM sessions LIMIT 10", con)
-df_sessions.info()
-df_sessions.head()
-```
-
-### Step 3: Kernel Reset (When starting a fresh task)
-Set `reset_kernel=True` when invoking `jupyter_execute` to clear kernel memory when switching context:
 ```json
-{
-  "code": "# Fresh task setup\nimport numpy as np",
-  "reset_kernel": true
-}
+{ "code": "import pandas as pd\ndf = pd.read_csv('data/events.csv')\ndf.head(5)" }
 ```
+
+The response carries stdout, the value of the last expression, and rich display
+output (`df.head()`, `df.info()`, matplotlib figures) or a traceback on failure.
+
+## Quick Reference
+
+| Need | Do |
+| ---- | -- |
+| Install a missing package | `%pip install <package>` inside a cell |
+| See a value | Leave it as the last line, or `print(...)` |
+| Inspect a frame | `df.head()`, `df.info()`, `df.describe()` |
+| Clear all state | `jupyter_execute(code=..., reset_kernel=true)` |
+| Recover a dead kernel | Just call again — a fresh kernel is provisioned automatically |
+
+## Procedure
+
+1. **Setup cell**: import libraries and load data or open connections. Use paths
+   relative to the working directory, or `~` / `$HOME` expansions for files in the
+   user's home tree.
+2. **Analysis cells**: transform, query, or train one step at a time. Reuse the
+   names already in memory (`df`, `con`, `model`) instead of re-importing or
+   re-reading.
+3. **Verification**: end a cell with the expression you want to see, so the result
+   comes back in the tool response before you move on.
+4. **Context switch**: pass `reset_kernel=True` when starting an unrelated task or
+   when the kernel holds too much data.
+
+Example — inspect a SQLite database without re-connecting per cell:
+
+```python
+# Cell 1
+import sqlite3
+import pandas as pd
+
+db_path = "analytics.db"  # or Path.home() / ".local" / "share" / "app" / "app.db"
+con = sqlite3.connect(db_path)
+tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", con)
+print(tables["name"].tolist())
+```
+
+```python
+# Cell 2 — con and pd are still live in the kernel
+df = pd.read_sql("SELECT * FROM sessions LIMIT 10", con)
+df.info()
+df.head()
+```
+
+## Pitfalls
+
+- Re-importing or re-reading files every cell wastes time and can mask stale state;
+  the kernel already holds your objects.
+- A cell that raises leaves earlier definitions intact — fix the failing cell rather
+  than resetting the kernel.
+- Kernel memory is per session and is dropped when the session ends or on an
+  explicit reset; it is not a persistence layer. Write results to disk if you need
+  them later.
+- Long-running cells are bounded by the configured `timeout`; chunk heavy work or
+  move it to `terminal(background=True)`.
+
+## Verification
+
+- The last cell's output shows the expected columns, row counts, or metrics.
+- Persisted artifacts (exported CSVs, saved models) exist on disk — confirm with
+  `terminal` (`ls -lh`) or `read_file`.
