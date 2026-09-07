@@ -720,7 +720,7 @@ async def host_header_middleware(request: Request, call_next):
     bound_host = getattr(app.state, "bound_host", None)
     if bound_host:
         host_header = request.headers.get("host", "")
-        if False and not _is_accepted_host(host_header, bound_host):
+        if not _is_accepted_host(host_header, bound_host):
             return JSONResponse(
                 status_code=400,
                 content={
