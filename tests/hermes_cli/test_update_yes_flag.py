@@ -12,7 +12,31 @@ import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from hermes_cli.main import cmd_update
+
+
+@pytest.fixture(autouse=True)
+def _patch_gateway_discovery():
+    """Keep cmd_update's gateway auto-restart phase off this machine's gateways.
+
+    These tests drive ``cmd_update`` end-to-end with ``commit_count="1"``, so
+    the update reaches its post-pull auto-restart phase. That phase is surfaced
+    (#78574: an aborted restart now fails the update) instead of swallowing
+    exceptions at debug level, so an unmocked ``find_gateway_pids`` on a box
+    with a live gateway reaches the conftest live-system guard and turns into
+    ``⚠ Update incomplete — gateway auto-restart failed`` plus a spurious
+    ``sys.exit(1)`` — which is what these prompt-focused tests were tripping on.
+
+    None of them assert on gateway restarts, so discovery returning nothing
+    (and systemd being unsupported) makes the phase a clean no-op. Same seams
+    as the autouse fixture in ``test_cmd_update.py``.
+    """
+    with patch("hermes_cli.gateway.find_gateway_pids", return_value=[]), \
+         patch("hermes_cli.gateway.supports_systemd_services", return_value=False), \
+         patch("hermes_cli.gateway.find_profile_gateway_processes", return_value=[]):
+        yield
 
 
 def _make_run_side_effect(

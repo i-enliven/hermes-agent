@@ -89,6 +89,30 @@ def _patch_gateway_discovery():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _patch_venv_health():
+    """Report the venv as healthy so the ``commit_count == 0`` path stays deterministic.
+
+    The up-to-date branch probes the checkout's venv before printing
+    "Already up to date!" and diverts into the dependency-repair path when the
+    probe reports a broken install. That probe is a property of the *machine
+    running the tests*, not of the code under test: a contributor checkout that
+    carries the gitignored ``.hermes-bootstrap-complete`` marker but keeps its
+    interpreter in ``.venv`` (the layout ``AGENTS.md`` recommends) has no
+    ``venv/bin/python``, so the probe legitimately reports "venv python
+    missing" and the update never reaches the message the test asserts on.
+
+    None of the tests in this module exercise the repair path, so pinning the
+    probe to healthy makes every end-to-end ``cmd_update`` test here assert on
+    the branch it actually means to cover.
+    """
+    with patch(
+        "hermes_cli.update_cmd._venv_core_imports_healthy",
+        return_value=(True, ""),
+    ):
+        yield
+
+
 class TestCmdUpdateNpmLockfileCache:
     @staticmethod
     def _cache_file(hermes_root, project_root):
