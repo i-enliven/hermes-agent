@@ -375,7 +375,17 @@ def test_bounded_fallback_does_not_fire_when_budget_not_exhausted(monkeypatch):
 
 
 def test_iteration_limit_summary_completion_flag(monkeypatch):
-    """When budget is exhausted and max_iterations summary succeeds, completed is True."""
+    """Budget exhausted + max_iterations summary succeeds: the salvaged
+    summary is returned, but the turn is NOT 'completed'.
+
+    ``completed`` means the tool loop finished naturally (or emitted a
+    genuine final text response), not "a usable answer exists". A
+    budget-exhausted turn that only produced a fallback summary keeps
+    ``completed is False`` so the cron/CLI/gateway/trajectory consumers that
+    key off ``completed is False and turn_exit_reason.startswith(
+    "max_iterations_reached(")`` still recognise it as a truncated, warned
+    outcome rather than a clean success.
+    """
     monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
     agent = _LimitAgent()
 
@@ -396,7 +406,8 @@ def test_iteration_limit_summary_completion_flag(monkeypatch):
     )
 
     assert result["final_response"] == "summary from extra call"
-    assert result["completed"] is True
+    assert result["completed"] is False
+    assert result["turn_exit_reason"].startswith("max_iterations_reached(")
     assert agent._handle_max_iterations_called is True
 
 
