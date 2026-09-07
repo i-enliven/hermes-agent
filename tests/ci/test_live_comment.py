@@ -27,6 +27,26 @@ classify_jobs = _mod.classify_jobs
 
 DOCKER = "Docker Build, Test, and Publish"
 
+_WORKFLOWS_DIR = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+_CALLER_YML = _WORKFLOWS_DIR / "ci-review-comment.yml"
+
+
+def _skip_if_no_ci_workflows() -> None:
+    """Skip the CI-config guards when this checkout ships no GitHub Actions.
+
+    These two tests assert that the poller's ``WATCH_WORKFLOWS`` list matches
+    real ``name:`` values in ``.github/workflows/*.yml`` and never self-watches
+    — an invariant that only exists while that CI config exists. A fork that
+    removes ``.github/workflows/`` (no GitHub Actions) has no such file to
+    guard, so the check is not-applicable rather than failing. Mirrors the
+    ``pytest.importorskip`` idiom used for the optional ``yaml`` dep below.
+    """
+    if not _CALLER_YML.exists():
+        pytest.skip(
+            "no .github/workflows/ in this checkout (GitHub Actions removed); "
+            "the poller's CI-config guard is not-applicable"
+        )
+
 
 def _run(run_id: int, name: str, created_at: str) -> dict:
     return {"id": run_id, "name": name, "created_at": created_at}
@@ -94,10 +114,10 @@ def test_workflow_watch_list_names_a_workflow_that_exists():
     A name that matches nothing makes the poller silently drop that run
     from the comment, which no unit test on its own would notice.
     """
+    _skip_if_no_ci_workflows()
     yaml = pytest.importorskip("yaml")
-    root = Path(__file__).resolve().parents[2]
     caller = yaml.safe_load(
-        (root / ".github/workflows/ci-review-comment.yml").read_text(encoding="utf-8")
+        _CALLER_YML.read_text(encoding="utf-8")
     )
     step = next(
         s for s in caller["jobs"]["comment"]["steps"]
@@ -107,7 +127,7 @@ def test_workflow_watch_list_names_a_workflow_that_exists():
     assert watched, "the poller is watching nothing"
 
     known = set()
-    for path in (root / ".github/workflows").glob("*.yml"):
+    for path in _WORKFLOWS_DIR.glob("*.yml"):
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         if isinstance(doc, dict) and isinstance(doc.get("name"), str):
             known.add(doc["name"])
@@ -123,10 +143,10 @@ def test_poller_never_watches_its_own_workflow():
     itself would make the loop wait for itself and only ever exit on
     timeout.
     """
+    _skip_if_no_ci_workflows()
     yaml = pytest.importorskip("yaml")
-    root = Path(__file__).resolve().parents[2]
     doc = yaml.safe_load(
-        (root / ".github/workflows/ci-review-comment.yml").read_text(encoding="utf-8")
+        _CALLER_YML.read_text(encoding="utf-8")
     )
     own_name = doc["name"]
     step = next(
