@@ -99,6 +99,7 @@ CONFIGURABLE_TOOLSETS = [
     ("terminal",        "💻 Terminal & Processes",      "terminal, process"),
     ("file",            "📁 File Operations",           "read, write, patch, search"),
     ("code_execution",  "⚡ Code Execution",            "execute_code"),
+    ("jupyter",         "📓 Jupyter Kernel",           "jupyter_execute (persistent Python kernel)"),
     ("vision",          "👁️  Vision / Image Analysis",  "vision_analyze"),
     ("video",           "🎬 Video Analysis",            "video_analyze (requires video-capable model)"),
     ("image_gen",       "🎨 Image Generation",          "image_generate"),
@@ -2362,7 +2363,7 @@ def _exempt_explicit_platform_native(
 #: schemas to a user with no Nous credential — the same split Home Assistant
 #: uses. Probing the portal from this path would put a network call on every
 #: CLI start, gateway session and cron tick.
-_RECENTLY_SHIPPED_TOOLSETS = frozenset({"bfl"})
+_RECENTLY_SHIPPED_TOOLSETS = frozenset({"bfl", "jupyter"})
 
 
 def _enable_recently_shipped_toolsets(
