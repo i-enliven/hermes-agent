@@ -1,0 +1,100 @@
+# Module: `cron`
+
+Durable, profile-local scheduler: a JSON job store, a file-locked tick loop run inside the gateway, and delivery of job output to messaging platforms. Runs unattended, so its hardening invariants (below) are load-bearing.
+
+## Responsibilities
+
+- Persist scheduled jobs per profile under `HERMES_HOME/cron/` and compute their next fire times.
+- Tick every 60s from the gateway (or a pluggable external provider), claim each due job under a CAS fence, and execute it in an isolated `AIAgent` session with at-most-once semantics.
+- Deliver results to origin chats / platforms with a cron header/footer, without polluting the target conversation's transcript.
+- Guard against agent-created self-respawn loops and unbounded runs.
+- Record every attempt in a durable ledger so `hermes cron runs` can answer "did it actually fire?" after a crash.
+
+## Key Files
+
+- [`../../../cron/jobs.py`](../../../cron/jobs.py) — job store, schedule parser, claims, due-checking (~3.7K LOC).
+- [`../../../cron/scheduler.py`](../../../cron/scheduler.py) — `tick()`, `run_job()`, `run_one_job()`, delivery (~7.2K LOC).
+- [`../../../cron/scheduler_provider.py`](../../../cron/scheduler_provider.py) — `CronScheduler` ABC + `InProcessCronScheduler` + `resolve_cron_scheduler()`.
+- [`../../../cron/executions.py`](../../../cron/executions.py) — SQLite audit ledger of attempts (`cron/executions.db`); `MAX_TERMINAL_EXECUTIONS = 1000`; terminal states `completed`/`failed`/`unknown`.
+- [`../../../cron/monitor.py`](../../../cron/monitor.py) — hash-suppressed change detection for `monitor_script`/`monitor_url` jobs; `hash_monitor_output()`, `build_monitor_diff()`, `MonitorOutcome`. Unchanged output suppresses the agent run entirely (silent `no_change` tick); changed output injects a diff block before a normal run. Comparison is on **exact bytes** (no timestamp stripping), so a monitor script that emits a "generated at" line looks changed every tick.
+- [`../../../cron/lifecycle_guard.py`](../../../cron/lifecycle_guard.py) — `check_gateway_lifecycle()` / `GatewayLifecycleBlocked`; rejects jobs whose prompt/script would restart the gateway (#30719).
+- [`../../../cron/notepad.py`](../../../cron/notepad.py) — per-job KV scratchpad (`cron/notepad.db`); `MAX_VALUE_BYTES = 16 * 1024`, `MAX_JOB_TOTAL_BYTES = 64 * 1024`.
+- [`../../../cron/suggestions.py`](../../../cron/suggestions.py) — accept/dismiss store for proposed automations (`add_suggestion`, `accept_suggestion`, `dismiss_suggestion`).
+- [`../../../cron/suggestion_catalog.py`](../../../cron/suggestion_catalog.py) — curated built-in starter automations (the `catalog` suggestion source).
+- [`../../../cron/blueprint_catalog.py`](../../../cron/blueprint_catalog.py) — parameterized automations with typed slots; `blueprint_form_schema`, `blueprint_slash_command`.
+- [`../../../cron/scripts/classify_items.py`](../../../cron/scripts/classify_items.py) — the shipped helper script (`cron/scripts/` is runnable via `python3 -m cron.scripts.<name>`): reads JSON items from stdin or `--input-file`, scores each with the auxiliary client at `task="monitor"` (so `auxiliary.monitor.{provider,model}` picks a cheap model), and prints ONLY the items at/above threshold — below it, prints nothing, so a wrapping `no_agent` job stays silent unless something actually matters.
+- [`../../../tools/cronjob_tools.py`](../../../tools/cronjob_tools.py) — the agent-facing `cronjob` tool.
+- [`../../../hermes_cli/subcommands/cron.py`](../../../hermes_cli/subcommands/cron.py) + [`../../../hermes_cli/cron.py`](../../../hermes_cli/cron.py) — argparse verbs and their implementations; dispatched by `cmd_cron` in [`../../../hermes_cli/main.py`](../../../hermes_cli/main.py).
+
+## Public API
+
+From `cron/jobs.py`:
+
+- `create_job(prompt, schedule, *, name, repeat, deliver, origin, skill, skills, model, provider, base_url, script, context_from, enabled_toolsets, workdir, no_agent, attach_to_session, monitor_script, monitor_url)` — the full per-job field set, verified against the signature.
+- `parse_schedule(schedule)` → `{"kind": "once"|"interval"|"cron", ...}`. Accepted forms: duration `"30m"/"2h"/"1d"` (one-shot from now), `"every 30m"` (recurring interval), 5-or-6-field cron expr (validated via the `croniter` package, a core dependency), ISO timestamp `"2026-02-03T14:00"` (one-shot). `parse_duration()` handles the duration grammar.
+- `load_jobs()` / `save_jobs()`, `compute_next_run()`, `get_due_jobs()`, `advance_next_runs()`, `claim_job_for_fire()`, `claim_dispatch()`, `fire_claim_fence()`, `clear_run_claim()`, `mark_job_run()`.
+- Job lifecycle: `get_job()`, `list_jobs(include_disabled=False)`, `update_job()`, `pause_job(reason=None)`, `resume_job()`, `trigger_job()`, `remove_job()`.
+- `use_cron_store(home)` — ContextVar-scoped store redirection (tests, multi-profile dashboard ops); never mutate `CRON_DIR`/`JOBS_FILE` process-wide.
+- Creation-time normalisation worth knowing: `repeat <= 0` is coerced to `None` (= forever), a `once` schedule auto-gets `repeat = 1`, and `deliver` defaults to `"origin"` when an `origin` was captured else `"local"`. Job IDs are `uuid4().hex[:12]`.
+
+From `cron/executions.py`: `create_execution(job_id, *, source)` → `mark_execution_running(execution_id)` → `finish_execution(execution_id, *, success, error=None, delivery_outcome=None)`, plus `recover_interrupted_executions()`, `list_executions(*, job_id=None, limit=50, before_claimed_at=None)`, `latest_execution(job_id)`, `latest_executions(job_ids)`. The `status` column is CHECK-constrained to `claimed|running|completed|failed|unknown`, terminal rows are immutable (`finish_execution` only writes `WHERE status IN ('claimed','running')` and returns `None` on a lost race), and recovery marks rows `unknown` **without scheduling retries** — only after `_owner_is_live(pid, process_started_at)` proves the exact owner process is gone (it fails *safe*, returning `True` when liveness cannot be disproved). This is an audit ledger, not a retry queue.
+
+From `cron/notepad.py`: per-job `set`/`get` KV access, written through `hermes cron notepad <job_id> set <key> <value>` (the agent reaches it via its terminal tool — deliberately no model tool).
+
+From `cron/scheduler.py`: `tick(verbose, adapters, loop, sync, *, can_dispatch)`, `run_one_job()`, `get_running_job_ids()`, `sweep_stale_inflight()`, `_resolve_cron_disabled_toolsets()` / `_resolve_cron_enabled_toolsets()` (the toolset floor for cron runs).
+
+From `tools/cronjob_tools.py`: `cronjob(action=...)` with `create|list|update|pause|resume|remove|run`; registered on the `cronjob` toolset in [`../../../toolsets.py`](../../../toolsets.py); `check_cronjob_requirements()` gates it on `HERMES_INTERACTIVE` / `HERMES_GATEWAY_SESSION` / `HERMES_EXEC_ASK`. Scheduling from *inside* a cron run is off by default; `cron.allow_agent_scheduling: true` enables it.
+
+CLI: `hermes cron <verb>` — actual argparse verbs are `list`, `create` (alias `add`), `edit`, `pause`, `resume`, `run` (triggers on the next tick), `remove` (aliases `rm`, `delete`), `status`, `runs` (alias `history`, `--limit` default 20), `notepad <job_id> [get|set|delete|list] [key] [value]`, and `tick` (run due jobs once and exit). Dispatched through `cmd_cron` in [`../../../hermes_cli/main.py`](../../../hermes_cli/main.py). The `/cron` slash command ([`../../../hermes_cli/commands.py`](../../../hermes_cli/commands.py), `cli_only`) exposes only `list|add|create|edit|pause|resume|run|remove` — `status`, `runs`, `notepad`, and `tick` are CLI-only.
+
+## Internal Structure
+
+On-disk layout, all resolved via `get_hermes_home()` (profile-scoped, #4707 — never `get_default_hermes_root()`): `cron/jobs.json`, `cron/output/`, `cron/.tick.lock`, `cron/ticker_heartbeat`, `cron/ticker_last_success`, `cron/executions.db`, `cron/notepad.db`.
+
+The persisted job record built by `create_job()` (`cron/jobs.py`) is flat and explicit: `id` (12-hex uuid4), `name`, `prompt`, `skills` + legacy `skill`, `model`, `provider`, `provider_snapshot` / `model_snapshot` (resolution captured at creation for unpinned jobs, #44585), `base_url`, `script`, `no_agent`, `monitor_script`, `monitor_url`, `monitor_state`, `context_from`, `schedule` (the `parse_schedule()` dict), `schedule_display`, `repeat: {times, completed}` (`times: None` = forever), `enabled`, `state`, `paused_at`, `paused_reason`, `created_at`, `next_run_at`, `last_run_at`, `last_status`, `last_error`, `last_delivery_error`, `failure_streak`, `deliver`, `origin`, `enabled_toolsets`, `workdir`, and `attach_to_session` **only when explicitly set** — an absent key means "fall back to `cron.mirror_delivery`", which keeps existing jobs byte-identical.
+
+`tick()` acquires the lock, honors the `hermes pause` ESTOP sentinel (`agent/estop.py::check_paused("cron", ...)`), reaps provably-dead execution owners, calls `get_due_jobs()`, then `advance_next_runs()` **before** any execution — that ordering is what gives at-most-once semantics. Jobs with a `workdir` go to a single-thread sequential pool (they mutate the process-global `TERMINAL_CWD`); the rest go to a parallel pool sized by `HERMES_CRON_MAX_PARALLEL` > `cron.max_parallel_jobs` > unbounded.
+
+The gateway resolves a provider via `resolve_cron_scheduler()` (`cron.provider` in config.yaml; empty = built-in) and runs its `start(stop_event, interval=60)`. External providers live in [`../../../plugins/cron_providers/`](../../../plugins/cron_providers/) — bundled-first discovery, one active provider, and the built-in is deliberately *not* discoverable there so the fallback can never be deleted by a dropped-in directory. The bundled `chronos` provider arms one NAS-side one-shot per job at its real next-fire time and is called back over `/api/cron/fire`; its `start()` arms and **returns** (no periodic wake), so a hosted gateway is truly at zero between fires. Wire spec: [`../../chronos-managed-cron-contract.md`](../../chronos-managed-cron-contract.md).
+
+Both `tick()` and `run_one_job()` share one execute→save→deliver→mark body, which is what lets the built-in ticker, `hermes cron tick`, and an external provider's `fire_due` produce identical behaviour. Idle ticks short-circuit before `load_config()` and still run the MCP-orphan sweep.
+
+## Dependencies
+
+- **Used by:** the gateway ticker ([`../../../gateway/run.py`](../../../gateway/run.py)), `hermes_cli` (`cmd_cron`, `hermes_cli/cron.py`), `tools/cronjob_tools.py`, the dashboard/desktop cron surfaces.
+- **Uses:** `hermes_constants.get_hermes_home()`, `hermes_time`, `croniter`, `agent/estop.py`, `agent/interrupt_compat.request_hard_interrupt`, `tools/send_message_tool._send_to_platform`, `gateway/mirror.mirror_to_session`, `tools/mcp_tool._kill_orphaned_mcp_children` (post-tick orphan sweep).
+
+## Notable Patterns / Gotchas
+
+Hardening invariants, each with its verified source (several correct the summary in `AGENTS.md`):
+
+- **No fixed wall-clock cap on cron runs.** `AGENTS.md` claims a "3-minute hard interrupt"; no such constant exists in `cron/`. The real mechanism is an **inactivity** watchdog: `HERMES_CRON_TIMEOUT` (default `600.0`s — `_DEFAULT_CRON_INACTIVITY_TIMEOUT`, `cron/jobs.py`; parsed by `_cron_inactivity_seconds()`, `cron/scheduler.py`; `0` = unlimited) polled every `_POLL_INTERVAL = 5.0`s; on expiry it calls `request_hard_interrupt(agent, "Cron job timed out (inactivity)")` and raises `TimeoutError`. A job that keeps producing output legitimately runs past the limit.
+- **Catch-up window: half the period, clamped 120s–7200s.** `_compute_grace_seconds()` in `cron/jobs.py` (`MIN_GRACE = 120`, `MAX_GRACE = 7200`). Past it, `get_due_jobs()` fast-forwards instead of replaying missed fires.
+- **One-shot grace: 120s.** `ONESHOT_GRACE_SECONDS = 120` in `cron/jobs.py`; `_recoverable_oneshot_run_at()` refuses a stale `run_at`, and creation is rejected outside the window.
+- **Tick lock is profile-aware.** `_get_lock_paths()` (`cron/scheduler.py`) builds `get_hermes_home() / "cron" / ".tick.lock"` **at call time** (never frozen at import), then `fcntl.flock(LOCK_EX|LOCK_NB)` (POSIX) or `msvcrt.locking(LK_NBLCK)` (Windows). Only genuine contention errnos skip the tick; `EMFILE`/`ENFILE` are raised, not swallowed (#87644).
+- **`skip_memory=True` always** when constructing the cron `AIAgent` (`cron/scheduler.py`) — cron system prompts must not corrupt user memory representations.
+- **At-most-once + claims.** `advance_next_runs()` runs under the lock before dispatch; `claim_job_for_fire()` is a CAS; a leaked one-shot `run_claim` self-heals at `ONESHOT_RUN_CLAIM_TTL_SECONDS = 1800` (derived as `HERMES_CRON_TIMEOUT × 3`, floored at 1800), and only if the owner is not in `get_running_job_ids()`.
+- **Cron output lands in its OWN session.** Each run gets `cron_<job_id>_<YYYYmmdd_HHMMSS>`; delivery is wrapped with a `Cronjob Response:` header/footer (toggle `cron.wrap_response`). Mirroring into the target chat's gateway transcript is **off by default** — `_cron_mirror_delivery_enabled()` precedence: per-job `attach_to_session` → `cron.mirror_delivery` → `False`; when on, only the clean (unwrapped) text is appended via `gateway.mirror.mirror_to_session` at a turn boundary, and only for the job's `origin` chat, never fan-out targets.
+- **Silence contract.** Empty script stdout = no delivery; `[SILENT]` (`SILENT_MARKER`) suppresses delivery for agent runs. The run body signals other states through sentinel markers `run_one_job()` keys off rather than parsing prose: `BLOCKED_CONFIG_MARKER` (`[blocked_config]`) when pre-flight config validation refuses to build the agent at all (missing provider key, unready skill, unconfigured delivery platform — so a doomed job never burns an LLM call; opt out with `cron.preflight: false`), and `DRIFT_SKIP_MARKER` (`[drift_skip]`) for a #44585 drift-guard skip. Each has a `:silent` variant meaning "already alerted on a previous tick" — the alert-once dedup, persisted via the job's `preflight_alerted` / `drift_alerted` bits (#73506 shape).
+- **Delivery targets.** `_resolve_delivery_targets()` resolves `deliver` (`"origin"`, `"local"`, `"all"`, `platform` or `platform:chat_id`) against `_KNOWN_DELIVERY_PLATFORMS` and per-platform home-channel env vars (`_HOME_TARGET_ENV_VARS`, e.g. `TELEGRAM_HOME_CHANNEL`). `deliver=origin` with no origin and no home channel degrades to local rather than reporting an error (#43014). Live gateway adapters are preferred over the standalone HTTP send so E2EE rooms (Matrix) can still encrypt.
+- **Model drift guard.** `cron_model_drift_guard_enabled()` plus `DRIFT_SKIP_MARKER = "[drift_skip]"` (`cron/scheduler.py`) skip a fire when the job's pinned provider/model no longer matches the resolved one.
+- **Script timeout:** `_DEFAULT_SCRIPT_TIMEOUT = 3600`s (`cron/scheduler.py`); config `cron.script_timeout_seconds`.
+- **Stale in-flight floor:** `_INFLIGHT_MIN_ALLOWANCE_MINUTES = 30.0`; effective allowance is `max(2 * interval, 30)`.
+- **Ticker liveness is two files:** `ticker_heartbeat` (thread alive) vs `ticker_last_success` (last non-raising tick), so `hermes cron status` can tell "alive but failing" from "healthy"; `TICKER_INTERVAL_SECONDS = 60` (`cron/jobs.py`) is the single source of truth shared by the ticker and the status check, which alarms at `STALE_AFTER = TICKER_INTERVAL_SECONDS * 3 + 20` (`hermes_cli/cron.py`).
+- **Lock waits are bounded.** The cross-process `.jobs.lock` flock is capped at `_JOBS_LOCK_TIMEOUT_SECONDS = 30.0` (`cron/jobs.py`, #60703) — an unbounded wait on a wedged sibling freezes the heartbeat and every job. The `TERMINAL_CWD` lock wait is `max(inactivity, _CWD_LOCK_TIMEOUT_FLOOR_SECONDS = 120.0) + _CWD_LOCK_TIMEOUT_MARGIN_SECONDS = 60.0` (`cron/scheduler.py`).
+- **Claims heartbeat.** `_RUN_CLAIM_HEARTBEAT_SECONDS = 60.0` and `_FIRE_CLAIM_HEARTBEAT_GRACE_SECONDS = _RUN_CLAIM_HEARTBEAT_SECONDS * 3` (`cron/scheduler.py`); a lost fire claim aborts the run via `_abort_if_fire_claim_lost()`.
+- **Dead-owner reap is throttled.** `_DEAD_OWNER_REAP_INTERVAL_SECONDS = 300.0` (`cron/scheduler.py`) gates `recover_interrupted_executions()` so idle 60s ticks do not each open the ledger; only rows whose owner pid + start-time are *proved* gone are rewritten (#86721).
+- **EMFILE backoff.** The ticker loop doubles its wait per consecutive `EMFILE`/`ENFILE` failure, capped at `_EMFILE_BACKOFF_MAX_SECONDS = 15 * 60` (`cron/scheduler_provider.py`, #87644).
+- **Emergency stop never kills a running job.** `tick()` consults `agent/estop.py::check_paused("cron", ...)` before dispatch, so `hermes pause` halts *new* fires; `agent/estop.py` records interrupting in-flight cron as deliberately out of scope (#44617). Runs the shutdown path force-interrupted are tracked in `_forced_releases` (`_FORCED_RELEASE_HISTORY = 20`, `cron/scheduler.py`) via `mark_running_jobs_interrupted()`.
+- **Gateway restart drains cron rather than truncating it.** `DEFAULT_GATEWAY_CRON_DRAIN_TIMEOUT` (`gateway/restart.py`) reads `agent.cron_drain_timeout` (default `30` in `hermes_cli/config_defaults.py`); a zero-second drain would land an in-flight run in `jobs.json` as a permanent failure (#82161).
+- **Provider misfire sweep** is separate from the catch-up window: `fire_overdue_jobs()` uses `cron.misfire_grace_minutes` (`DEFAULT_MISFIRE_GRACE_MINUTES = 10`; ≤0 disables the sweep).
+- **Timezone anchoring.** Naive ISO timestamps from `parse_schedule()` are made aware against the *configured* Hermes timezone, not server-local, so `"20:07"` means 20:07 on the same clock `get_due_jobs()` compares against (#51021).
+- **There is no standalone cron daemon.** The ticker lives only inside the gateway process, so with no gateway running `next_run_at` passes while `last_run_at` stays null — the single most common cron support report (#51038). `hermes_cli/cron.py::_warn_if_gateway_not_running()` surfaces it at create/list time, but stays silent for any non-`builtin` provider, since those fire via an external webhook and a missing gateway process is not a fault.
+- **Cron-spawned agents get a toolset floor.** `_resolve_cron_disabled_toolsets()` (`cron/scheduler.py`) always denies `messaging` and `clarify` (both need a live interactive session) plus `memory` (the agent is built with `skip_memory=True`, so the tool would be unbacked), and additionally denies `cronjob` by default — loop prevention, not a security boundary. `cron.allow_agent_scheduling: true` drops only that policy denial; the user's `agent.disabled_toolsets` is layered on top so a per-job `enabled_toolsets` cannot widen past it (#25752).
+- **Durability boundary:** background `delegate_task` is process-local; work that must survive a restart needs `cronjob` or `terminal(background=True, notify_on_complete=True)`.
+- **Script containment.** `script` and `monitor_script` paths are resolved against `get_hermes_home() / "scripts"` and must stay inside it (`cron/scheduler.py`, ~line 3489+); `.sh`/`.bash` run via bash, anything else via Python. `workdir` jobs are serialized onto the single-thread pool precisely because they mutate the process-global `TERMINAL_CWD`.
+- **Never bypass `create_job()`** for agent-created jobs — it is where `check_gateway_lifecycle()` runs, so the SIGTERM-respawn guard covers the model tool, not just the CLI.
+- **Two-tier prompt scanner** lives in `tools/cronjob_tools.py`: `_scan_cron_prompt()` (strict — `_CRON_THREAT_PATTERNS` + `_CRON_EXFIL_COMMAND_PATTERNS`, after `_strip_cron_safe_constructs()` and `_check_invisible_unicode()`) for user-authored prompts, and the looser `_scan_cron_skill_assembled()` for prompts with loaded skill content folded in. Both run at create/update time *and* again at execution time in `cron/scheduler.py`, as defense-in-depth for jobs authored before the scanner existed. Creation context is stamped by `_origin_from_env()`.
+- **`cron/__init__.py`** re-exports `create_job`, `get_job`, `list_jobs`, `remove_job`, `update_job`, `pause_job`, `resume_job`, `trigger_job`, `JOBS_FILE`, `tick` — import from the package for the stable surface.
+
+See also [tools.md](tools.md) for the `cronjob` tool registration.
