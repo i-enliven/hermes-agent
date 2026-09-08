@@ -1,0 +1,95 @@
+{
+  "repo_name": "hermes-agent",
+  "source_path": ".",
+  "source_sha": "f049b1b929b9ece3c1b7714beac9f25ffa069871",
+  "generated_at": "2026-09-07T00:00:00Z",
+  "generator": "hermes-agent code-wiki skill v0.1.0",
+  "output_mode": "in-repo (docs/wiki/) — explicitly requested by the user",
+  "supersedes": {
+    "path": "~/.hermes/wikis/hermes-agent/",
+    "reason": "Prior wiki described a stripped-down variant of this codebase; deleted and regenerated from source.",
+    "preserved": [
+      "architecture-review-20260904-2135.html (unrelated artifact, from improve-codebase-architecture)"
+    ]
+  },
+  "modules_documented": [
+    "agent-core",
+    "tools",
+    "providers-transports",
+    "state-persistence",
+    "gateway",
+    "cron",
+    "cli",
+    "web-dashboard",
+    "desktop",
+    "acp",
+    "plugins",
+    "delegation-kanban",
+    "skills-curator",
+    "tui"
+  ],
+  "top_level_pages": [
+    "README.md",
+    "architecture.md",
+    "getting-started.md"
+  ],
+  "diagram_pages": [
+    "diagrams/class-diagram.md",
+    "diagrams/sequences.md"
+  ],
+  "method": "Static read of the working tree via codegraph + targeted Read/Grep. No code was executed.",
+  "verification": {
+    "file_line_citations": "all resolve; no out-of-range line numbers",
+    "classes_drawn": "32/32 class names drawn across 4 classDiagram blocks resolve to top-level classes in Hermes source (grep '^class ' over .py/.ts/.tsx, vendored + generated dirs excluded)",
+    "sequence_symbols": "105/105 code symbols named across 4 sequenceDiagram blocks are accounted for. 94 resolve directly against a whole-repo identifier index; the 11 flags were each adjudicated by targeted grep and all 11 were instrument artifacts, not defects: 10 are participant IDs carrying a spurious trailing hyphen (the message regex's greedy [\\w*.-] class consumes one '-' of a '-->>' arrow, so 'Transport-->>Agent' yields 'Transport-'), and stream_callback is a real symbol (76 occurrences, defined at agent/conversation_loop.py:1697, stored at agent/turn_context.py:594) that the index held only in its _stream_callback form. Mermaid participant aliases and display labels are excluded from the claim.",
+    "mermaid_fences": "fence stack parse (opens==closes, empty stack) passes on all 19 pages; type-aware node census: largest graph/flowchart 16 nodes, largest classDiagram 14 classes, largest sequenceDiagram 7 participants. The ~20 readability cap applies to graph/flowchart/classDiagram only and every one is inside it.",
+    "generic_prose_scan": "clean",
+    "citation_sweep": "every file:NNNN citation resolved and bounds-checked against the target file's real line count; each cited line additionally tested for the identifier nearest before it (+/-3 line window). 115 explicit + 99 context-relative bare citations",
+    "link_check": "542 relative markdown links checked, 0 broken"
+  },
+  "corrections_vs_agents_md": [
+    "cron: no '3-minute hard interrupt' exists; real mechanism is an inactivity watchdog, HERMES_CRON_TIMEOUT default 600s (cron/jobs.py:209), so a productive job runs unbounded",
+    "cron: tick lock is profile-aware (get_hermes_home()/cron/.tick.lock), not a fixed ~/.hermes path",
+    "cron: real verbs include create (add is an alias), status, runs, notepad, tick",
+    "gateway: gateway/platforms/whatsapp.py does not exist despite being cited in AGENTS.md and ADDING_A_PLATFORM.md",
+    "gateway: _auth_env() is NOT fail-closed (falls through to os.getenv); only _platform_gate_env() returns the default on a scoped miss",
+    "gateway: the busy-bypass command set is registry-derived (busy_policy != 'reject'), not a fixed list",
+    "plugins: post_setup is duck-typed via hasattr, not on the MemoryProvider ABC",
+    "plugins: pre_llm_call / on_session_start / on_session_end fire from agent/turn_context.py, turn_finalizer.py, conversation_loop.py — not model_tools.py / run_agent.py",
+    "deps: 24/29 direct dependencies are exact == pins, 5 are ranged; all 29 carry a ceiling (stricter than the documented >=floor,<next_major norm)",
+    "deps: git+ URL and GitHub Actions SHA-pinning rules unverifiable in this checkout (no git+ entries, no .github/workflows/)",
+    "config: smart_model_routing is written by setup/config but read nowhere in agent/, run_agent.py, tools/, or gateway/",
+    "entry points: 'hermes' is a Python launcher, not a shell wrapper; discover_builtin_tools() lives in tools/registry.py:111, not model_tools.py"
+  ],
+  "known_gaps": [
+    "plugins/context_engine/ ships only __init__.py — no concrete engines to document",
+    "plugins/observability/ and plugins/kanban/ implement no ABC (hook subscribers / assets)",
+    "Several platform adapters (a2a, raft, photon) expose no verifiable transport detail"
+  ],
+  "audit_found_defects_fixed": [
+    "gateway.md: 'IrcAdapter' -> real class is IRCAdapter (plugins/platforms/irc/adapter.py:119)",
+    "gateway.md: 'cron/scheduler.py platform_map' and 'tools/send_message_tool.py platform_map' were fabricated; no such dict exists",
+    "gateway.md: '_send_to_<platform>()' per-platform senders were fabricated; there is one _send_to_platform() at tools/send_message_tool.py:925 taking platform positionally",
+    "tools.md: the :332 toolset-rule docstring belongs to get_tool_definitions (model_tools.py:323-414), the public entry point that calls _compute_tool_definitions (417-652); the sentence had called it 'the caller of registry.get_definitions()', which is _compute_tool_definitions and does not carry that docstring",
+    "class-diagram.md: 'HonchoProvider' fabricated; real class is HonchoMemoryProvider (plugins/memory/honcho/__init__.py:262)",
+    "sequences.md: 'HermessCLI' typo -> HermesCLI, plus 2 mis-rooted relative links corrected",
+    "getting-started.md + providers-transports.md: dependency-pinning claim overstated; true state is 24/29 exact == plus 5 ranged, all 29 with a ceiling",
+    "tui.md: launch-path env shorthand 'HERMES_TUI_RESUME / _QUERY / _IMAGE / _ACTIVE_SESSION_FILE' was ambiguous (reads as HERMES_TUI_RESUME_QUERY); expanded to the four real names",
+    "tui.md: the '*.expire' wildcard in the server-event list was ambiguous notation; the real events are secret.expire and sudo.expire, now spelled out",
+    "state-persistence.md: 'each mixin has no state of its own' was false — SessionSchemaMixin and SessionSearchMixin both write the host's _fts_* capability flags; SessionDB.__init__ (hermes_state.py:3222) seeds all five, the mixins only ever rewrite them",
+    "state-persistence.md: '## Schema' was glued to the end of the mixin-contract paragraph and rendered as literal text, not a heading; separated",
+    "state-persistence.md: the Callable Surface table I added took a first hand-typed pass containing 1 fabricated method (split_by_title, zero repo-wide hits), 5 omissions, and 3 names misattributed to mixins that do not define them (search_sessions, assert_export_safe, assert_resume_safe — all host-defined on SessionDB); reconciled against an AST walk to 178/178",
+    "tui.md: the .expire family was first narrowed to 2 (secret/sudo) from literal greps of the client tree; the real family is 7, derived at server.py:3512 as f\"{event.removesuffix('.request')}.expire\" over a 7-member .request guard set — literal-spelling greps under-report derived event names",
+    "tui.md: the subagent.* sentence misattributed subagent.spawn_requested to _relay() (it is child_progress_cb at delegate_tool.py:1936) and implied the start/text/complete trio came from delegation_live_log.py, which only compares those names (:247,:249,:251); all seven originate in delegate_tool.py, six via _relay() and spawn_requested via child_progress_cb",
+    "desktop.md: ALL_SPECS cited at :377, which is neither the declaration (:376) nor the NO_DESKTOP_SURFACE spread (:378); corrected to cite both",
+    "tui.md: the _block() bullet claimed the .expire guard set and the allow_expired=True handlers are 'the same seven by construction' — nothing enforces the pairing (allow_expired appears in no test; the guard set is a literal in server.py:3502-3510, the opt-in a per-handler argument in methods_prompt.py:1406-1451); restated as an unenforced convention that must be maintained in both places",
+    "tui.md: the approval asymmetry was first explained by an unverified inference (an expiry frame would make a healthy client discard a live prompt); the verified cause is that resolve_gateway_approval (tools/approval.py:2634) returns a resolved-count whose docstring says '0 means nothing was pending', so a late approval.respond is already idempotent and needs no expiry signal",
+    "tui.md: approval.respond cited as methods_prompt.py:1486-1507; the AST span is decorator 1486 through body end 1506, so the upper bound sat one line past the handler. Cause: the span was read off a fixed-width range dump (22 lines from the decorator), whose last printed line is not the node end. Corrected to 1486-1506.",
+    "delegation-kanban.md: 'role=leaf loses all five' presented the blocklist as a uniform subtraction. Measured against a populated registry (88 tools), only delegate_task/clarify/memory/cronjob are removed by the two layers; send_message is never registered as an agent-callable tool at all (tools/send_message_tool.py:2264), so its blocklist entry is defensive only. Both layers remove toolsets BY NAME, never by member: the deny layer needs a non-empty tools list that is a subset of the blocklist (:1203-1204), the strip layer needs membership of _COMPOSITE_BLOCKED_TOOLSETS or an all-blocked list (:1180-1181), and kanban is dropped unconditionally (:1183) -- so a toolset pairing send_message with any unblocked tool matches neither predicate, and what keeps it out of the schema is the missing registration. Outcome unchanged (a leaf schema holds none of the five); mechanism corrected. The same probe also established that _strip_blocked_tools reads the STATIC TOOLSETS dict, so all(t in BLOCKED for t in []) is vacuously true and it drops 8 toolsets, not 5: safe, context_engine and hermes-gateway go as collateral even though hermes-gateway resolves to 72 tools at runtime.",
+    "agent-core.md:44 used '/'-shorthand for three tool-executor entry points and, in doing so, manufactured two identifiers that resolve to nothing: `execute_tool_calls_concurrent` / `_sequential` / `_segmented`. agent/tool_executor.py declares execute_tool_calls_concurrent, execute_tool_calls_sequential and execute_tool_calls_segmented; 'def _sequential' and 'def _segmented' do not exist anywhere in the tree. Expanded to the three real names.",
+    ".codewiki-state.json shipped source_path as an absolute developer home path. Repo-relative now. Caught by a PII sweep run before staging, prompted by HEAD commit f049b1b9, whose stated purpose is stripping leaked developer home paths from shipped files.",
+    "Sweep result worth recording so the next auditor does not re-litigate it: of 2724 distinct backticked identifier claims across all 19 pages, exactly 5 failed a whole-repo targeted grep. Four are benign and were left alone -- PLUGIN_API_VERSION and builtin_hooks appear in sentences that assert their ABSENCE or their existence as a directory (gateway/builtin_hooks is real), and slashExec is a real filename (web/src/lib/slashExec.ts) that a word-boundary identifier grep cannot match. Only the agent-core.md:44 case was a genuine fabrication."
+  ],
+  "audit_method": "Static read of the working tree; no code executed. Verification battery, in order: (1) whole-repo identifier index sweep of every backticked symbol in all 14 module pages, then a targeted grep per flag; (2) AST walks (ast.parse) for every class/method/function span, public-surface count and enclosing-symbol question; (3) a symbol-adjacency sweep binding each file:NNNN citation to the identifier nearest before it and testing that identifier occurs within +/-3 lines of the cited line; (4) a fence-stack parse (opens==closes, empty stack) instead of a fence-count parity heuristic; (5) relative-link resolution for every markdown link; (6) index completeness against the module map. Instrument caveats, each learned by being fooled by it: the identifier index covered only .py/.ts/.tsx/.toml/.json and excluded tests/, docs/, evals/, website/, web_dist/, so C sources, SQL schema strings and test fixtures yielded false ABSENTs; `grep -l` piped to awk '{s+=$1}' sums a non-numeric field and can only ever report 0; a regex requiring trailing () matched none of a table listing bare names; split('|') on a two-column table puts the payload in cells[2], not cells[3]; and the last line of a fixed-width range dump is not an AST node's end_lineno. In every case the targeted probe, not the bulk instrument, was the arbiter. Of the 18 entries in audit_found_defects_fixed, 8 were introduced by my own hand-written or hand-edited prose rather than by the original workers, and were caught only because each edit was re-verified against source after it landed. an unpopulated tool registry makes every toolset resolve to [] , which is indistinguishable from genuinely-absent membership, so any claim about what a role can or cannot call was decided only after importing model_tools to trigger discovery (88 tools registered); a static read of the TOOLSETS dict alone under-reports, because resolve_toolset/validate_toolset merge registry-discovered tools at runtime. A second instrument caveat, learned the same way: the identifier index is a first-pass FILTER and never a completeness oracle. It held _stream_callback but not the bare stream_callback despite 76 real occurrences, so ABSENT from the index proves nothing and every flag was settled by targeted grep. A third: a message regex whose character class includes '-' must not be used to split Mermaid '-->>' arrows, because the greedy class eats a hyphen and the '->>' alternative then matches the remainder, manufacturing hyphenated pseudo-symbols out of correct participant IDs. A fourth instrument caveat, same origin: a node-count regex whose bracket group is optional matches every identifier on the line, so it tallies Mermaid message-label words as graph nodes and reported a spurious 67-node over-cap failure on a sequence diagram; the cap is also type-specific and does not bind sequence diagrams, which are measured in declared participants. Node counts must be taken by splitting on the arrow token and censusing declared participants, never by a permissive identifier sweep. A fifth instrument caveat, self-inflicted and worth pinning: compile() is the wrong oracle for documentation code fences. Signature sketches with '...' bodies, bare arrows and 'def' stubs are legitimate notation and compile() rejects them wholesale, so a fence-compile pass reported 7 of 8 fences invalid while every one of them was correct prose. Worse, the same pass had only detected 1 of the 8 fences in the first place, which is what made an earlier 'async def' claim look verified when it had never been parsed at all -- 'async def' is valid Python and the file was fine. A checker that silently under-counts is more dangerous than a checker that fails loudly. A sixth: a loop variable reused across a nested collection pass attributed all 5 identifier misses to the alphabetically last page; every attribution in a report must be re-derived from the bytes, not carried in a loop binding.",
+  "source_path_note": "repo-relative by design: an absolute path here would leak the generating developer's home directory into the shipped tree, the same class of defect f049b1b9 removes from SKILL.md files"
+}
