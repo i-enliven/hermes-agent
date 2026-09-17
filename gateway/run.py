@@ -17314,6 +17314,23 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 detail=_undo_detail,
                 execute=_do_undo,
             )
+        if canonical == "rewind":
+            _rewind_raw = event.get_command_args().strip()
+            if not _rewind_raw or _rewind_raw.lower() == "list":
+                return await self._handle_rewind_command(event)
+
+            async def _do_rewind():
+                return await self._handle_rewind_command(event)
+
+            _step_part = _rewind_raw.split()[0]
+            _rewind_detail = f"This rewinds the conversation to Step {_step_part} and discards subsequent history."
+            return await self._maybe_confirm_destructive_slash(
+                event=event,
+                command="rewind",
+                title=f"/rewind {_step_part}",
+                detail=_rewind_detail,
+                execute=_do_rewind,
+            )
         
         if canonical == "sethome":
             return await self._handle_set_home_command(event)

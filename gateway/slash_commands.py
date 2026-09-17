@@ -3127,7 +3127,13 @@ class GatewaySlashCommandsMixin:
             return t("gateway.undo.nothing")
 
         # Reset stored token count — transcript was truncated.
-        session_entry.last_prompt_tokens = 0
+        # Update stored token count with reduced transcript size.
+        try:
+            active = self.session_store.db.get_messages_as_conversation(session_entry.session_id, repair_alternation=True)
+            from agent.model_metadata import estimate_messages_tokens_rough
+            session_entry.last_prompt_tokens = estimate_messages_tokens_rough(active)
+        except Exception:
+            session_entry.last_prompt_tokens = 0
         # Evict the cached agent so the next turn rebuilds from the active-only
         # transcript and memory providers refresh their per-session caches.
         try:
@@ -3144,6 +3150,60 @@ class GatewaySlashCommandsMixin:
             count=result["rewound_count"],
             preview=preview,
         )
+
+    async def _handle_rewind_command(self, event: MessageEvent) -> str:
+        """Handle /rewind [step] [findings] or /rewind list."""
+        source = event.source
+        raw_args = event.get_command_args().strip()
+        session_entry = await self.async_session_store.get_or_create_session(source)
+        session_id = session_entry.session_id
+
+        db = getattr(getattr(self, "session_store", None), "session_db", None)
+        if db is None:
+            db = getattr(getattr(self, "session_store", None), "_db", None)
+        if db is None:
+            from hermes_state import SessionDB
+            db = SessionDB()
+
+        if not raw_args or raw_args.lower() == "list":
+            steps = db.list_session_steps(session_id)
+            if not steps:
+                return "No recorded steps in session."
+            lines = ["Available steps for rewind:"]
+            for s in steps:
+                step_lbl = f"Step {s['step']}:"
+                role_lbl = f"[{s['role']}]"
+                lines.append(f"  {step_lbl:<10} {role_lbl:<12} {s['preview']}")
+            lines.append("\nUse `/rewind <step> [findings]` to travel back to a step.")
+            return "\n".join(lines)
+
+        parts = raw_args.split(maxsplit=1)
+        target_step = parts[0].strip()
+        findings = parts[1].strip() if len(parts) > 1 else None
+
+        try:
+            result = db.rewind_to_step(session_id, target_step, findings=findings)
+        except ValueError as e:
+            return str(e)
+        except Exception as e:
+            logger.error("gateway rewind failed: %s", e)
+            return f"Failed to rewind session: {e}"
+
+        try:
+            active = db.get_messages_as_conversation(session_id, repair_alternation=True)
+            from agent.model_metadata import estimate_messages_tokens_rough
+            session_entry.last_prompt_tokens = estimate_messages_tokens_rough(active)
+        except Exception:
+            session_entry.last_prompt_tokens = 0
+        try:
+            session_key = build_session_key(source)
+            self._evict_cached_agent(session_key)
+        except Exception as e:
+            logger.debug("rewind: cached-agent eviction skipped: %s", e)
+
+        rewound_count = len(result.get("rewound_ids", []))
+        obs_msg = f" with {len(findings)} chars of findings" if findings else ""
+        return f"⏳ Rewound session to Step {target_step} ({rewound_count} message(s) pruned){obs_msg}."
 
     async def _handle_set_home_command(self, event: MessageEvent) -> str:
         """Handle /sethome command -- set the current chat as the platform's home channel."""

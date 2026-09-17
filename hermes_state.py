@@ -11039,6 +11039,193 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             return len(ids)
 
         return self._execute_write(_do)
+    # =========================================================================
+    # Step-Level Time Travel & Rollback
+    # =========================================================================
+
+    def list_session_steps(self, session_id: str) -> List[Dict[str, Any]]:
+        """List chronological user turn ($T$) and agent cycle ($T.C$) steps in active session.
+
+        Turns ($T$, e.g. "1", "2") represent top-level user query boundaries.
+        Agent cycles ($T.C$, e.g. "1.1", "1.2") represent assistant execution iterations within Turn $T$.
+        """
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT id, role, content, tool_calls, tool_name, timestamp, display_metadata, display_kind "
+                "FROM messages WHERE session_id = ? AND active = 1 ORDER BY id ASC",
+                (session_id,),
+            )
+            rows = cursor.fetchall()
+
+        from agent.context_compressor import is_user_originated_turn
+
+        steps: List[Dict[str, Any]] = []
+        turn_num = 0
+        cycle_num = 0
+
+        for r in rows:
+            mid, role, content, tool_calls, tool_name, ts, dm, dk = r
+            decoded_content = self._decode_content(content) or ""
+            dm_dict = {}
+            if dm:
+                try:
+                    dm_dict = json.loads(dm) if isinstance(dm, str) else dm
+                except Exception:
+                    dm_dict = {}
+            if not isinstance(dm_dict, dict):
+                dm_dict = {}
+
+            msg_dict = {
+                "role": role,
+                "content": decoded_content,
+                "display_kind": dk or dm_dict.get("display_kind"),
+            }
+
+            if is_user_originated_turn(msg_dict):
+                turn_num += 1
+                cycle_num = 0
+                step_id = str(turn_num)
+                preview = decoded_content.strip().split("\n")[0][:80]
+                steps.append({
+                    "step": step_id,
+                    "type": "user_turn",
+                    "turn": turn_num,
+                    "cycle": 0,
+                    "message_id": mid,
+                    "role": role,
+                    "preview": preview or "(empty user prompt)",
+                    "timestamp": ts,
+                    "checkpoint_hash": dm_dict.get("checkpoint_hash"),
+                })
+            elif role == "assistant":
+                cycle_num += 1
+                step_id = f"{turn_num}.{cycle_num}" if turn_num > 0 else f"0.{cycle_num}"
+                preview = ""
+                if decoded_content:
+                    preview = decoded_content.strip().split("\n")[0][:80]
+                elif tool_calls:
+                    try:
+                        tc_list = json.loads(tool_calls) if isinstance(tool_calls, str) else tool_calls
+                        names = [tc.get("function", {}).get("name", "tool") for tc in tc_list]
+                        preview = f"call: {', '.join(names)}"
+                    except Exception:
+                        preview = "call: tool"
+                else:
+                    preview = "(assistant response)"
+                steps.append({
+                    "step": step_id,
+                    "type": "agent_cycle",
+                    "turn": turn_num,
+                    "cycle": cycle_num,
+                    "message_id": mid,
+                    "role": role,
+                    "preview": preview,
+                    "timestamp": ts,
+                    "checkpoint_hash": dm_dict.get("checkpoint_hash"),
+                })
+        return steps
+
+    def resolve_step_boundary(
+        self, session_id: str, step: str
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve a step identifier (e.g. "1", "1.2") to its boundary message and target ID."""
+        step = str(step).strip()
+        steps = self.list_session_steps(session_id)
+        match = None
+        for s in steps:
+            if s["step"] == step:
+                match = s
+                break
+        if not match:
+            return None
+
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT id, role FROM messages WHERE session_id = ? AND active = 1 AND id >= ? ORDER BY id ASC",
+                (session_id, match["message_id"]),
+            )
+            rows = cursor.fetchall()
+
+        last_id = match["message_id"]
+        if match["type"] == "agent_cycle" and len(rows) > 1:
+            for r in rows[1:]:
+                if r[1] == "tool":
+                    last_id = r[0]
+                else:
+                    break
+
+        return {
+            "step": step,
+            "type": match["type"],
+            "target_message_id": match["message_id"],
+            "last_retained_id": last_id,
+            "checkpoint_hash": match.get("checkpoint_hash"),
+        }
+
+    def rewind_to_step(
+        self, session_id: str, step: str, findings: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Soft-delete messages after the specified step and inject findings."""
+        boundary = self.resolve_step_boundary(session_id, step)
+        if not boundary:
+            raise ValueError(f"Step {step!r} not found in active session {session_id}")
+
+        last_retained_id = boundary["last_retained_id"]
+
+        def _do(conn):
+            cursor = conn.execute(
+                "SELECT id FROM messages WHERE session_id = ? AND id > ? AND active = 1",
+                (session_id, last_retained_id),
+            )
+            ids = [r[0] for r in cursor.fetchall()]
+            if ids:
+                placeholders = ",".join("?" for _ in ids)
+                conn.execute(
+                    f"UPDATE messages SET active = 0 WHERE id IN ({placeholders})",
+                    ids,
+                )
+            if findings:
+                cur_row = conn.execute(
+                    "SELECT content, display_metadata FROM messages WHERE id = ?",
+                    (last_retained_id,),
+                ).fetchone()
+                if cur_row:
+                    raw_content = cur_row[0] or ""
+                    cur_dm = {}
+                    if cur_row[1]:
+                        try:
+                            cur_dm = json.loads(cur_row[1]) if isinstance(cur_row[1], str) else cur_row[1]
+                        except Exception:
+                            cur_dm = {}
+                    if not isinstance(cur_dm, dict):
+                        cur_dm = {}
+
+                    original_content = cur_dm.get("original_content", raw_content)
+                    cur_dm["original_content"] = original_content
+
+                    obs_text = f"\n\n[Time Travel Observation - Findings from subsequent exploration]:\n{findings.strip()}"
+                    new_content = original_content + obs_text
+                    conn.execute(
+                        "UPDATE messages SET content = ?, display_metadata = ? WHERE id = ?",
+                        (new_content, json.dumps(cur_dm), last_retained_id),
+                    )
+
+            conn.execute(
+                "UPDATE sessions SET rewind_count = COALESCE(rewind_count, 0) + 1 "
+                "WHERE id = ?",
+                (session_id,),
+            )
+            return ids
+
+        rewound = self._execute_write(_do)
+
+        return {
+            "rewound_count": len(rewound),
+            "rewound_ids": rewound,
+            "target_step": step,
+            "last_retained_id": last_retained_id,
+            "boundary": boundary,
+        }
 
     # =========================================================================
     # Search

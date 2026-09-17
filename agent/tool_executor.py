@@ -74,6 +74,12 @@ def _ensure_file_checkpoint(
     resolved_path = _resolve_path_for_task(file_path, effective_task_id or "default")
     work_dir = agent._checkpoint_mgr.get_working_dir_for_path(str(resolved_path))
     agent._checkpoint_mgr.ensure_checkpoint(work_dir, f"before {function_name}")
+    try:
+        cp_hash = agent._checkpoint_mgr.get_latest_checkpoint_hash(work_dir)
+        if cp_hash:
+            agent._last_checkpoint_hash = cp_hash
+    except Exception:
+        pass
 
 
 def _budget_for_agent(agent) -> BudgetConfig:
@@ -1041,6 +1047,9 @@ def _begin_tool_execution(
                 agent._checkpoint_mgr.ensure_checkpoint(
                     cwd, f"before terminal: {command[:60]}"
                 )
+                cp_hash = agent._checkpoint_mgr.get_latest_checkpoint_hash(cwd)
+                if cp_hash:
+                    agent._last_checkpoint_hash = cp_hash
         except Exception:
             pass
 
@@ -2218,6 +2227,29 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('setup_mcp', function_args, tool_duration, result=function_result)}")
+        elif function_name == "time_travel":
+            def _execute(next_args: dict) -> Any:
+                from tools.time_travel_tool import time_travel_tool as _time_travel_tool
+                return _time_travel_tool(
+                    target_step=next_args.get("target_step", ""),
+                    findings=next_args.get("findings", ""),
+                    restore_files=next_args.get("restore_files", False),
+                    agent=agent,
+                    messages=messages,
+                )
+            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
+                agent,
+                function_name=function_name,
+                function_args=function_args,
+                effective_task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", "") or "",
+                execute=_execute,
+                scope_block=_ts_scope_block,
+                display_index=i,
+            ))
+            tool_duration = time.time() - tool_start_time
+            if agent._should_emit_quiet_tool_messages():
+                agent._vprint(f"  {_get_cute_tool_message_impl('time_travel', function_args, tool_duration, result=function_result)}")
         elif function_name == "delegate_task":
             _action_arg = str(function_args.get("action") or "").strip().lower()
             tasks_arg = function_args.get("tasks")

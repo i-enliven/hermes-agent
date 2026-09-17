@@ -25,6 +25,7 @@ move-and-name refactor with no semantic change.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -699,8 +700,10 @@ def build_turn_context(
 
     # Hydrate per-session nudge counters from persisted history (issue #22357).
     if conversation_history and agent._user_turn_count == 0:
+        from agent.context_compressor import is_user_originated_turn
+
         prior_user_turns = sum(
-            1 for m in conversation_history if m.get("role") == "user"
+            1 for m in conversation_history if is_user_originated_turn(m)
         )
         if prior_user_turns > 0:
             agent._user_turn_count = prior_user_turns
@@ -722,6 +725,18 @@ def build_turn_context(
         user_msg["display_kind"] = persist_user_display_kind
         if persist_user_display_metadata:
             user_msg["display_metadata"] = persist_user_display_metadata
+
+    if getattr(agent, "_checkpoint_mgr", None) and getattr(agent._checkpoint_mgr, "enabled", False):
+        try:
+            cwd = os.getcwd()
+            agent._checkpoint_mgr.ensure_checkpoint(cwd, f"turn {agent._user_turn_count + 1} start")
+            cp_hash = agent._checkpoint_mgr.get_latest_checkpoint_hash(cwd)
+            if cp_hash:
+                dm = user_msg.setdefault("display_metadata", {})
+                if isinstance(dm, dict) and "checkpoint_hash" not in dm:
+                    dm["checkpoint_hash"] = cp_hash
+        except Exception as exc:
+            logger.debug("Failed to record turn-start checkpoint hash: %s", exc)
 
     append_message(messages, user_msg)
     current_turn_user_idx = len(messages) - 1

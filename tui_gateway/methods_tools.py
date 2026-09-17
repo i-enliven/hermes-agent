@@ -950,6 +950,26 @@ def _(rid, params: dict) -> dict:
                     agent._last_flushed_db_idx = len(active)
                 except Exception:
                     pass
+            try:
+                from agent.model_metadata import estimate_messages_tokens_rough
+                remaining_tokens = estimate_messages_tokens_rough(active)
+                comp = getattr(agent, "context_compressor", None)
+                if comp is not None:
+                    comp.last_prompt_tokens = remaining_tokens
+                    comp.last_real_prompt_tokens = remaining_tokens
+                    comp.last_total_tokens = remaining_tokens
+                ce = getattr(agent, "_context_engine", None)
+                if ce is not None and hasattr(ce, "last_prompt_tokens"):
+                    ce.last_prompt_tokens = remaining_tokens
+            except Exception:
+                pass
+
+        sid = params.get("session_id", "")
+        if sid:
+            try:
+                _emit("session.info", sid, _session_info(agent, session))
+            except Exception as e:
+                logger.debug("undo: failed to emit session.info: %s", e)
         target_msg = result.get("target_message") or {}
         target_text = target_msg.get("content") or ""
         if isinstance(target_text, list):
@@ -971,6 +991,111 @@ def _(rid, params: dict) -> dict:
             rid,
             {"type": "prefill", "message": target_text, "notice": notice},
         )
+
+    if name == "rewind":
+        # /rewind [step] [findings] or /rewind list
+        if not session:
+            return _err(rid, 4001, "no active session to rewind")
+        if session.get("running"):
+            return _err(
+                rid, 4009, "session busy — /interrupt the current turn before /rewind"
+            )
+        db = _get_db()
+        if db is None:
+            return _db_unavailable_error(rid, code=5008)
+        session_key = session.get("session_key", "")
+        if not session_key:
+            return _err(rid, 4001, "no session key for rewind")
+
+        arg_str = (arg or "").strip()
+        if not arg_str or arg_str.lower() == "list":
+            try:
+                steps = db.list_session_steps(session_key)
+            except Exception as e:
+                return _err(rid, 5008, f"rewind: failed to list steps: {e}")
+            if not steps:
+                return _ok(rid, {"type": "exec", "output": "No recorded steps in session."})
+            lines = ["Available steps for rewind:"]
+            for s in steps:
+                step_lbl = f"Step {s['step']}:"
+                role_lbl = f"[{s['role']}]"
+                lines.append(f"  {step_lbl:<10} {role_lbl:<12} {s['preview']}")
+            lines.append("\nRun `/rewind <step> [findings]` to travel back to a step.")
+            return _ok(rid, {"type": "exec", "output": "\n".join(lines)})
+
+        parts = arg_str.split(maxsplit=1)
+        target_step = parts[0].strip()
+        findings = parts[1].strip() if len(parts) > 1 else None
+
+        try:
+            result = db.rewind_to_step(session_key, target_step, findings=findings)
+        except ValueError as e:
+            return _err(rid, 4004, f"rewind: {e}")
+        except Exception as e:
+            return _err(rid, 5008, f"rewind: {e}")
+
+        # Reload the active-only transcript into the in-memory session history
+        try:
+            active = db.get_messages_as_conversation(
+                session_key, repair_alternation=True, include_row_ids=True
+            )
+        except Exception:
+            active = []
+        with session["history_lock"]:
+            session["history"] = list(active)
+            session["history_version"] = int(session.get("history_version", 0)) + 1
+
+        agent = session.get("agent")
+        if agent is not None:
+            mm = getattr(agent, "_memory_manager", None)
+            if mm is not None:
+                try:
+                    mm.on_session_switch(
+                        session_key,
+                        parent_session_id="",
+                        reset=False,
+                        rewound=True,
+                    )
+                except Exception as e:
+                    logger.debug("rewind: memory manager session-switch notify failed: %s", e)
+            from tools.time_travel_tool import parse_step_identifier
+            parsed = parse_step_identifier(target_step)
+            if parsed:
+                target_turn, target_cycle = parsed
+                agent._user_turn_count = target_turn
+                agent._api_call_count = target_cycle
+            if hasattr(agent, "_last_flushed_db_idx"):
+                agent._last_flushed_db_idx = len(active)
+            if hasattr(agent, "_invalidate_system_prompt"):
+                try:
+                    agent._invalidate_system_prompt()
+                except Exception:
+                    pass
+            try:
+                from agent.model_metadata import estimate_messages_tokens_rough
+                remaining_tokens = estimate_messages_tokens_rough(active)
+                comp = getattr(agent, "context_compressor", None)
+                if comp is not None:
+                    comp.last_prompt_tokens = remaining_tokens
+                    comp.last_real_prompt_tokens = remaining_tokens
+                    comp.last_total_tokens = remaining_tokens
+                ce = getattr(agent, "_context_engine", None)
+                if ce is not None and hasattr(ce, "last_prompt_tokens"):
+                    ce.last_prompt_tokens = remaining_tokens
+            except Exception:
+                pass
+
+        sid = params.get("session_id", "")
+        if sid:
+            try:
+                _emit("session.info", sid, _session_info(agent, session))
+            except Exception as e:
+                logger.debug("rewind: failed to emit session.info: %s", e)
+
+        rewound_count = len(result.get("rewound_ids", []))
+        obs_msg = f" with {len(findings)} chars of findings" if findings else ""
+        notice = f"⏳ Rewound to step {target_step} ({rewound_count} message(s) pruned){obs_msg}."
+        return _ok(rid, {"type": "exec", "output": notice})
 
     if name in {"snapshot", "snap"}:
         subcommand = arg.split(maxsplit=1)[0].lower() if arg else ""

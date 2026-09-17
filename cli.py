@@ -9981,6 +9981,19 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     )
             except Exception:
                 pass
+            try:
+                from agent.model_metadata import estimate_messages_tokens_rough
+                remaining_tokens = estimate_messages_tokens_rough(self.conversation_history)
+                comp = getattr(self.agent, "context_compressor", None)
+                if comp is not None:
+                    comp.last_prompt_tokens = remaining_tokens
+                    comp.last_real_prompt_tokens = remaining_tokens
+                    comp.last_total_tokens = remaining_tokens
+                ce = getattr(self.agent, "_context_engine", None)
+                if ce is not None and hasattr(ce, "last_prompt_tokens"):
+                    ce.last_prompt_tokens = remaining_tokens
+            except Exception:
+                pass
 
         turn_word = "turn" if turns_undone == 1 else "turns"
         msg_count = rewound_rows or removed_count
@@ -10023,6 +10036,132 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             app.invalidate()
         except Exception as e:
             logger.debug("undo: prefill buffer failed: %s", e)
+
+    def rewind_to_step(self, step: str, findings: Optional[str] = None) -> None:
+        """Rollback conversation history to Turn T (e.g. '1') or Cycle T.C (e.g. '1.2')."""
+        if not self.conversation_history and self._session_db is not None and self.session_id:
+            try:
+                active = self._session_db.get_messages_as_conversation(
+                    self.session_id, repair_alternation=True
+                )
+                if active:
+                    self.conversation_history = list(active)
+            except Exception as e:
+                logger.debug("rewind: lazy history hydration failed: %s", e)
+
+        if not self.conversation_history:
+            print("(._.) No messages to rewind.")
+            return
+
+        from tools.time_travel_tool import parse_step_identifier
+        parsed = parse_step_identifier(step)
+        if not parsed:
+            print(f"(._.) Invalid step format {step!r} — use /rewind T (e.g. /rewind 1) or /rewind T.C (e.g. /rewind 1.2).")
+            return
+
+        target_turn, target_cycle = parsed
+        if target_turn < 1:
+            print("(._.) Target turn must be >= 1.")
+            return
+
+        from tools.time_travel_tool import find_step_boundary_index
+
+        cut_idx = find_step_boundary_index(self.conversation_history, target_turn, target_cycle)
+        if cut_idx is None:
+            print(f"(._.) Step {step!r} not found in conversation history.")
+            return
+
+        discarded_count = len(self.conversation_history) - (cut_idx + 1)
+        if discarded_count <= 0 and not findings:
+            print(f"(._.) Already at step {step!r}.")
+            return
+
+        self.conversation_history = self.conversation_history[:cut_idx + 1]
+
+        if findings:
+            target_msg = self.conversation_history[cut_idx]
+            cur_content = target_msg.get("content") or ""
+            original_content = target_msg.get("original_content", cur_content)
+            target_msg["original_content"] = original_content
+
+            obs = f"\n\n[Time Travel Observation - Findings from subsequent exploration]:\n{findings.strip()}"
+            if isinstance(original_content, str):
+                target_msg["content"] = original_content + obs
+
+        # Soft-delete in SessionDB
+        if self._session_db is not None and self.session_id:
+            try:
+                self._session_db.rewind_to_step(self.session_id, step, findings=findings)
+            except Exception as e:
+                logger.debug("rewind: SessionDB rewind failed: %s", e)
+
+        # Agent surgery
+        if self.agent is not None:
+            if hasattr(self.agent, "_invalidate_system_prompt"):
+                try:
+                    self.agent._invalidate_system_prompt()
+                except Exception:
+                    pass
+            if hasattr(self.agent, "_last_flushed_db_idx"):
+                self.agent._last_flushed_db_idx = len(self.conversation_history)
+            self.agent._user_turn_count = target_turn
+            self.agent._api_call_count = target_cycle
+
+            try:
+                from agent.model_metadata import estimate_messages_tokens_rough
+                remaining_tokens = estimate_messages_tokens_rough(self.conversation_history)
+                comp = getattr(self.agent, "context_compressor", None)
+                if comp is not None:
+                    comp.last_prompt_tokens = remaining_tokens
+                    comp.last_real_prompt_tokens = remaining_tokens
+                    comp.last_total_tokens = remaining_tokens
+                ce = getattr(self.agent, "_context_engine", None)
+                if ce is not None and hasattr(ce, "last_prompt_tokens"):
+                    ce.last_prompt_tokens = remaining_tokens
+            except Exception:
+                pass
+        print(f"(^_^)b Rewound to Step {step} ({discarded_count} message(s) pruned).")
+        print(f"  {len(self.conversation_history)} message(s) remaining in history.")
+
+    def _handle_rewind_command(self, cmd_original: str) -> None:
+        """Handle /rewind command."""
+        cleaned_args, _ = HermesCLI._split_destructive_skip(cmd_original)
+        parts = cleaned_args.strip().split(None, 1) if cleaned_args.strip() else []
+        if not parts:
+            print("Usage: /rewind list | /rewind <step> [prompt]")
+            print("Examples:")
+            print("  /rewind list           - List recent turns and cycles")
+            print("  /rewind 1              - Rewind to User Turn 1")
+            print("  /rewind 1.2            - Rewind to Agent Cycle 1.2")
+            print("  /rewind 1 \"New prompt\" - Rewind to Turn 1 with findings")
+            return
+
+        sub = parts[0].strip().lower()
+        if sub == "list":
+            if self._session_db is not None and self.session_id:
+                steps = self._session_db.list_session_steps(self.session_id)
+                if not steps:
+                    print("(._.) No recorded steps in session.")
+                    return
+                print("\nAvailable steps for rewind:")
+                for s in steps:
+                    step_lbl = f"Step {s['step']}:"
+                    role_lbl = f"[{s['role']}]"
+                    print(f"  {step_lbl:<10} {role_lbl:<12} {s['preview']}")
+                print()
+            else:
+                print("(._.) Session database not available.")
+            return
+
+        target_step = parts[0].strip()
+        findings = parts[1].strip() if len(parts) > 1 else None
+
+        desc = f"Rewind conversation to Step {target_step}."
+        if self._confirm_destructive_slash("rewind", desc, cmd_original=cmd_original) is None:
+            return
+
+        self.rewind_to_step(target_step, findings=findings)
+
     
     def _run_curses_picker(self, title: str, items: list[str], default_index: int = 0) -> int | None:
         """Run curses_single_select via run_in_terminal so prompt_toolkit handles terminal ownership cleanly."""
@@ -11579,6 +11718,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             ) is None:
                 return True  # confirmation cancelled — command handled, keep REPL alive
             self.undo_last(_undo_n)
+        elif canonical == "rewind":
+            self._handle_rewind_command(cmd_original)
         elif canonical == "branch":
             self._handle_branch_command(cmd_original)
         elif canonical == "worktree":
@@ -13381,6 +13522,13 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if not confirm_required:
             return "once"
 
+        import sys
+        if not getattr(self, "_app", None) and not sys.stdin.isatty():
+            print(
+                f"(._.) /{command} requires interactive confirmation. "
+                f"Pass 'now' or '--yes' (e.g. /{command} ... now) to proceed non-interactively."
+            )
+            return None
         # Render a prompt_toolkit-native confirmation panel.  This keeps option
         # labels visible above the composer and avoids raw input()/EOF races with
         # the running TUI.

@@ -1687,6 +1687,151 @@ def _notify_context_engine_turn_complete(
             exc_info=True,
         )
 
+def _apply_time_travel_rewind(agent, messages: list, api_call_count: int) -> int:
+    """Apply staged time travel rewind to in-memory messages, SessionDB, and checkpoint state."""
+    pending = getattr(agent, "_pending_time_travel", None)
+    if not pending:
+        return api_call_count
+
+    agent._pending_time_travel = None
+    target_step = pending["target_step"]
+    target_turn = pending["target_turn"]
+    target_cycle = pending["target_cycle"]
+    findings = pending["findings"]
+    restore_files = pending.get("restore_files", False)
+
+    # 1. Locate target step boundary in in-memory messages FIRST
+    from tools.time_travel_tool import find_step_boundary_index
+
+    cut_idx = find_step_boundary_index(messages, target_turn, target_cycle)
+    if cut_idx is None:
+        logger.warning(
+            "Time travel failed: step %s (turn %s, cycle %s) not found in active messages",
+            target_step, target_turn, target_cycle,
+        )
+        return api_call_count
+
+    # 2. Update SessionDB if available
+    boundary = None
+    session_db = getattr(agent, "_session_db", None)
+    session_id = getattr(agent, "session_id", None)
+    if session_db is not None and session_id:
+        try:
+            db_res = session_db.rewind_to_step(session_id, target_step, findings=findings)
+            if db_res and isinstance(db_res, dict):
+                boundary = db_res.get("boundary")
+        except Exception as e:
+            logger.warning("Time travel SessionDB rewind failed: %s", e)
+
+    # 3. Revert files if requested
+    if restore_files and getattr(agent, "_checkpoint_mgr", None):
+        try:
+            cwd = os.getcwd()
+            commit_hash = boundary.get("checkpoint_hash") if boundary else None
+            if not commit_hash and cut_idx < len(messages):
+                dm = messages[cut_idx].get("display_metadata")
+                if isinstance(dm, dict):
+                    commit_hash = dm.get("checkpoint_hash")
+            if not commit_hash:
+                target_ts = None
+                if boundary and boundary.get("timestamp"):
+                    try:
+                        target_ts = float(boundary["timestamp"])
+                    except (ValueError, TypeError):
+                        pass
+                if target_ts is None and cut_idx < len(messages) and messages[cut_idx].get("timestamp"):
+                    try:
+                        target_ts = float(messages[cut_idx]["timestamp"])
+                    except (ValueError, TypeError):
+                        pass
+
+                try:
+                    checkpoints = agent._checkpoint_mgr.list_checkpoints(cwd)
+                    from datetime import datetime
+
+                    # Check for turn-start reason match first
+                    if target_cycle == 0:
+                        for cp in checkpoints:
+                            r = cp.get("reason", "")
+                            if r.startswith(f"turn {target_turn} ") or r == f"turn {target_turn}":
+                                commit_hash = cp.get("hash")
+                                break
+
+                    # Timestamp proximity match (pick closest within 2.0s tolerance)
+                    # When timestamps are tied (same second), prefer the earlier commit (later in list)
+                    if not commit_hash and target_ts is not None:
+                        best_diff = float("inf")
+                        best_hash = None
+                        for cp in checkpoints:
+                            cp_iso = cp.get("timestamp")
+                            if cp_iso:
+                                try:
+                                    cp_dt = datetime.fromisoformat(cp_iso)
+                                    diff = abs(cp_dt.timestamp() - target_ts)
+                                    if diff <= 2.0 and diff <= best_diff:
+                                        best_diff = diff
+                                        best_hash = cp.get("hash")
+                                except Exception:
+                                    continue
+                        if best_hash:
+                            commit_hash = best_hash
+                except Exception:
+                    pass
+
+            if commit_hash:
+                restore_res = agent._checkpoint_mgr.restore(cwd, commit_hash=commit_hash, safe=True)
+                if isinstance(restore_res, dict) and not restore_res.get("success", False):
+                    logger.warning("Time travel checkpoint restore failed: %s", restore_res.get("error"))
+                else:
+                    agent._last_checkpoint_hash = commit_hash
+            else:
+                logger.warning("Time travel checkpoint restore skipped: no checkpoint found for step %s", target_step)
+        except Exception as e:
+            logger.warning("Time travel checkpoint restore failed: %s", e)
+
+    # 4. Truncate in-memory messages & attach findings
+    discarded_count = len(messages) - (cut_idx + 1)
+    if cut_idx < len(messages) - 1:
+        del messages[cut_idx + 1:]
+
+    target_msg = messages[cut_idx]
+    cur_content = target_msg.get("content") or ""
+    original_content = target_msg.get("original_content", cur_content)
+    target_msg["original_content"] = original_content
+
+    obs = f"\n\n[Time Travel Observation - Findings from subsequent exploration]:\n{findings}"
+    if isinstance(original_content, str):
+        target_msg["content"] = original_content + obs
+    if hasattr(agent, "_invalidate_system_prompt"):
+        try:
+            agent._invalidate_system_prompt()
+        except Exception:
+            pass
+    if hasattr(agent, "_last_flushed_db_idx"):
+        agent._last_flushed_db_idx = len(messages)
+    try:
+        from agent.model_metadata import estimate_messages_tokens_rough
+        remaining_tokens = estimate_messages_tokens_rough(messages)
+        comp = getattr(agent, "context_compressor", None)
+        if comp is not None:
+            comp.last_prompt_tokens = remaining_tokens
+            comp.last_real_prompt_tokens = remaining_tokens
+            comp.last_total_tokens = remaining_tokens
+        ce = getattr(agent, "_context_engine", None)
+        if ce is not None and hasattr(ce, "last_prompt_tokens"):
+            ce.last_prompt_tokens = remaining_tokens
+    except Exception:
+        pass
+
+    agent._vprint(
+        f"\n{agent.log_prefix}⏳ Time Travel: rewound context to Step {target_step} "
+        f"({discarded_count} messages pruned, findings retained)."
+    )
+    api_call_count = target_cycle
+    agent._api_call_count = api_call_count
+    agent._user_turn_count = target_turn
+
+    return api_call_count
 
 def run_conversation(
     agent,
@@ -7254,6 +7399,8 @@ def run_conversation(
                 _tc_names = {tc.function.name for tc in assistant_message.tool_calls}
                 if _tc_names == {"execute_code"}:
                     agent.iteration_budget.refund()
+                if getattr(agent, "_pending_time_travel", None):
+                    api_call_count = _apply_time_travel_rewind(agent, messages, api_call_count)
                 
                 # Use real token counts from the API response to decide
                 # compression.  prompt_tokens + completion_tokens is the

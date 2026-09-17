@@ -927,6 +927,23 @@ class CheckpointManager:
             logger.debug("Checkpoint failed (non-fatal): %s", e)
             return False
 
+    def get_latest_checkpoint_hash(self, working_dir: str) -> Optional[str]:
+        """Get the commit SHA of the latest checkpoint for working_dir."""
+        store = _store_path(CHECKPOINT_BASE)
+        if not (store / "HEAD").exists():
+            return None
+        abs_dir = str(_normalize_path(working_dir))
+        dir_hash = _project_hash(abs_dir)
+        ref = _ref_name(dir_hash)
+        ok_ref, ref_commit, _ = _run_git(
+            ["rev-parse", "--verify", ref + "^{commit}"],
+            store, abs_dir,
+            allowed_returncodes={128},
+        )
+        if ok_ref and ref_commit:
+            return ref_commit.strip()
+        return None
+
     def list_checkpoints(self, working_dir: str) -> List[Dict]:
         """List available checkpoints for a directory (most recent first)."""
         abs_dir = str(_normalize_path(working_dir))

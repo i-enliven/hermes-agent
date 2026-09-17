@@ -2362,6 +2362,17 @@ def build_assistant_message(agent, assistant_message, finish_reason: str) -> dic
             tool_calls.append(tc_dict)
         msg["tool_calls"] = tool_calls
 
+    if getattr(agent, "_checkpoint_mgr", None) and getattr(agent._checkpoint_mgr, "enabled", False):
+        try:
+            cwd = os.getcwd()
+            cp_hash = agent._checkpoint_mgr.get_latest_checkpoint_hash(cwd)
+            if cp_hash:
+                dm = msg.setdefault("display_metadata", {})
+                if isinstance(dm, dict) and "checkpoint_hash" not in dm:
+                    dm["checkpoint_hash"] = cp_hash
+        except Exception:
+            pass
+
     return msg
 
 
